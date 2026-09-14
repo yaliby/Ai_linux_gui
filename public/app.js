@@ -2815,6 +2815,7 @@ function openSettings() { $('settings').classList.remove('hidden'); settingsOpen
 
 // ---------- מתג ההתרעות ----------
 $('notifyOn').onchange = (e) => { store.settings.notify = e.target.checked; save(); renderNotifyRow(); };
+$('notifyActionsOn').onchange = (e) => { store.settings.notifyActions = e.target.checked; save(); renderNotifyRow(); };
 $('notifyAsk').onclick = () => notifyChipClick(); // באותו כפתור יושבות "בקש" ו"למה חסום"
 $('notifyChip').onclick = () => notifyChipClick();
 $('notifyTest').onclick = () => {
@@ -3833,6 +3834,7 @@ function decidePermission(id, decision, extra, ref) {
       response: (pre && pre.response) || null,
     }));
   }
+  closeAskNotification(id);
   const p = pendingPerms.get(id);
   const r = ref || (p && p.ref);
   pendingPerms.delete(id);
@@ -3842,7 +3844,20 @@ function decidePermission(id, decision, extra, ref) {
   if (!pendingPerms.size) renderWorking();
 }
 
+/**
+ * ההתראה של בקשה שכבר נענתה חייבת לרדת מהמגירה. עם requireInteraction היא
+ * נשארת שם עד שנוגעים בה, וכפתור "אשר" שמצביע על בקשה סגורה הוא בדיוק סוג
+ * ההתראה שמלמדת להתעלם מהתראות.
+ */
+function closeAskNotification(id) {
+  navigator.serviceWorker?.ready
+    .then((reg) => reg.getNotifications({ tag: 'ask-' + id }))
+    .then((list) => { for (const n of list) n.close(); })
+    .catch(() => {});
+}
+
 function closePermission(id, note) {
+  closeAskNotification(id);
   const p = pendingPerms.get(id);
   pendingPerms.delete(id);
   if (p && p.ref) { p.ref.decision = note; refreshAskCard(p.ref); persist(); }
@@ -4230,14 +4245,42 @@ async function jumpToPendingAsk() {
   if (btn) setTimeout(() => btn.focus(), 350);
 }
 
-/** התראה כשהשאלה מגיעה והחלון לא בפוקוס — אחרת היא פשוט לא נראית. */
+/**
+ * התראה כשהשאלה מגיעה והחלון לא בפוקוס — אחרת היא פשוט לא נראית.
+ *
+ * בקשת אישור רגילה מקבלת שני כפתורים בתוך ההתראה עצמה, כך שאפשר לענות עליה
+ * מהטלפון בלי לפתוח את האפליקציה — וזה בדיוק הרגע שבו זה משנה, כי התור עומד
+ * וממתין. הכפתורים עוברים דרך ה-Service Worker אל ‎/api/permission-answer‎.
+ *
+ * שתי בקשות שלא מקבלות כפתורים, במכוון:
+ * · ‎AskUserQuestion‎ — התשובה שלה היא בחירה מתוך אפשרויות, ו"אשר/דחה"
+ *   פשוט אינם התשובה.
+ * · מצב שבו הכיתוב אינו אומר *מה* מאשרים. גוף ההתראה נושא את שם הכלי ואת
+ *   הפקודה/הקובץ, כי כפתור אישור בלי זה הוא בקשה לאשר משהו לא ידוע.
+ */
 function notifyQuestion(ref) {
   const isQ = ref.tool === 'AskUserQuestion';
   const text = isQ ? 'Claude שאל אותך שאלה' : 'Claude ממתין לאישור שלך';
   if (document.hasFocus()) return;
   setTitleBadge(text);
-  desktopNotify(text, isQ ? 'לחץ כדי לענות' : 'לחץ כדי לאשר');
+  if (isQ) { desktopNotify(text, 'לחץ כדי לענות'); return; }
+  const what = clamp(toolPreview(ref.tool, ref.input) || ref.description || '', 120);
+  desktopNotify(text, ref.tool + (what ? ' · ' + what : ''), {
+    // חייב להישאר גלוי עד שעונים: בקשה שנעלמת מהמגירה משאירה את התור תקוע
+    requireInteraction: true,
+    // תג ייחודי לבקשה. עם ה-tag המשותף 'rtl-claude' בקשה שנייה הייתה דורסת
+    // את הראשונה, ואיתה את הכפתורים שמצביעים על ה-requestId שלה.
+    tag: 'ask-' + ref.id,
+    actions: notifyActionsOn() ? [
+      { action: 'allow', title: 'אשר' },
+      { action: 'deny', title: 'דחה' },
+    ] : [],
+    data: { convId: streamOwnerId || subId, requestId: ref.id },
+  });
 }
+
+/** כפתורי אישור בהתראה — ניתנים לכיבוי, כי במגירת ההתראות הם נגישים גם נעול. */
+function notifyActionsOn() { return store.settings.notifyActions !== false; }
 function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 
 // ---------- תפריט השלמה: פקודות סלאש (/) ואזכור קבצים (@) ----------
@@ -5210,17 +5253,22 @@ function notifyOn() { return store.settings.notify !== false; }
  * המסלול הישיר עדיף כי הוא עובד גם לפני שה-SW נרשם. מנסים SW קודם
  * ונופלים אחורה — כך אותה קריאה עובדת בשני המקרים.
  */
-function desktopNotify(title, body) {
+function desktopNotify(title, body, extra) {
   if (!notifyOn()) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const opts = {
     body, icon: '/icons/icon-192.png', badge: '/icons/icon-128.png',
     tag: 'rtl-claude', renotify: true, dir: 'rtl', lang: 'he',
-    data: { url: location.pathname + location.search },
+    ...extra,
+    data: { url: location.pathname + location.search, ...(extra && extra.data) },
   };
+  // actions נתמך אך ורק דרך ה-Service Worker. ב-‎new Notification()‎ הוא לא
+  // רק מתעלם — בחלק מהדפדפנים הבנאי זורק, כלומר ההתראה כולה נעלמת בגלל
+  // כפתור. לכן במסלול הישיר הוא מוסר, וההתראה יורדת לגרסה בלי כפתורים.
+  const plain = { ...opts }; delete plain.actions;
   const direct = () => {
     try {
-      const n = new Notification(title, opts);
+      const n = new Notification(title, plain);
       n.onclick = () => { window.focus(); clearTitleBadge(); n.close(); };
       return true;
     } catch { return false; }
@@ -5287,6 +5335,21 @@ function renderNotifyRow() {
   cb.checked = notifyOn();
   cb.disabled = !granted;
   test.disabled = !granted || !notifyOn();
+
+  // כפתורים בהתראה קיימים רק כשההתראה יוצאת מה-Service Worker. בדסקטופ
+  // ‎new Notification()‎ מתעלם מהם, ולכן המתג שם היה מבטיח משהו שלא קורה.
+  const canAct = !!navigator.serviceWorker && 'actions' in Notification.prototype;
+  const actBox = $('notifyActionsRow'), actHint = $('notifyActionsHint');
+  const actCb = $('notifyActionsOn');
+  actCb.checked = notifyActionsOn();
+  actCb.disabled = !granted || !notifyOn() || !canAct;
+  actBox.classList.toggle('off', actCb.disabled);
+  actHint.textContent = !canAct
+    ? 'הדפדפן הזה לא תומך בכפתורים בתוך התראה'
+    : notifyActionsOn()
+      ? '✓ אפשר לאשר או לדחות בלי לפתוח את האפליקציה'
+      : 'ההתראה תגיע בלי כפתורים — האישור נעשה במסך עצמו';
+  actHint.className = 'hint' + (canAct && notifyActionsOn() && granted && notifyOn() ? ' ok' : '');
   // ב-insecure הכפתור כן מוצג — הוא לא יבקש הרשאה אלא יפתח את ההסבר,
   // וזה המקום היחיד שממנו מגיעים אליו.
   ask.classList.toggle('hidden', granted || why === 'unsupported' || why === 'denied');

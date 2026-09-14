@@ -249,6 +249,9 @@ body.busy .top-progress > span { animation: topSlide 1.15s cubic-bezier(.4,0,.2,
 .settings .switch-row { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; }
 .settings .switch-row input { width: 16px; height: 16px; padding: 0; accent-color: var(--accent); cursor: pointer; flex: none; }
 .settings .switch-row input:disabled { cursor: not-allowed; opacity: .5; }
+/* מתג שאי-אפשר להפעיל אותו כרגע — נשאר קריא (ההסבר למה הוא כבוי יושב
+   ב-hint שמתחתיו) אבל מפסיק להיראות כמו משהו שמחכה ללחיצה */
+.settings .switch-row.off { cursor: default; color: var(--text-dim); }
 .settings .set-actions { display: flex; gap: 6px; }
 .settings .set-actions .mini { border: 1px solid var(--border); }
 .settings .set-actions .mini:disabled { opacity: .45; cursor: not-allowed; background: transparent; color: var(--text-dim); }

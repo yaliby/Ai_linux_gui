@@ -209,6 +209,14 @@
           <button type="button" class="mini" id="notifyTest">בדיקה</button>
         </div>
         <span class="hint" id="notifyHint"></span>
+        <!-- מתג נפרד, כי זו החלטה נפרדת: ההתראה עצמה רק מודיעה, והכפתורים
+             שבתוכה מבצעים. במגירת ההתראות הם נגישים גם כשהמסך נעול, ולמי
+             שזה מפריע לו מגיע לכבות אותם בלי לכבות את ההתראות. -->
+        <label class="switch-row" id="notifyActionsRow">
+          <input type="checkbox" id="notifyActionsOn" />
+          <span>כפתורי אישור בתוך ההתראה</span>
+        </label>
+        <span class="hint" id="notifyActionsHint"></span>
       </div>
     </div>
 

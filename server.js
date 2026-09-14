@@ -2291,6 +2291,31 @@ function godApprove(s, requestId, req) {
   return true;
 }
 
+/**
+ * החלטת המשתמש על בקשת הרשאה → control_response חזרה ל-CLI.
+ * מי שענה ראשון קובע; הכרטיס נסגר בשאר המכשירים דרך permission_resolved.
+ * שני קוראים: הודעת ה-WebSocket מהממשק, והמענה מתוך ההתראה בטלפון
+ * (‎/api/permission-answer‎) — שם אין בכלל חלון פתוח שיחזיק socket.
+ * מחזיר false כשהבקשה כבר לא פתוחה, כדי שהקורא ידע לומר זאת.
+ */
+function answerPermission(s, msg, by) {
+  if (!s || !msg.requestId || !s.pendingPerms.has(msg.requestId)) return false;
+  s.pendingPerms.delete(msg.requestId);
+  // label/answers נשלחים כדי שהכרטיס במכשיר השני ייסגר עם *אותה* תשובה
+  // שנבחרה כאן, ולא רק עם "אושר/נדחה" גנרי.
+  emit(s, {
+    kind: 'permission_resolved', id: msg.requestId, decision: msg.decision,
+    label: msg.label || null, answers: msg.answers || null, response: msg.response || null,
+    by: by || null,
+  });
+  if (!s.child) return true;
+  const inner = msg.decision === 'allow'
+    ? { behavior: 'allow', updatedInput: msg.updatedInput || {}, ...(msg.updatedPermissions ? { updatedPermissions: msg.updatedPermissions } : {}) }
+    : { behavior: 'deny', message: msg.message || 'נדחה על-ידי המשתמש' };
+  writeStdin(s, { type: 'control_response', response: { subtype: 'success', request_id: msg.requestId, response: inner } });
+  return true;
+}
+
 /** מעבר ל-GOD בזמן שכרטיסים כבר פתוחים — הם נענים כאן ולא נשארים תלויים. */
 function godFlushPending(s) {
   for (const [id, req] of [...s.pendingPerms]) {
@@ -2385,6 +2410,27 @@ app.get('/api/turn-state', (req, res) => {
     subs: s.subs.size,
     now: Date.now(),
   });
+});
+
+/* מענה לבקשת הרשאה בלי חלון פתוח — הנתיב שמשרת את כפתורי ההתראה בטלפון.
+   ההתראה עצמה נורית מה-Service Worker, ולחיצה על "אשר" או "דחה" בתוכה קורית
+   כשהאפליקציה סגורה לגמרי: אין שם דף, אין WebSocket, ואין דרך להחזיר החלטה
+   דרך הזרם הרגיל. ה-SW חי גם אז, ויכול לעשות fetch — וזה כל מה שצריך.
+
+   ההרשאה: המאזין הראשי קשור ל-127.0.0.1 בלבד, והמאזין של ה-LAN מעביר כל
+   בקשה דרך שער עוגיית המכשיר (‎remoteApp.use(app)‎). כלומר הנתיב הזה כבר
+   סגור בדיוק כמו כל השאר, בלי שער נוסף משלו. */
+app.post('/api/permission-answer', express.json({ limit: '4kb' }), (req, res) => {
+  const { convId, requestId, decision } = req.body || {};
+  if (!VALID_ID.test(String(convId || ''))) return res.status(400).json({ ok: false, error: 'bad-id' });
+  if (decision !== 'allow' && decision !== 'deny') return res.status(400).json({ ok: false, error: 'bad-decision' });
+  // sessions.get ולא getSession — מענה לבקשה לא אמור ליצור סשן יש מאין
+  const s = sessions.get(String(convId));
+  const by = deviceLabel(req) + ' · התראה';
+  // הבקשה כבר נענתה במכשיר אחר (או שהתור נגמר) — לא שגיאה, פשוט מאוחר מדי
+  const ok = answerPermission(s, { requestId: String(requestId || ''), decision, label: decision }, by);
+  dbg('perm.notify', { convId, decision, by: deviceLabel(req), ok });
+  res.json({ ok });
 });
 
 // כל החיבורים הפתוחים, בלי קשר לשיחה שהם צופים בה — לשידור שינויים ברמת
@@ -3576,22 +3622,7 @@ function handleConnection(ws, req) {
       broadcastLimit(s);
 
     } else if (msg.type === 'permission') {
-      // החלטת המשתמש על בקשת הרשאה → control_response חזרה ל-CLI.
-      // מי שענה ראשון קובע; הכרטיס נסגר בשני המכשירים דרך permission_cancel.
-      if (!msg.requestId || !s.pendingPerms.has(msg.requestId)) return;
-      s.pendingPerms.delete(msg.requestId);
-      // label/answers נשלחים כדי שהכרטיס במכשיר השני ייסגר עם *אותה* תשובה
-      // שנבחרה כאן, ולא רק עם "אושר/נדחה" גנרי.
-      emit(s, {
-        kind: 'permission_resolved', id: msg.requestId, decision: msg.decision,
-        label: msg.label || null, answers: msg.answers || null, response: msg.response || null,
-        by: ws._device,
-      });
-      if (!s.child) return;
-      const inner = msg.decision === 'allow'
-        ? { behavior: 'allow', updatedInput: msg.updatedInput || {}, ...(msg.updatedPermissions ? { updatedPermissions: msg.updatedPermissions } : {}) }
-        : { behavior: 'deny', message: msg.message || 'נדחה על-ידי המשתמש' };
-      writeStdin(s, { type: 'control_response', response: { subtype: 'success', request_id: msg.requestId, response: inner } });
+      answerPermission(s, msg, ws._device);
 
     } else if (msg.type === 'dialog') {
       // תשובת המשתמש לבקשת control שאיננו מכירים מראש
