@@ -14,13 +14,53 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      // SHARE_CACHE אינו גרסה של הקליפה אלא תיבת דואר: שיתוף שהמתין בזמן
+      // שהאפליקציה התעדכנה היה נמחק כאן לפני שהדף הספיק לאסוף אותו.
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== SHARE_CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
+/* ---------- שיתוף אל תוך האפליקציה ----------
+   ‎share_target‎ שבמניפסט מוסיף את "Claude עברית" לתפריט השיתוף של הטלפון:
+   צילום מסך, קטע טקסט או קישור מכל אפליקציה אחרת נשלחים לכאן כ-POST רב-חלקי.
+   הפענוח נעשה *כאן* ולא בשרת, ובכוונה — ‎Request.formData()‎ הוא מנתח
+   multipart מובנה בדפדפן, ובלעדיו היה צריך להכניס לפרויקט תלות חדשה רק
+   בשביל הנתיב הזה. מה שהתקבל יושב ב-Cache Storage עד שהדף נפתח ולוקח אותו,
+   כי ‎303‎ אל הדף הוא ניווט חדש ואי-אפשר לצרף אליו גוף.
+   ‎/share‎ אינו נתיב אמיתי בשרת: הוא קיים אך ורק כאן. */
+const SHARE_CACHE = 'rtl-claude-share';
+const SHARE_MAX_FILES = 6;
+
+async function takeShare(request) {
+  const cache = await caches.open(SHARE_CACHE);
+  // שיתוף קודם שלא נאסף (הדף נסגר לפני שהספיק) לא מצטרף לזה שעכשיו
+  for (const k of await cache.keys()) await cache.delete(k);
+  let fd;
+  // כתובת מוחלטת: ‎Response.redirect‎ מנתח את הארגומנט כ-URL מלא, ומנוע שלא
+  // משלים אותו מול מקור הדף זורק TypeError על כתובת יחסית — כלומר השיתוף
+  // היה נבלע בשקט במקום להיפתח.
+  const home = new URL('/', self.location.origin).href;
+  try { fd = await request.formData(); } catch { return Response.redirect(home, 303); }
+  const text = ['title', 'text', 'url'].map((k) => fd.get(k)).filter((v) => typeof v === 'string' && v.trim()).join('\n');
+  if (text) await cache.put('/__share/text', new Response(text, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }));
+  const files = fd.getAll('files').filter((f) => f && typeof f === 'object' && (f.type || '').startsWith('image/'));
+  let i = 0;
+  for (const f of files.slice(0, SHARE_MAX_FILES)) {
+    await cache.put('/__share/file/' + i++, new Response(f, {
+      headers: { 'Content-Type': f.type, 'X-Share-Name': encodeURIComponent(f.name || 'image') },
+    }));
+  }
+  // ‎303‎ ולא ‎302‎: הופך את הניווט ל-GET, אחרת הדפדפן מנסה לשלוח את ה-POST שוב
+  return Response.redirect(new URL('/?share=1', self.location.origin).href, 303);
+}
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
+  if (req.method === 'POST' && new URL(req.url).pathname === '/share') {
+    e.respondWith(takeShare(req));
+    return;
+  }
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;

@@ -2117,7 +2117,45 @@ function setBusy(state) {
   if (state) { resetTurnTok(); godTurn = []; renderWorking(); }
   // מעבר busy→פנוי = התור הסתיים: הבזק "הסתיים" בולט
   if (was && !state) flashDone();
+  syncWakeLock();
 }
+
+/* ==========================================================================
+   נעילת מסך בזמן תור
+   --------------------------------------------------------------------------
+   בטלפון, תור ארוך פירושו לרוב לשים את המכשיר בצד ולחכות. המסך נכבה, ובאנדרואיד
+   ואייפון זה גם הרגע שבו הדף מושהה: ה-WebSocket נסגר, ומה שחוזר אליו כשפותחים
+   שוב הוא מסלול ההתחברות-מחדש וההשלמה — שעובד, אבל הצפייה החיה בעבודה פשוט
+   אבדה באמצע. הנעילה מבקשת מהמערכת לא לכבות את המסך כל עוד יש תור *וכל עוד
+   מסתכלים*: הדפדפן משחרר אותה מעצמו ברגע שהלשונית מוסתרת, ולכן אין כאן שום
+   סכנה של מסך שנשאר דלוק בכיס. היא נלקחת שוב בחזרה ללשונית, אם התור עוד רץ.
+
+   רק במגע: במחשב כיבוי המסך אינו משהה את הדף, ואין שום תקלה שהנעילה פותרת —
+   רק שומר מסך שמפסיק לעבוד בלי שביקשו.
+   ========================================================================== */
+let wakeLock = null;
+const wakeLockWanted = () => busy && !document.hidden
+  && 'wakeLock' in navigator && matchMedia('(pointer: coarse)').matches;
+
+async function syncWakeLock() {
+  if (!wakeLockWanted()) {
+    if (wakeLock) { const w = wakeLock; wakeLock = null; try { await w.release(); } catch {} }
+    return;
+  }
+  if (wakeLock) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    // המערכת משחררת בעצמה (מסך שנכבה בכל זאת, סוללה חלשה) — בלי הניקוי הזה
+    // ‎wakeLock‎ היה נשאר מלא ומונע כל ניסיון לקחת אותה שוב.
+    wakeLock.addEventListener('release', () => { wakeLock = null; }, { once: true });
+    dlog('wakelock', { on: true });
+  } catch (e) {
+    // סירוב אינו תקלה: אין הרשאה, הסוללה נמוכה, או שהמשתמש כיבה את זה במערכת
+    wakeLock = null;
+    dlog('wakelock.fail', { err: String((e && e.message) || e) });
+  }
+}
+document.addEventListener('visibilitychange', syncWakeLock);
 
 /** הבזק ירוק גדול "✓ הסתיים" כשהמודל מסיים תור — סימן חיובי חד־משמעי */
 let doneFlashT = null;
@@ -3785,8 +3823,55 @@ async function init() {
   loadConfig();
   refreshUsage(); setInterval(refreshUsage, 30000); // ניצול מכסה — רענון חי כל 30 שנ׳
   if (storeReady) { setSaveState('saved'); scheduleFlush(); } else setSaveState('error');
+  takeSharedInput();
 }
 init();
+
+/* ==========================================================================
+   שיתוף מאפליקציה אחרת בטלפון
+   --------------------------------------------------------------------------
+   ‎share_target‎ שבמניפסט מוסיף את האפליקציה לתפריט השיתוף של המערכת. ה-POST
+   נקלט ב-Service Worker (ראו takeShare שם), מה שהתקבל מחכה ב-Cache Storage,
+   והדף נפתח עם ‎?share=1‎. כאן אוספים אותו: הטקסט נכנס לשדה הכתיבה, והתמונות
+   נכנסות כצירופים באותו מסלול בדיוק שמשרת הדבקה וגרירה — כלומר הן נשלחות
+   למודל כ-base64 ולא כקובץ, וכל מה שנאמר על צירופים תקף גם כאן.
+   מה שנאסף נמחק מיד: התיבה הזו היא מעבר, לא אחסון.
+   ========================================================================== */
+async function takeSharedInput() {
+  if (new URLSearchParams(location.search).get('share') !== '1') return;
+  // הכתובת מתנקה מיד, כדי שרענון לא ינסה לאסוף שיתוף שכבר נאסף
+  history.replaceState(null, '', location.pathname);
+  if (!('caches' in window)) return;
+  try {
+    const cache = await caches.open('rtl-claude-share');
+    const keys = await cache.keys();
+    if (!keys.length) return;
+    let text = '';
+    const files = [];
+    for (const k of keys) {
+      const res = await cache.match(k);
+      if (!res) continue;
+      if (new URL(k.url).pathname === '/__share/text') { text = await res.text(); continue; }
+      const blob = await res.blob();
+      const name = decodeURIComponent(res.headers.get('X-Share-Name') || 'שיתוף.png');
+      files.push(new File([blob], name, { type: blob.type || 'image/png' }));
+    }
+    for (const k of keys) await cache.delete(k);
+
+    if (text) {
+      const input = $('input');
+      // לא דורסים טיוטה שכבר הייתה שם — השיתוף מצטרף לסופה
+      input.value = input.value ? input.value.replace(/\s*$/, '') + '\n' + text : text;
+      autoGrow(); stashDraft();
+    }
+    for (const f of files) await addAttachment(f, true);
+    $('input').focus();
+    dlog('share.in', { chars: text.length, files: files.length });
+    if (files.length) toast(files.length === 1 ? 'תמונה צורפה מהשיתוף' : files.length + ' תמונות צורפו מהשיתוף');
+  } catch (e) {
+    dlog('share.fail', { err: String((e && e.message) || e) });
+  }
+}
 
 /* ==========================================================================
    פיצ'רים חזקים — הנגשת פונקציות הטרמינל ב-GUI
