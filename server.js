@@ -2149,6 +2149,108 @@ function newSession(id) {
 }
 const getSession = (id) => sessions.get(id) || newSession(id);
 
+/* ==========================================================================
+   מנוי שלא מספיק לנקז
+   --------------------------------------------------------------------------
+   עם ‎--include-partial-messages‎ כל טוקן הוא פריים נפרד לכל מנוי. טלפון על
+   סלולר חלש לא קורא אותם בקצב שבו הם נכתבים, ו-‎ws.send‎ ממשיך לצבור אותם
+   בזיכרון של התהליך בלי שום תקרה: תור ארוך אחד מול חיבור גרוע אחד מנפח את
+   השרת, ועל הדרך מאט את כל המנויים האחרים שיושבים באותו event loop.
+   הפתרון לא צריך באפר משלו, כי כבר יש אחד — ‎s.log‎ מחזיק כל פריים ממוספר
+   בדיוק לצורך השלמה אחרי ניתוק. לכן סוקט שעבר את סף ההמתנה פשוט מפסיק לקבל
+   ומסומן ב-‎_lagFrom‎ (ה-seq האחרון שהספיק לצאת אליו); כשהוא מתנקז, אותו מסלול
+   ‎subscribe‎ שמשרת חיבור שנפל משלים לו את הפער — לפי הסדר, בלי כפילות ובלי
+   אובדן. ואם הפיגור ארוך מהיומן, זה בדיוק המצב שבשבילו קיים ‎mode: 'reset'‎.
+   ========================================================================== */
+const WS_HIGH_WATER = 2 * 1024 * 1024;   // מעבר לכמות הזו בהמתנה — מפסיקים לכתוב לסוקט
+const WS_LOW_WATER = 512 * 1024;         // מתחת לזה הוא התנקז מספיק כדי להמשיך
+const WS_DRAIN_MS = 25;                  // ראו הערת הקצב ב-sweepLag
+const lagging = new Set();
+let lagTimer = null;
+
+function startLag(ws, s, seq) {
+  if (ws._lagStart == null) {            // תחילת פיגור, ולא המשך של אותו אחד
+    ws._lagAt = Date.now();
+    ws._lagStart = seq - 1;
+    dbg('ws.lag', { convId: s.id, device: ws._device, from: seq - 1, buffered: ws.bufferedAmount });
+  }
+  ws._lagFrom = seq - 1;                 // מה שיצא בפועל הוא הפריים שלפני זה שנחסם
+  ws._lagSess = s;
+  lagging.add(ws);
+  if (!lagTimer) { lagTimer = setInterval(sweepLag, WS_DRAIN_MS); lagTimer.unref?.(); }
+}
+
+function clearLag(ws) {
+  if (!ws) return;
+  lagging.delete(ws);
+  ws._lagFrom = null;
+  ws._lagSess = null;
+}
+
+/** ניתוק או מעבר לשיחה אחרת — גם הפיגור עצמו מתבטל, ולא רק ההשלמה שלו. */
+function dropLag(ws) {
+  clearLag(ws);
+  if (ws) { ws._lagAt = null; ws._lagStart = null; }
+}
+
+/** הפיגור נסגר — הסוקט חזר לקבל בזרם הרגיל. */
+function endLag(ws, s) {
+  const from = ws._lagStart;
+  dbg('ws.drained', { convId: s.id, device: ws._device, from, to: s.seq, ms: Date.now() - ws._lagAt });
+  ws._lagAt = null;
+  ws._lagStart = null;
+}
+
+/*
+ * הקצב כאן הוא כל העניין. הסקר הוא היחיד שיודע מתי הסוקט התנקז, ולכן כל
+ * תקתוק מעביר לכל היותר ‎HIGH−LOW‎ בייטים: עם חלון של 448KB וסקר של 250ms
+ * ההשלמה זחלה ב-1.8MB לשנייה, כלומר הייתה נשארת מאחור מול תור שמזרים מהר
+ * יותר מזה. חלון של 1.5MB כל 25ms נותן תקרה של ~60MB לשנייה — הרבה מעבר לכל
+ * רשת אמיתית — ומשאיר את הצוואר במקום היחיד שבו הוא שייך: הקו עצמו.
+ * הסקר רץ רק כשמישהו בפיגור, ונעצר ברגע שהרשימה מתרוקנת.
+ */
+function sweepLag() {
+  for (const ws of [...lagging]) {
+    if (ws.readyState !== ws.OPEN) { clearLag(ws); continue; }
+    if (ws.bufferedAmount > WS_LOW_WATER) continue;
+    const s = ws._lagSess;
+    const from = ws._lagFrom;
+    clearLag(ws);
+    // בינתיים הוא עבר לשיחה אחרת (או ירד ממנה) — אין לאן להשלים
+    if (!s || ws._sess !== s) continue;
+    const oldest = s.log.length ? s.log[0].seq : s.seq + 1;
+    if (from < oldest - 1) {
+      // הפיגור ארך יותר מהיומן. אין ממה להשלים, וזה בדיוק המצב שבשבילו קיים
+      // ‎mode: 'reset'‎ — הלקוח קורא את השיחה מהדיסק ומתחיל זרם נקי.
+      dbg('ws.lag.reset', { convId: s.id, device: ws._device, from, oldest });
+      endLag(ws, s);
+      subscribe(ws, s.id, 0);
+    } else if (replayLog(ws, s, from)) {
+      // המשך ההשלמה הוא אותם פריימים שהיו מגיעים חי, לפי הסדר — ולכן הוא
+      // אינו דורש פריים ‎sync‎ משלו. בגרסה קודמת כל תקתוק קרא ל-subscribe,
+      // והלקוח קיבל עשרות פריימי sync מיותרים על פיגור אחד.
+      endLag(ws, s);
+    }
+  }
+  if (!lagging.size && lagTimer) { clearInterval(lagTimer); lagTimer = null; }
+}
+
+/**
+ * מנגן ליומן החל מ-since. מחזיר true אם הכל יצא, ו-false אם הסוקט נחסם באמצע
+ * וסומן להמשך. גם ההשלמה כפופה לסף ההמתנה: בלעדיה היא הייתה הדרך הקצרה ביותר
+ * בדיוק לבעיה שבאה למנוע — אלפי פריימים נשפכים בבת אחת לסוקט שרק עכשיו
+ * התנקז, והבאפר מזנק לעשרות מגה-בייט במכה אחת.
+ */
+function replayLog(ws, s, since) {
+  for (const frame of s.log) {
+    if (frame.seq <= since) continue;
+    if (ws.readyState !== ws.OPEN) return false;
+    if (ws.bufferedAmount > WS_HIGH_WATER) { startLag(ws, s, frame.seq); return false; }
+    sendTo(ws, frame);
+  }
+  return true;
+}
+
 /** משדר פריים לכל המנויים ושומר אותו ביומן, כדי שמי שהתנתק יוכל להשלים. */
 function emit(s, frame) {
   s.seq += 1;
@@ -2161,7 +2263,10 @@ function emit(s, frame) {
   if (s.log.length > LOG_MAX) s.log.splice(0, s.log.length - LOG_MAX);
   const raw = JSON.stringify(out);
   for (const ws of s.subs) {
-    if (ws.readyState === ws.OPEN) { try { ws.send(raw); } catch {} }
+    if (ws.readyState !== ws.OPEN) continue;
+    if (ws._lagFrom != null) continue;                    // בפיגור — יקבל בהשלמה
+    if (ws.bufferedAmount > WS_HIGH_WATER) { startLag(ws, s, out.seq); continue; }
+    try { ws.send(raw); } catch {}
   }
 }
 /** הודעת שירות למנוי יחיד — לא נכנסת ליומן ולא תופסת seq. */
@@ -3281,6 +3386,7 @@ function loadResumeState() {
 /* ---------- מנויים ---------- */
 
 function unsubscribe(ws) {
+  dropLag(ws);
   const s = ws._sess;
   if (!s) return;
   s.subs.delete(ws);
@@ -3352,12 +3458,12 @@ function subscribe(ws, convId, sinceSeq) {
     duet: duetState,
   });
   if (canCatchUp) {
-    for (const frame of s.log) if (frame.seq > since) sendTo(ws, frame);
+    replayLog(ws, s, since);
   } else {
     // מכשיר חדש שנכנס באמצע תור. הדיסק מחזיק את מה שכבר הסתיים, והיומן מחזיק
     // את התור הרץ מתחילתו — יחד זו התמונה המלאה. בלי המשלוח הזה הטלפון היה
     // נפתח באמצע תור ורואה שיחה שנעצרה בתור הקודם.
-    for (const frame of s.log) sendTo(ws, frame);
+    replayLog(ws, s, 0);
   }
   broadcastPresence(s);
 }
