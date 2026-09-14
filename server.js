@@ -1275,13 +1275,47 @@ app.post('/api/import', storeJson, (req, res) => {
 });
 
 // חיפוש חופשי בכל השיחות שבדיסק (כולל כאלה שלא נטענו לזיכרון הדפדפן)
+/* אינדקס החיפוש.
+   ----------------------------------------------------------------------
+   קודם כל חיפוש קרא ופענח מהדיסק את *כל* קובצי השיחות מחדש — סינכרונית,
+   באותו thread שמזרים ברגע זה תשובה לדפדפן. החיפוש בממשק מופעל אחרי השהיה
+   של 220ms מכל הקלדה, כלומר כל מילה שמקלידים בסרגל הצד עצרה את הסטרימינג
+   למשך פענוח של מגה-בייטים. הפתרון הוא אותה תבנית שכבר משרתת את רשימת
+   השיחות (‎convMetaCached‎): מטמון לפי חתימת הקובץ, כך שרק שיחה שהשתנתה
+   נקראת שוב. החתימה היא mtime *וגודל* — בשתי כתיבות באותה מילישנייה mtime
+   לבדו היה מחזיר תוכן ישן.
+   ‎lower‎ הוא כל הטקסט מוקטן פעם אחת, ומשמש רק לשאלה "האם יש כאן התאמה
+   בכלל". קטע ההקשר עצמו נחתך תמיד מהטקסט המקורי, כדי שמה שמוצג יישאר
+   בדיוק כפי שנכתב. */
+const searchCache = new Map();
+function searchDoc(id) {
+  let st;
+  try { st = fs.statSync(convPath(id)); } catch { searchCache.delete(id); return null; }
+  const sig = st.mtimeMs + ':' + st.size;
+  const hit = searchCache.get(id);
+  if (hit && hit.sig === sig) return hit.doc;
+  const c = readConv(id);
+  if (!c) { searchCache.delete(id); return null; }
+  const parts = [];
+  for (const m of (c.messages || [])) {
+    if (m.role === 'user') { if (m.text) parts.push(m.text); }
+    else for (const b of (m.blocks || [])) if ((b.type === 'text' || b.type === 'thinking') && b.text) parts.push(b.text);
+  }
+  const title = c.title || '';
+  const doc = { id, title, updatedAt: c.updatedAt || 0, parts, lower: (title + '\n' + parts.join('\n')).toLowerCase() };
+  searchCache.set(id, { sig, doc });
+  return doc;
+}
+
 app.get('/api/search', (req, res) => {
   const q = (req.query.q || '').toString().trim().toLowerCase();
   if (!q) return res.json({ results: [] });
   const results = [];
+  const live = new Set();
   for (const id of listConvIds()) {
-    const c = readConv(id);
-    if (!c) continue;
+    live.add(id);
+    const doc = searchDoc(id);
+    if (!doc || !doc.lower.includes(q)) continue;   // הרוב המכריע נופל כאן
     let hits = 0, snippet = '';
     const scan = (text) => {
       if (!text) return;
@@ -1290,14 +1324,15 @@ app.get('/api/search', (req, res) => {
       hits++;
       if (!snippet) snippet = text.slice(Math.max(0, i - 40), i + 100).replace(/\s+/g, ' ').trim();
     };
-    scan(c.title);
-    for (const m of (c.messages || [])) {
-      if (m.role === 'user') scan(m.text);
-      else for (const b of (m.blocks || [])) if (b.type === 'text' || b.type === 'thinking') scan(b.text);
+    scan(doc.title);
+    for (const text of doc.parts) {
+      scan(text);
       if (hits > 8) break;
     }
-    if (hits) results.push({ id: c.id, title: c.title, updatedAt: c.updatedAt, hits, snippet });
+    if (hits) results.push({ id: doc.id, title: doc.title, updatedAt: doc.updatedAt, hits, snippet });
   }
+  // שיחות שנמחקו בינתיים לא נשארות תלויות בזיכרון
+  for (const id of searchCache.keys()) if (!live.has(id)) searchCache.delete(id);
   results.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   res.json({ results: results.slice(0, 50) });
 });
