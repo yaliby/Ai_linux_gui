@@ -1,0 +1,21 @@
+# תלויות
+node_modules/
+
+# סודות ותצורה מקומית
+.env
+.env.local
+certs/
+*.pem
+*.key
+
+# גיבויים אוטומטיים
+*.bak
+*.bak-*
+
+# הגדרות מקומיות של כלים
+.claude/settings.local.json
+
+# לוגים וזמניים
+*.log
+npm-debug.log*
+.DS_Store

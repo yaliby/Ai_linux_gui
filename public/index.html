@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <!-- viewport-fit=cover + safe-area ב-CSS: בלי זה המחבר נחתך מתחת לפס הבית באייפון -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Claude · ממשק עברית</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#f5f4ef" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#1c1b19" media="(prefers-color-scheme: dark)" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Claude עברית" />
+  <link rel="icon" href="/favicon.png" type="image/png" sizes="32x32" />
+  <link rel="icon" href="/icons/icon-128.png" type="image/png" sizes="128x128" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/icon-256.png" />
+  <link rel="stylesheet" href="/vendor/highlight/styles/github.min.css" media="(prefers-color-scheme: light)" />
+  <link rel="stylesheet" href="/vendor/highlight/styles/github-dark.min.css" media="(prefers-color-scheme: dark)" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== סרגל צד ===== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="side-head">
+      <span class="wordmark">Claude</span>
+      <button id="sideCollapse" class="icon-btn" title="כווץ" aria-label="כווץ סרגל"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5l-6 6.5 6 6.5"/></svg></button>
+    </div>
+    <!-- גוף הסרגל הוא אזור גלילה אחד: האופציות, החיפוש ורשימת השיחות זזים
+         יחד כבלוק אחד. קודם רק ‎.conv-list‎ גללה, והאופציות נשארו תקועות
+         למעלה — כלומר הן גזלו שליש מגובה המגירה בטלפון בלי שאפשר להזיז אותן. -->
+    <div class="side-scroll" id="sideScroll">
+      <nav class="side-nav">
+        <button id="newChat" class="nav-row">
+          <span class="nav-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg></span>
+          <span>שיחה חדשה</span>
+        </button>
+        <!-- צ'אט אנונימי: שיחה שלא נכתבת לדיסק, לא ליומן ולא לקובץ סשן של
+             ה-CLI, ונמחקת ביציאה. מקומו כאן, ליד "שיחה חדשה", כי זו בחירה
+             שעושים *לפני* שמתחילים לכתוב — אחר כך כבר מאוחר. -->
+        <button id="newAnon" class="nav-row">
+          <span class="nav-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4.5c-3 0-5.5 2.4-5.5 5.4v6.9l2.2-1.4 1.7 1.4 1.6-1.4 1.6 1.4 1.7-1.4 2.2 1.4v-6.9c0-3-2.5-5.4-5.5-5.4z"/><path d="M9.8 10.4h.01"/><path d="M14.2 10.4h.01"/></svg></span>
+          <span>צ׳אט אנונימי</span>
+        </button>
+        <button id="newDuet" class="nav-row">
+          <span class="nav-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M4.5 19a3.5 3.5 0 0 1 7 0"/><path d="M12.5 19a3.5 3.5 0 0 1 7 0"/></svg></span>
+          <span>דואט · שני מודלים</span>
+        </button>
+        <button id="openSessions" class="nav-row">
+          <span class="nav-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 5v4.5H15"/></svg></span>
+          <span>סשנים על הדיסק</span>
+        </button>
+        <!-- Remote Control הוא יציאה החוצה: המחשב הזה נפתח ל-claude.ai/code
+             ולנייד. עד היום הוא היה מוסתר מאחורי /rc ולוח הפקודות; מקומו בסרגל,
+             ליד שאר מה שרץ על המחשב הזה. -->
+        <button id="openRc" class="nav-row">
+          <span class="nav-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="6.5" width="12" height="9" rx="1.5"/><path d="M9.5 15.5v3"/><path d="M6.5 18.5h6"/><path d="M18 5.2a6.5 6.5 0 0 1 0 9.6"/><path d="M20.6 2.8a10 10 0 0 1 0 14.4"/></svg></span>
+          <span>Remote Control</span>
+        </button>
+        <button id="openMcp" class="nav-row">
+          <span class="nav-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 13v7"/><path d="M13 16.5h7"/></svg></span>
+          <span>שרתי MCP</span>
+        </button>
+        <!-- היומן חי על הדיסק מזמן; מכאן אפשר להגיע אליו גם מהטלפון, שהוא
+             בדיוק המכשיר שבו התקלות קורות ואין בו קונסולה לפתוח. -->
+        <button id="openLogs" class="nav-row">
+          <span class="nav-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 4.5h9L19 8.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5v-13A1.5 1.5 0 0 1 6.5 5"/><path d="M14.5 4.5V9H19"/><path d="M8.5 12.5h7"/><path d="M8.5 16h4.5"/></svg></span>
+          <span>יומן ריצה</span>
+        </button>
+      </nav>
+      <div class="side-search">
+        <input id="convSearch" type="search" placeholder="חיפוש שיחות…" aria-label="חיפוש שיחות" />
+      </div>
+      <div class="conv-list" id="convList"></div>
+    </div>
+    <div class="side-foot">
+      <button id="themeToggle" class="mini" title="החלף מצב תצוגה">◐ מצב תצוגה</button>
+      <span class="ver">RTL</span>
+    </div>
+  </aside>
+  <div class="side-resizer" id="sideResizer" role="separator" aria-orientation="vertical" aria-label="שינוי רוחב סרגל השיחות" title="גרור לשינוי רוחב"></div>
+  <!-- עמעום מאחורי מגירת השיחות בטלפון. קיים רק שם: מעל 760px הסרגל הוא עמודה
+       בגריד ואין מה לעמעם. הקשה עליו סוגרת — זו הדרך שבה סוגרים מגירה בטלפון. -->
+  <div class="side-backdrop" id="sideBackdrop" hidden></div>
+
+  <!-- ===== ראשי ===== -->
+  <div class="main">
+    <!-- פס התקדמות עליון — נצבע ונע כל עוד המודל מעבד -->
+    <div class="top-progress" id="topProgress" aria-hidden="true"><span></span></div>
+    <header class="topbar">
+      <div class="topbar-lead">
+        <button id="sideToggle" class="icon-btn" title="שיחות" aria-label="תפריט"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg></button>
+        <!-- "שיחה חדשה" הוא הפעולה הכי נפוצה, וכל הדרכים אליה היו מותנות: בתוך
+             המגירה (שצריך לפתוח), ב-Ctrl+N (שאין בטלפון) ובלוח הפקודות. כאן הוא
+             קבוע — צמוד לכפתור התפריט, ולא נכנס לקבוצה שנחתכת בסרגל צר. -->
+        <button id="newChatTop" class="icon-btn" title="שיחה חדשה (Ctrl+N)" aria-label="שיחה חדשה"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button>
+      </div>
+      <div class="title-wrap">
+        <span class="dot" id="statusDot" title="מנותק"></span>
+        <span class="status-pill" id="statusPill" aria-live="polite">מוכן</span>
+        <strong id="convTitle">שיחה חדשה</strong>
+        <button type="button" id="cwdChip" class="cwd-chip" title="תיקיית העבודה של השיחה"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7a1.5 1.5 0 0 1 1.5-1.5h3l2 2h8A1.5 1.5 0 0 1 20 9v8.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/></svg><span id="cwdChipText">~</span></button>
+      </div>
+      <div class="topbar-actions">
+        <!-- חיווי "ההתרעות לא יעבדו". מופיע רק כשבאמת אין הרשאה, כי אחרת אין
+             שום סימן לכך שסיום משימה לא יקפיץ כלום — וזה מתגלה רק בפעם שבה
+             חיכית להתרעה שלא הגיעה. לחיצה מבקשת את ההרשאה במקום. -->
+        <button type="button" id="notifyChip" class="notify-chip hidden" aria-live="polite">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 15.5v-4a6 6 0 0 0-9.2-5.1"/><path d="M6.2 9.4A6 6 0 0 0 6 11.5v4L4.5 18h13"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/><path d="M4 3.5l16 17"/></svg>
+          <span id="notifyChipText">התרעות כבויות</span>
+        </button>
+        <span id="saveDot" class="save-dot hidden" aria-live="polite"></span>
+        <span id="presence" class="presence hidden" aria-live="polite" title="מכשירים שצופים בשיחה הזו"></span>
+        <!-- קרוס־צ'ק ידני. זמין תמיד, גם כשאין תור פעיל: זו הדרך לשאול "האם מה
+             שמוצג כאן הוא מה שקיים בפועל", ולתקן אם לא. -->
+        <button id="syncBtn" class="icon-btn" title="בדוק מול השרת וסנכרן את המסך" aria-label="בדוק מול השרת"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 4.6v5h-5"/><path d="M3.5 19.4v-5h5"/><path d="M4.7 9.3a8 8 0 0 1 13.2-3.1l2.6 2.4"/><path d="M19.3 14.7a8 8 0 0 1-13.2 3.1L3.5 15.4"/></svg></button>
+        <button id="remoteBtn" class="icon-btn" title="גישה מרחוק" aria-label="גישה מרחוק"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.8 8.2a10 10 0 0 1 14.4 0"/><path d="M8 11.4a5.5 5.5 0 0 1 8 0"/><circle cx="12" cy="16.2" r="1.7"/></svg></button>
+        <button id="findBtn" class="icon-btn" title="חיפוש בשיחה (Ctrl+F)" aria-label="חיפוש בשיחה"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg></button>
+        <button id="exportBtn" class="icon-btn" title="ייצוא ל-Markdown (Ctrl+E)" aria-label="ייצוא"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19h14"/></svg></button>
+        <button id="wideToggle" class="icon-btn" title="הרחב את שטח העבודה" aria-label="הרחב תצוגה"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 4.5h-5v5"/><path d="M14.5 19.5h5v-5"/><path d="M4.5 4.5l6 6"/><path d="M19.5 19.5l-6-6"/></svg></button>
+        <button id="settingsToggle" class="icon-btn" title="הגדרות" aria-label="הגדרות"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h8"/><path d="M17 7.5h3"/><circle cx="14.5" cy="7.5" r="2.5"/><path d="M4 16.5h3"/><path d="M12 16.5h8"/><circle cx="9.5" cy="16.5" r="2.5"/></svg></button>
+        <!-- תפריט גלישה — מוצג רק בטלפון. שאר כפתורי הסרגל נכנסים תחתיו במקום
+             להידחס לשבעה יעדים בני 38px בשורה אחת. הוא פותח את לוח הפקודות,
+             שכבר מכיל בדיוק את אותן פעולות. -->
+        <button id="moreBtn" class="icon-btn" title="עוד" aria-label="פעולות נוספות"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg></button>
+      </div>
+    </header>
+
+    <!-- פס הצ'אט האנונימי. הוא לא קישוט: כל עוד הוא על המסך, מה שנכתב כאן
+         לא יישמר בשום מקום — וזו עובדה שצריכה להיות מול העיניים בכל רגע, לא
+         רק ברגע הפתיחה. בתוכו יושבות שתי הפעולות היחידות ששייכות למצב: מתג
+         הכלים (שמשנה מה השיחה יכולה לגעת בו מחוץ לעצמה) והיציאה, שמוחקת.
+         "יציאה" איננה רק הכפתור: כל מעבר החוצה מוחק. ראו leaveAnon ב-app.js.
+         הפס מתוכנן להישאר שורה אחת — בטלפון הוא מתחלף לנוסח קצר יותר. -->
+    <div id="anonBar" class="anon-bar hidden" role="status" aria-live="polite">
+      <span class="ab-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4.5c-3 0-5.5 2.4-5.5 5.4v6.9l2.2-1.4 1.7 1.4 1.6-1.4 1.6 1.4 1.7-1.4 2.2 1.4v-6.9c0-3-2.5-5.4-5.5-5.4z"/><path d="M9.8 10.4h.01"/><path d="M14.2 10.4h.01"/></svg></span>
+      <span class="anon-body">
+        <b>צ׳אט אנונימי</b>
+        <!-- אותו משפט בשתי מידות. בטלפון העמודה הזו רחבה כ-150px, והנוסח
+             הארוך גלש שם לשמונה שורות ועשה מהפס חצי מסך. מדיה־קוורי מחליף
+             ביניהם; הקצר נושא את הארוך ב-title. -->
+        <small class="anon-long">לא נשמר בדיסק, לא ביומן ולא בקובץ סשן · כל יציאה ממנו מוחקת אותו, בלי דרך לחזור</small>
+        <small class="anon-short" title="לא נשמר בדיסק, לא ביומן ולא בקובץ סשן · כל יציאה ממנו מוחקת אותו, בלי דרך לחזור">לא נשמר · כל יציאה מוחקת</small>
+      </span>
+      <span class="anon-acts">
+        <button type="button" id="anonTools" class="anon-tools"><span class="t-long">כלים: כבויים</span><span class="t-short">כלים ✕</span></button>
+        <button type="button" id="anonExit" class="anon-exit" aria-label="יציאה ומחיקה"><span class="t-long">יציאה ומחיקה</span><span class="t-short">מחק ויצא</span></button>
+      </span>
+    </div>
+
+    <!-- פס "ממתינים לחידוש מכסת הסשן". יושב מתחת לסרגל העליון, כלומר במקום
+         הראשון שהעין נוחתת עליו, ונשאר שם כל זמן ההמתנה — גם אחרי רענון דף
+         וגם במכשיר אחר, כי המצב עצמו חי בשרת. -->
+    <div id="limitBar" class="limit-bar hidden" role="status" aria-live="polite">
+      <span class="lb-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.4 1.6"/><path d="M9 3.2h6"/></svg></span>
+      <span class="lb-body">
+        <b id="limitBarTitle">מכסת הסשן נגמרה</b>
+        <small id="limitBarSub">ממשיכים אוטומטית ברגע שהמכסה תתחדש</small>
+      </span>
+      <span class="lb-acts">
+        <button type="button" id="limitResumeNow" class="lb-go">המשך עכשיו</button>
+        <button type="button" id="limitCancel" class="lb-x" title="בטל המשך אוטומטי" aria-label="בטל המשך אוטומטי">✕</button>
+      </span>
+    </div>
+
+    <!-- פס "ממתין לתשובה" — שאלה של Claude לא יכולה להיעלם מהעין -->
+    <div id="askBar" class="ask-bar hidden" role="status">
+      <span class="ab-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M9.8 9.6a2.3 2.3 0 1 1 2.9 2.6v1.2"/><path d="M12.7 16.6h.01"/></svg></span>
+      <span id="askBarText">Claude ממתין לתשובה שלך</span>
+      <button type="button" id="askBarGo" class="ab-go">לענות עכשיו</button>
+    </div>
+
+    <!-- חיפוש בתוך השיחה -->
+    <div id="findBar" class="find-bar hidden">
+      <input id="findInput" type="search" placeholder="חיפוש בשיחה…" aria-label="חיפוש בשיחה" />
+      <span id="findCount" class="find-count"></span>
+      <button type="button" id="findPrev" class="find-nav" title="הקודם" aria-label="הקודם">↑</button>
+      <button type="button" id="findNext" class="find-nav" title="הבא" aria-label="הבא">↓</button>
+      <button type="button" id="findClose" class="find-nav" title="סגור" aria-label="סגור">✕</button>
+    </div>
+
+    <!-- הגדרות מתקדמות (popover) -->
+    <div class="settings hidden" id="settings">
+      <label>תיקיית עבודה
+        <div class="cwd-row">
+          <input id="cwd" type="text" dir="ltr" placeholder="~ (ברירת מחדל)" />
+          <button id="cwdBrowse" type="button" class="cwd-browse" title="עיין… בחר תיקייה ממנהל הקבצים"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7a1.5 1.5 0 0 1 1.5-1.5h3l2 2h8A1.5 1.5 0 0 1 20 9v8.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/></svg>עיין…</button>
+        </div>
+        <span class="hint" id="cwdHint"></span>
+      </label>
+
+      <!-- לא כל שיחה היא עבודה על פרויקט. כאן התיקייה מוחלפת בסימן, הכלים
+           כבויים, ומה שנשאר הוא שיחה בין המשתמש למודל. -->
+      <label class="switch-row" id="noDirRow">
+        <input type="checkbox" id="noDirOn" />
+        <span>ללא תיקייה — שיחה פשוטה עם המודל</span>
+      </label>
+
+      <div class="set-row" id="notifyRow">
+        <label class="switch-row">
+          <input type="checkbox" id="notifyOn" />
+          <span>התרעות מערכת</span>
+        </label>
+        <div class="set-actions">
+          <button type="button" class="mini" id="notifyAsk">בקש הרשאה</button>
+          <button type="button" class="mini" id="notifyTest">בדיקה</button>
+        </div>
+        <span class="hint" id="notifyHint"></span>
+      </div>
+    </div>
+
+    <main id="log" class="log" aria-live="polite"></main>
+
+    <button id="jumpBtn" class="jump hidden" title="לתחתית">↓</button>
+
+    <div id="working" class="working hidden">
+      <span class="spinner"></span>
+      <span id="workingText">חושב…</span>
+      <!-- קרוס־צ'ק: מופיעים רק כשהתור נראה תקוע, כדי שהמצב "אין קשר" לא ייראה
+           זהה למצב "עדיין עובד" — ושתהיה דרך ידנית לתקן בלי לרענן את הדף. -->
+      <span id="staleNote" class="stale-note hidden"></span>
+      <button id="resyncBtn" class="resync hidden" title="בדוק מול השרת והשלם מה שהוחמץ">⟳ סנכרן</button>
+      <button id="stopBtn" class="stop">עצור</button>
+    </div>
+
+    <!-- הבזק "הסתיים" — סימן חיובי בולט בסיום תור -->
+    <div class="done-flash" id="doneFlash" aria-hidden="true"><span class="df-ic">✓</span> הסתיים</div>
+
+    <!-- צירוף תמונות: input נסתר + שכבת גרירה -->
+    <input type="file" id="fileInput" accept="image/*" multiple hidden />
+    <div class="dropzone hidden" id="dropzone">
+      <div class="dz"><div class="dzi" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="13" rx="2"/><circle cx="9" cy="10.5" r="1.6"/><path d="M5.5 16.5l4-4 2.5 2.5 2.2-2.2 4.3 3.7"/></svg></div><b>שחררו כאן לצירוף</b><small>תמונה מהדיסק תצורף לפי הנתיב · הדבקה תישמר זמנית</small></div>
+    </div>
+
+    <!-- ===== קלט ===== -->
+    <footer class="composer">
+      <div class="composer-card">
+        <!-- תפריט השלמה: פקודות סלאש (/) ואזכור קבצים (@) -->
+        <div class="ac-menu hidden" id="acMenu"></div>
+        <div class="att-strip hidden" id="attStrip"></div>
+        <div class="queue-strip hidden" id="queueStrip"></div>
+        <textarea id="input" rows="1" placeholder="במה אפשר לעזור לך היום? · / לפקודות · @ לקבצים"></textarea>
+        <div class="composer-bar">
+          <button id="attachBtn" class="attach" title="צירוף תמונה" aria-label="צירוף תמונה">＋</button>
+          <!-- ב-RTL הילדים הראשונים יושבים מימין: צירוף + בוררים יחד בצד ימין,
+               spacer דוחף את "שלח" לשמאל. קודם הבוררים היו אחרי ה-spacer ונדבקו
+               לשליחה בצד שמאל — בדיוק ההפך ממה שממשק עברי מצפה. -->
+          <div class="pill-row">
+            <div class="pill-wrap">
+              <select id="perm" class="pill" title="מצב הרשאות"></select>
+            </div>
+            <div class="pill-wrap">
+              <select id="model" class="pill" title="מודל">
+                <option value="">מודל ברירת מחדל</option>
+              </select>
+            </div>
+            <div class="pill-wrap">
+              <select id="effort" class="pill" title="מאמץ חשיבה">
+                <option value="">מאמץ רגיל</option>
+              </select>
+            </div>
+          </div>
+          <span class="bar-spacer"></span>
+          <button id="sendBtn" class="send" title="שלח" aria-label="שלח">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+          </button>
+        </div>
+      </div>
+      <!-- מדדי מכסה — רצועה ויזואלית מתחת לתיבת הטקסט -->
+      <button type="button" class="usage-strip hidden" id="composerUsage" title="לחץ לפירוט מגבלות הניצול" aria-expanded="false" aria-controls="usageModal">
+        <div class="cu-meters" id="composerUsageMeters"></div>
+      </button>
+      <!-- המפרידים נוצרים ב-CSS, כדי שהסתרת פריט ריק לא תשאיר "·" יתום -->
+      <div class="statusbar" id="statusbar">
+        <span class="sb-item" id="sbModel">מודל ברירת מחדל</span>
+        <span class="sb-item hidden" id="sbContext" title="ניצול חלון ההקשר"></span>
+        <span class="sb-item" id="sbCost" title="עלות מצטברת בשיחה">$0.00</span>
+        <span class="sb-item hidden" id="sbTurn" title="משך התור האחרון"></span>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<!-- מודאל ניצול מכסה — חלון צף גדול במרכז (בהשראת Claude) -->
+<div id="usageModal" class="usage-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="usageModalTitle">
+  <div class="usage-card" role="document">
+    <button type="button" id="usageModalClose" class="usage-close" title="סגור" aria-label="סגור">✕</button>
+    <header class="usage-head">
+      <h2 id="usageModalTitle">מגבלות ניצול התוכנית</h2>
+      <span class="usage-plan" id="usagePlan" hidden></span>
+    </header>
+
+    <section class="usage-block" id="usageSessionBlock"></section>
+
+    <section class="usage-block" id="usageWeeklyBlock" hidden>
+      <h3 class="usage-sec">מגבלות שבועיות</h3>
+      <div id="usageWeeklyMeters"></div>
+    </section>
+  </div>
+</div>
+
+<!-- לוח פקודות (Ctrl/Cmd+K) -->
+<div id="palette" class="palette-overlay hidden">
+  <div class="palette-card">
+    <input id="paletteInput" type="text" placeholder="הקלד פקודה או חפש שיחה…  ·  Ctrl+K" aria-label="לוח פקודות" />
+    <div id="paletteList" class="palette-list"></div>
+  </div>
+</div>
+
+<!-- בורר מודלים עם חיפוש. מחליף את התפריט הנפתח של <select id="model">:
+     ברשימה של מאות מודלים גלילה היא לא דרך למצוא מודל, הקלדה כן. -->
+<div id="modelPicker" class="palette-overlay hidden" role="dialog" aria-modal="true" aria-label="בחירת מודל">
+  <div class="palette-card mp-card">
+    <input id="modelPickerInput" type="text" placeholder="חיפוש מודל…  ·  gemini, opus, חינם" aria-label="חיפוש מודל" autocomplete="off" spellcheck="false" />
+    <div id="modelPickerList" class="palette-list mp-list"></div>
+    <div id="modelPickerFoot" class="mp-foot"></div>
+  </div>
+</div>
+
+<!-- חלונית מודאלית כללית (סשנים / MCP) -->
+<div id="modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <strong id="modalTitle"></strong>
+      <button id="modalClose" class="icon-btn" title="סגור" aria-label="סגור">✕</button>
+    </div>
+    <div id="modalBody" class="modal-body"></div>
+  </div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="/vendor/marked/marked.min.js"></script>
+<script src="/vendor/dompurify/purify.min.js"></script>
+<script src="/vendor/highlight/highlight.min.js"></script>
+<script src="/app.js"></script>
+<script>
+  // רישום ה-service worker הוא מה שהופך את הממשק לאפליקציה שאפשר להתקין
+  // על מסך הבית בטלפון. הוא לא מיועד לעבודה בלי רשת (ראו ההערה ב-sw.js).
+  if ('serviceWorker' in navigator) {
+    addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  }
+</script>
+</body>
+</html>

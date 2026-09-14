@@ -1,0 +1,55 @@
+# OmniRoute — שער AI תואם-OpenAI, רץ מקומית ומשמש כספק בממשק.
+#
+# הרמה:      npm run omni:up        (או: docker compose up -d)
+# הכל ביחד:  npm run dev:all        (מרים את OmniRoute וממתין לו, ואז server.js)
+#
+# הערה על פורטים: בתוך המכולה OmniRoute מאזין על 20128 — זה קבוע ונקבע על ידי
+# האימג'. כלפי חוץ אנחנו ממפים אותו ל-OMNIROUTE_PORT (ברירת מחדל 3000), כדי
+# ש-OMNIROUTE_BASE_URL=http://localhost:3000/v1 יעבוד בלי הפתעות. משנים פורט
+# בצד המארח בלבד — ב-.env, בשתי השורות גם יחד.
+services:
+  omniroute:
+    image: diegosouzapw/omniroute:${OMNIROUTE_IMAGE_TAG:-latest}
+    container_name: omniroute
+    restart: unless-stopped
+    # לכיבוי מסודר: OmniRoute כותב את מסד הנתונים שלו בסגירה
+    stop_grace_period: 40s
+    ports:
+      - "127.0.0.1:${OMNIROUTE_PORT:-3000}:20128"
+    environment:
+      # הגדרות, מפתחות ספקים ומטמון המודלים — הכל יושב תחת DATA_DIR
+      DATA_DIR: /app/data
+      REDIS_URL: redis://redis:6379
+      OMNIROUTE_MEMORY_MB: ${OMNIROUTE_MEMORY_MB:-512}
+    volumes:
+      # נפח בשם ולא bind mount: המכולה רצה כמשתמש לא-root, ותיקייה מקומית
+      # הייתה נוצרת בבעלות שגויה ונופלת על הרשאות.
+      - omniroute-data:/app/data
+    healthcheck:
+      # סקריפט הבדיקה מגיע בתוך האימג' — אין תלות ב-curl/wget שאולי לא מותקנים
+      test: ["CMD", "node", "healthcheck.mjs"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # מגבלת קצב ומטמון משותף. בלעדיו OmniRoute נופל למימוש בזיכרון —
+  # עובד, אבל התיעוד שלהם ממליץ בפירוש נגד.
+  redis:
+    image: redis:7-alpine
+    container_name: omniroute-redis
+    restart: unless-stopped
+    volumes:
+      - omniroute-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  omniroute-data:
+  omniroute-redis-data:
