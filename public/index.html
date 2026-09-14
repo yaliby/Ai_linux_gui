@@ -218,6 +218,16 @@
         </label>
         <span class="hint" id="notifyActionsHint"></span>
       </div>
+
+      <!-- התקנה על מסך הבית. הכפתור מופיע רק כשהדפדפן באמת מוכן להתקין —
+           ראו renderInstallRow. -->
+      <div class="set-row hidden" id="installRow">
+        <div class="set-label">התקנה על מסך הבית</div>
+        <div class="set-actions">
+          <button type="button" class="mini" id="installBtn">התקן</button>
+        </div>
+        <span class="hint" id="installHint"></span>
+      </div>
     </div>
 
     <main id="log" class="log" aria-live="polite"></main>

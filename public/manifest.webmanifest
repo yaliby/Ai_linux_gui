@@ -50,5 +50,29 @@
         }
       ]
     }
-  }
+  },
+  "shortcuts": [
+    {
+      "name": "שיחה חדשה",
+      "short_name": "שיחה חדשה",
+      "url": "/?go=new",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "דואט — שני מודלים על תוצר אחד",
+      "short_name": "דואט",
+      "url": "/?go=duet",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
 }

@@ -1767,7 +1767,7 @@ function finalizeTurn(result) {
   if (!document.hasFocus() && !msgQueue.length) {
     const who = AGENT_LABEL[(conv && conv.sessionAgent) || activeAgent()] || 'Claude';
     setTitleBadge(who + ' סיים');
-    desktopNotify(who + ' סיים לעבוד', clamp((conv && conv.title) || '', 60));
+    desktopNotify(who + ' סיים לעבוד', clamp((conv && conv.title) || '', 60), { vibrate: HAPTIC_DONE });
   }
   // השיגור של הפריט הבא בתור נעשה בשרת — כאן רק מחכים לפריים user_msg שלו
 }
@@ -2116,7 +2116,7 @@ function setBusy(state) {
   setStatus(state ? 'busy' : 'on', state ? 'עובד…' : 'מחובר');
   if (state) { resetTurnTok(); godTurn = []; renderWorking(); }
   // מעבר busy→פנוי = התור הסתיים: הבזק "הסתיים" בולט
-  if (was && !state) flashDone();
+  if (was && !state) { flashDone(); haptic(HAPTIC_DONE); }
   syncWakeLock();
 }
 
@@ -2885,7 +2885,7 @@ $('anonTools').onclick = () => {
 
 // ---------- הגדרות + עיצוב ----------
 let settingsOpenedAt = 0;
-function openSettings() { $('settings').classList.remove('hidden'); settingsOpenedAt = Date.now(); renderNotifyRow(); }
+function openSettings() { $('settings').classList.remove('hidden'); settingsOpenedAt = Date.now(); renderNotifyRow(); renderInstallRow(); }
 
 // ---------- מתג ההתרעות ----------
 $('notifyOn').onchange = (e) => { store.settings.notify = e.target.checked; save(); renderNotifyRow(); };
@@ -3824,6 +3824,18 @@ async function init() {
   refreshUsage(); setInterval(refreshUsage, 30000); // ניצול מכסה — רענון חי כל 30 שנ׳
   if (storeReady) { setSaveState('saved'); scheduleFlush(); } else setSaveState('error');
   takeSharedInput();
+  runLaunchShortcut();
+}
+
+/* לחיצה ארוכה על האייקון במסך הבית פותחת את הקיצורים שבמניפסט, וכל אחד מהם
+   הוא בסך הכול כתובת. הפעולה נעשית *אחרי* ‎init‎ בכוונה: "שיחה חדשה" לפני
+   שההגדרות והשיחות הגיעו מהשרת הייתה נמחקת ברגע שהן מגיעות. */
+function runLaunchShortcut() {
+  const go = new URLSearchParams(location.search).get('go');
+  if (!go) return;
+  history.replaceState(null, '', location.pathname);
+  if (go === 'new') newConv();
+  else if (go === 'duet') $('newDuet').click();
 }
 init();
 
@@ -4382,13 +4394,17 @@ async function jumpToPendingAsk() {
 function notifyQuestion(ref) {
   const isQ = ref.tool === 'AskUserQuestion';
   const text = isQ ? 'Claude שאל אותך שאלה' : 'Claude ממתין לאישור שלך';
+  // לפני היציאה על פוקוס: מי שכן מסתכל על המסך לא מקבל התראה בכלל, ורטט הוא
+  // הדרך היחידה שנשארה לסמן לו שנפתח כרטיס שממתין לו.
+  haptic(HAPTIC_ASK);
   if (document.hasFocus()) return;
   setTitleBadge(text);
-  if (isQ) { desktopNotify(text, 'לחץ כדי לענות'); return; }
+  if (isQ) { desktopNotify(text, 'לחץ כדי לענות', { vibrate: HAPTIC_ASK }); return; }
   const what = clamp(toolPreview(ref.tool, ref.input) || ref.description || '', 120);
   desktopNotify(text, ref.tool + (what ? ' · ' + what : ''), {
     // חייב להישאר גלוי עד שעונים: בקשה שנעלמת מהמגירה משאירה את התור תקוע
     requireInteraction: true,
+    vibrate: HAPTIC_ASK,
     // תג ייחודי לבקשה. עם ה-tag המשותף 'rtl-claude' בקשה שנייה הייתה דורסת
     // את הראשונה, ואיתה את הכפתורים שמצביעים על ה-requestId שלה.
     tag: 'ask-' + ref.id,
@@ -5364,6 +5380,70 @@ addEventListener('focus', renderNotifyChip);
 navigator.serviceWorker?.addEventListener('message', (e) => {
   if (e.data && e.data.type === 'notification-click') clearTitleBadge();
 });
+
+/**
+ * רטט קצר על אירוע שדורש תשומת לב.
+ *
+ * שני מסלולים נפרדים לשני מצבים, ולא בכפילות: ‎navigator.vibrate‎ מתעלם
+ * בשקט כשהלשונית מוסתרת (זה בכוונה, בכל הדפדפנים), ולכן הוא משרת רק את הרגע
+ * שבו *מסתכלים* על המסך — כרטיס אישור שנפתח מול העיניים. כשהאפליקציה ברקע
+ * או סגורה, הרטט נוסע כשדה ‎vibrate‎ *בתוך* ההתראה עצמה, וה-Service Worker
+ * מוציא אותו יחד איתה.
+ * רק במגע: במחשב אין מנוע רטט, והקריאה שם היא רעש לשווא.
+ */
+function haptic(pattern) {
+  if (!notifyOn()) return;   // אותו מתג — הרטט הוא חלק מאותה התראה
+  if (!navigator.vibrate || document.hidden) return;
+  if (!matchMedia('(pointer: coarse)').matches) return;
+  try { navigator.vibrate(pattern); } catch {}
+}
+const HAPTIC_ASK = [55, 45, 55];   // "משהו ממתין לך" — שתי נקישות
+const HAPTIC_DONE = [22];          // "נגמר" — נקישה אחת קצרה
+
+/* ==========================================================================
+   התקנה על מסך הבית
+   --------------------------------------------------------------------------
+   באנדרואיד הדפדפן יורה ‎beforeinstallprompt‎ כשהאפליקציה עומדת בתנאי
+   ההתקנה, ומציג באנר משלו — בתחתית המסך, בתזמון שלו, ובדרך כלל בדיוק כשלא
+   מתאים. ‎preventDefault‎ לוקח ממנו את זה ומעביר את ההזמנה לכפתור בהגדרות,
+   שם היא נמצאת כשמחפשים אותה.
+   באייפון אין אירוע כזה בכלל וגם אין API להתקנה — שם נשארות ההוראות, כי
+   בלעדיהן המסך פשוט שותק על שאלה שנשאלת הרבה.
+   ========================================================================== */
+let installPrompt = null;
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; renderInstallRow(); });
+addEventListener('appinstalled', () => { installPrompt = null; renderInstallRow(); toast('הותקנה על מסך הבית'); });
+
+function renderInstallRow() {
+  const row = $('installRow'); if (!row) return;
+  const btn = $('installBtn'), hint = $('installHint');
+  const standalone = isStandalone();
+  // שורה שאין לה מה לומר לא מוצגת: בדפדפן שכבר התקין, או כזה שאינו תומך
+  row.classList.toggle('hidden', !installPrompt && !standalone && !isIOS());
+  btn.classList.toggle('hidden', !installPrompt);
+  if (standalone) {
+    hint.textContent = '✓ פועלת כאפליקציה מותקנת';
+    hint.className = 'hint ok';
+  } else if (installPrompt) {
+    hint.textContent = 'חלון משלה, בלי סרגל הכתובת, ועם התראות שעובדות ברקע';
+    hint.className = 'hint';
+  } else {
+    hint.textContent = 'בספארי: כפתור השיתוף ← “הוספה למסך הבית”';
+    hint.className = 'hint';
+  }
+}
+$('installBtn').onclick = async () => {
+  if (!installPrompt) return;
+  const p = installPrompt;
+  // ההזמנה תקפה לשימוש אחד. גם אם המשתמש ביטל — אי-אפשר להציג אותה שוב,
+  // והדפדפן יירה אירוע חדש בביקור הבא אם הוא עדיין רוצה.
+  installPrompt = null;
+  try { p.prompt(); await p.userChoice; } catch {}
+  renderInstallRow();
+};
 
 /** כבוי התרעות מתוך ההגדרות. ברירת המחדל דלוק — השער האמיתי הוא הרשאת הדפדפן. */
 function notifyOn() { return store.settings.notify !== false; }

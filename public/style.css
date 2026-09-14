@@ -252,6 +252,9 @@ body.busy .top-progress > span { animation: topSlide 1.15s cubic-bezier(.4,0,.2,
 /* מתג שאי-אפשר להפעיל אותו כרגע — נשאר קריא (ההסבר למה הוא כבוי יושב
    ב-hint שמתחתיו) אבל מפסיק להיראות כמו משהו שמחכה ללחיצה */
 .settings .switch-row.off { cursor: default; color: var(--text-dim); }
+/* כותרת שורה שאין בה שדה קלט (ולכן אינה label) — אותה טיפוגרפיה בדיוק */
+.settings .set-label { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+.settings .set-actions .mini.hidden { display: none; }
 .settings .set-actions { display: flex; gap: 6px; }
 .settings .set-actions .mini { border: 1px solid var(--border); }
 .settings .set-actions .mini:disabled { opacity: .45; cursor: not-allowed; background: transparent; color: var(--text-dim); }
