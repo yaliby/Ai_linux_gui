@@ -1180,6 +1180,21 @@ app.put('/api/conversations/:id', storeJson, (req, res) => {
     if (body.baseRev !== undefined && Number(body.baseRev) !== curRev) {
       return res.status(409).json({ ok: false, error: 'stale', rev: curRev, conversation: cur });
     }
+    /* כתיבה חלקית. בזמן תור חי משתנה רק ההודעה האחרונה, ולכן הלקוח שולח אותה
+       בלבד עם ‎fromIndex‎ — כמה הודעות מההתחלה להשאיר כמו שהן. מה שמתיר את זה
+       הוא בדיוק ‎baseRev‎ שנבדק שורה למעלה: גרסה זהה פירושה שהקידומת שבדיסק
+       היא בדיוק זו שהלקוח מחזיק, ואין מה לשלוח אותה שוב.
+       קובץ קצר מהצפוי אינו התנגשות בין מכשירים אלא חוסר התאמה בין השניים,
+       ולכן הוא מבקש שמירה מלאה במקום לשלוח את הלקוח לקרוא מחדש. */
+    const from = Number(body.fromIndex) || 0;
+    if (from > 0) {
+      const prefix = (cur && Array.isArray(cur.messages)) ? cur.messages : [];
+      if (!Number.isInteger(from) || from > prefix.length) {
+        dbg('store.gap', { convId: id, from, have: prefix.length, rev: curRev });
+        return res.status(409).json({ ok: false, error: 'gap', needFull: true, rev: curRev });
+      }
+      c.messages = prefix.slice(0, from).concat(c.messages);
+    }
     c.rev = curRev + 1;
     writeConv(c);
     broadcastAll({ kind: 'conv_meta', meta: convMeta(c) });

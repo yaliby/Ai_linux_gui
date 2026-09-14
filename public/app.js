@@ -300,12 +300,34 @@ function scheduleFlush() {
   flushTimer = setTimeout(flush, busy ? 2500 : 700);
 }
 
+/**
+ * כתיבה חלקית: כמה הודעות מההתחלה *לא* צריכות להישלח.
+ *
+ * בזמן תור חי משתנה אך ורק ההודעה האחרונה — הטקסט שנכתב עכשיו, כרטיסי הכלים
+ * שלו וכרטיסי ההרשאה שנולדים בתוכו. כל מה שלפניה כבר סגור. בלי זה כל שמירה
+ * (כל 2.5 שניות בזמן סטרימינג) סידרה, שלחה, פענחה וכתבה לדיסק את התמליל
+ * *כולו*, כלומר עלות שגדלה ליניארית עם אורך השיחה ומשולמת עשרות פעמים בתור.
+ *
+ * הבסיס לבטיחות הוא baseRev שכבר קיים: אם הגרסה בדיסק זהה לזו שבידינו, אז
+ * גם הקידומת שם זהה לשלנו, ואפשר להשאיר אותה במקומה. בסוף התור נשלחת שמירה
+ * מלאה אחת — היא גם המקום שבו כל תיקון להודעה ישנה (ראו mergeSessionTail)
+ * מגיע לדיסק.
+ */
+function deltaFrom(c) {
+  if (c._forceFull || !c.rev) return 0;          // מעולם לא נשמרה, או שנדרש מלא
+  if (!busy || streamOwnerId !== c.id) return 0;  // אין תור חי — שולחים הכל
+  return Math.max(0, (c.messages || []).length - 1);
+}
+
 /** מייצר את הגוף שנשלח לשרת — בלי שדות עזר פנימיים. */
-function serializeConv(c) {
+function serializeConv(c, fromIndex) {
+  const msgs = c.messages || [];
+  const from = Math.max(0, Math.min(Number(fromIndex) || 0, msgs.length));
   return {
     id: c.id, title: c.title, sessionId: c.sessionId, sessionAgent: c.sessionAgent || '', cwd: c.cwd || '', draft: c.draft || '',
     cost: c.cost || 0, ctx: c.ctx || null, createdAt: c.createdAt, updatedAt: c.updatedAt || c.createdAt,
-    messages: c.messages || [],
+    messages: from ? msgs.slice(from) : msgs,
+    ...(from ? { fromIndex: from } : {}),
     // הגרסה שראינו לאחרונה. אם בדיסק יש כבר גרסה חדשה יותר (מכשיר אחר כתב
     // בינתיים), השרת דוחה את הכתיבה במקום לתת לנו לדרוס — ואנחנו קוראים מחדש.
     baseRev: c.rev || 0,
@@ -335,16 +357,25 @@ async function flush() {
       // מכשיר שאינו הכותב הנוכחי מדלג: המצב שלו זהה ממילא, וכתיבה כפולה רק
       // הייתה נדחית ומאלצת טעינה מחדש באמצע סטרימינג.
       if (!isPrimary && id === subId) continue;
+      const from = deltaFrom(c);
       const r = await fetch('/api/conversations/' + encodeURIComponent(id), {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(serializeConv(c)),
+        body: JSON.stringify(serializeConv(c, from)),
       });
       if (r.ok) {
         const j = await r.json().catch(() => null);
         if (j && j.rev) c.rev = j.rev;
+        if (!from) c._forceFull = false;   // השמירה המלאה יצאה — החוב נסגר
       } else if (r.status === 409) {
-        // מכשיר אחר התקדם. הדיסק מנצח: קוראים משם ולא כותבים על גביו.
-        await reloadConv(id);
+        const j = await r.json().catch(() => null);
+        if (j && j.needFull) {
+          // השרת לא יכול להרכיב את הקידומת (קובץ קצר מהצפוי). זו אינה
+          // התנגשות בין מכשירים, ולכן אין מה לקרוא מחדש — רק לשלוח הכל.
+          c._forceFull = true; dirtyConvs.add(id); failed = true;
+        } else {
+          // מכשיר אחר התקדם. הדיסק מנצח: קוראים משם ולא כותבים על גביו.
+          await reloadConv(id);
+        }
       } else {
         failed = true; dirtyConvs.add(id);
       }
@@ -368,7 +399,9 @@ function flushBeacon() {
   stashDraft();   // חייב לקרות לפני קריאת dirtyConvs — אחרת טיוטה שלא נשלחה תאבד
   const convs = [...dirtyConvs].map(convById)
     .filter((c) => c && c.loaded && !c.anon && (isPrimary || c.id !== subId))
-    .map(serializeConv);
+    // ‎(c) =>‎ ולא ‎.map(serializeConv)‎: ‎map‎ מעביר את האינדקס כארגומנט שני,
+    // כלומר כל שיחה מהשנייה והלאה הייתה נשלחת כדלתא חתוכה באמצע.
+    .map((c) => serializeConv(c));
   if (!convs.length && !settingsDirty) return;
   const body = JSON.stringify({ conversations: convs, ...settingsBody() });
   try {
@@ -578,6 +611,9 @@ async function reconcileFromSession(id) {
   }
 
   if (!touched) return null;
+  // התיקון נוגע בהודעה *שאינה* האחרונה, ולכן שמירה חלקית הייתה משאירה את
+  // הגרסה הקטועה בדיסק. ראו deltaFrom.
+  c._forceFull = true;
   markDirty(c);
   if (activeId === id) {
     const keep = $('input').value;
