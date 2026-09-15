@@ -1,6 +1,6 @@
 {
-  "name": "Claude · ממשק עברית",
-  "short_name": "Claude עברית",
+  "name": "Sol · ממשק עברית",
+  "short_name": "Sol עברית",
   "description": "ממשק RTL ל-Claude Code, מסונכרן מלא מול המחשב",
   "lang": "he",
   "dir": "rtl",

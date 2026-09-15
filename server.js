@@ -3813,7 +3813,7 @@ loadResumeState();
 setTimeout(() => { limitTick().catch(() => {}); }, 4000).unref?.();
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`\n  \x1b[1mממשק RTL ל-Claude Code\x1b[0m`);
+  console.log(`\n  \x1b[1mSol · ממשק RTL ל-Claude Code\x1b[0m`);
   const proto = server instanceof https.Server ? 'https' : 'http';
   console.log(`  \x1b[36m${proto}://localhost:${PORT}\x1b[0m\n`);
 });

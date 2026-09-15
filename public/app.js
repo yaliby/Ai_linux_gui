@@ -492,7 +492,7 @@ const renderMdLive = (t) => renderMd(stabilizeMd(t));
 // ---------- מצב ----------
 // כותרת החלון תמיד מכילה "ממשק עברית" — כלל ה-KWin ב-launch.sh מזהה לפיה את
 // החלון ומצמיד לו את האייקון הנכון בשורת המשימות.
-const BASE_TITLE = 'Claude · ממשק עברית';
+const BASE_TITLE = 'Sol · ממשק עברית';
 const LS = 'rtlclaude.v2';   // מפתח ישן — נשאר רק לצורך הגירה חד-פעמית
 const MAX_IMAGE_BYTES = 30 * 1024 * 1024;
 let store = { convs: [], activeId: null, settings: {}, history: [] };

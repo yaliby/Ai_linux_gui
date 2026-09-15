@@ -4,7 +4,7 @@
    לכן: רשת קודם תמיד, והמטמון הוא רק רשת ביטחון לקליפה (HTML/CSS/JS) כדי
    שמסך ריק לא יקפוץ בשנייה שבה ה-Wi-Fi מתחלף לסלולר.
    קריאות API ו-WebSocket לא נכנסות למטמון לעולם. */
-const CACHE = 'rtl-claude-shell-v5';
+const CACHE = 'rtl-claude-shell-v6';
 const SHELL = ['/', '/index.html', '/app.js', '/style.css', '/icon.svg'];
 
 self.addEventListener('install', (e) => {
@@ -22,7 +22,7 @@ self.addEventListener('activate', (e) => {
 });
 
 /* ---------- שיתוף אל תוך האפליקציה ----------
-   ‎share_target‎ שבמניפסט מוסיף את "Claude עברית" לתפריט השיתוף של הטלפון:
+   ‎share_target‎ שבמניפסט מוסיף את "Sol עברית" לתפריט השיתוף של הטלפון:
    צילום מסך, קטע טקסט או קישור מכל אפליקציה אחרת נשלחים לכאן כ-POST רב-חלקי.
    הפענוח נעשה *כאן* ולא בשרת, ובכוונה — ‎Request.formData()‎ הוא מנתח
    multipart מובנה בדפדפן, ובלעדיו היה צריך להכניס לפרויקט תלות חדשה רק
