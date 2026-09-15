@@ -24,6 +24,7 @@
 
 const { spawn, execFile } = require('child_process');
 const { EventEmitter } = require('events');
+const https = require('https');
 const { PassThrough } = require('stream');
 const path = require('path');
 const os = require('os');
@@ -173,8 +174,11 @@ function collapse(flat) {
 
 /**
  * מזהה ה-UI ורמת המאמץ → המזהה שבאמת נשלח ל-‎--model‎.
- * נופל בחזרה למזהה כפי שהוא אם הצירוף אינו קיים ברשימה האמיתית, כדי שמאמץ
- * שנשאר מבחירה קודמת לא יפיל את ההרצה על שם מודל מומצא.
+ *
+ * הכלל היחיד כאן: לעולם לא להחזיר מזהה שאינו ברשימה האמיתית. ל-45 מתוך 78
+ * המודלים אין וריאנט חסר-מאמץ בכלל — ‎cursor-grok-4.6‎ קיים רק כ-‎-low/-medium/
+ * -high/-xhigh‎ — ולכן "הבסיס כמו שהוא" הוא שם מומצא, ו-cursor-agent יוצא עליו
+ * בקוד 1 עם ‎Cannot use this model‎. הבחירה נופלת לוריאנט שכן קיים.
  */
 function resolveModel(uiId, effort, realIds) {
   const bare = bareModel(uiId);
@@ -184,25 +188,23 @@ function resolveModel(uiId, effort, realIds) {
   // לא קרתה — הבורר הראה Auto וההרצה המשיכה עם המודל הישן.
   if (bare === 'auto' || bare === 'default') return bare;
   const have = realIds instanceof Set ? realIds : new Set(realIds || []);
-  if (!effort || !EFFORTS.includes(effort)) return bare;
   const fast = /-fast$/.test(bare);
   const base = fast ? bare.slice(0, -5) : bare;
-  const suffix = fast ? '-fast' : '';
-  const cand = base + '-' + effort + suffix;
-  if (have.size === 0 || have.has(cand)) return cand;
-  // המאמץ המבוקש אינו קיים אצל המודל הזה (לא כל מודל מציע את כל חמש הרמות).
-  // יורדים לרמה הגבוהה ביותר שכן קיימת, ורק אם אין אף אחת — חוזרים למזהה
-  // החשוף. שליחת צירוף מומצא הייתה מפילה את ההרצה על שם מודל שאינו קיים.
-  const want = EFFORTS.indexOf(effort);
-  for (let i = want - 1; i >= 0; i--) {
-    const down = base + '-' + EFFORTS[i] + suffix;
-    if (have.has(down)) return down;
-  }
-  for (let i = want + 1; i < EFFORTS.length; i++) {
-    const up = base + '-' + EFFORTS[i] + suffix;
-    if (have.has(up)) return up;
-  }
-  return have.has(bare) ? bare : base;
+  const at = (e) => base + '-' + e + (fast ? '-fast' : '');
+  const valid = !!effort && EFFORTS.includes(effort);
+  // רשימה ריקה = הגשר עוד לא הספיק לקרוא ל-CLI ואין מטמון. אין מול מה לאמת,
+  // ולכן מרכיבים כמיטב היכולת במקום לחסום.
+  if (!have.size) return valid ? at(effort) : bare;
+  // וריאנט חסר-מאמץ, כשהוא קיים, הוא מה שבחירה ללא מאמץ מתכוונת אליו.
+  if (!valid && have.has(bare)) return bare;
+  // אחרת יוצאים מ-high — אותה נקודה שממנה groupName גוזר את שם התצוגה, כך
+  // שמה שרץ הוא מה שכתוב בבורר — ומחפשים למטה ואז למעלה. מאמץ שנשאר מבחירה
+  // קודמת ואינו קיים אצל המודל הזה נפתר באותה הליכה עצמה.
+  const want = EFFORTS.indexOf(valid ? effort : 'high');
+  if (have.has(at(EFFORTS[want]))) return at(EFFORTS[want]);
+  for (let i = want - 1; i >= 0; i--) if (have.has(at(EFFORTS[i]))) return at(EFFORTS[i]);
+  for (let i = want + 1; i < EFFORTS.length; i++) if (have.has(at(EFFORTS[i]))) return at(EFFORTS[i]);
+  return bare;
 }
 
 function loadCache() { try { return JSON.parse(fs.readFileSync(MODELS_CACHE, 'utf8')); } catch { return null; } }
@@ -239,6 +241,207 @@ function available() {
     execFile(BIN, ['--version'], { timeout: 8000 }, (err) => resolve(!err));
   });
 }
+
+/* ==========================================================================
+   מכסת החשבון
+   --------------------------------------------------------------------------
+   ל-cursor-agent אין פקודת usage — לא ב---help ולא בסכמת האירועים. את המספרים
+   מחזיק הדשבורד ב-cursor.com, מאחורי עוגיית ‎WorkosCursorSessionToken‎, ואותו
+   טוקן בדיוק הוא זה שה-CLI שומר אצלו אחרי ‎cursor-agent login‎. לכן ברוב
+   המקרים אין כאן מה להגדיר: אם הסוכן עובד, גם המכסה תגיע. אם החשבון דורש
+   עוגייה מהדפדפן (או שה-CLI מחובר לחשבון אחר), מדביקים אותה ב-‎CURSOR_SESSION_TOKEN‎
+   והיא גוברת על טוקן ה-CLI.
+
+   מה שמוחזר מכאן הוא *אותה סכמה* של מכסת Claude (‎windows[]‎ עם ‎pct‎ ו-‎resets_at‎),
+   בדיוק מאותה סיבה שהגשר מתרגם אירועים: כדי שהדפדפן יצייר מד אחד ולא שניים.
+   ========================================================================== */
+const AUTH_FILE = path.join(os.homedir(), '.config', 'cursor', 'auth.json');
+const DASHBOARD = 'https://cursor.com';
+
+function readCliToken() {
+  try { return JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8')).accessToken || null; }
+  catch { return null; }
+}
+
+/** מזהה ה-WorkOS שהעוגייה נושאת לפני ה-‎::‎ — יושב ב-sub של הטוקן ("auth0|user_01…"). */
+function tokenUser(tok) {
+  try {
+    const claims = JSON.parse(Buffer.from(String(tok).split('.')[1], 'base64url').toString('utf8'));
+    const sub = String(claims.sub || '');
+    return sub.includes('|') ? sub.split('|').pop() : sub;
+  } catch { return ''; }
+}
+
+/** ערך העוגייה המלא + מזהה המשתמש, או null כשאין התחברות. */
+function sessionCookie() {
+  const raw = (process.env.CURSOR_SESSION_TOKEN || '').trim() || readCliToken();
+  if (!raw) return null;
+  // עוגייה שהודבקה מהדפדפן כבר נושאת את המזהה; טוקן CLI צריך שנרכיב אותו
+  if (raw.includes('::')) {
+    const user = raw.split('::')[0];
+    return user ? { value: raw, user } : null;
+  }
+  const user = tokenUser(raw);
+  return user ? { value: user + '::' + raw, user } : null;
+}
+
+/** קריאה בודדת לדשבורד, עם הסטטוס והגוף הגולמי. */
+function dashboardRaw(method, route, cookie, body) {
+  return new Promise((resolve) => {
+    const data = body ? JSON.stringify(body) : null;
+    const headers = {
+      Cookie: 'WorkosCursorSessionToken=' + cookie,
+      Accept: 'application/json',
+      'User-Agent': 'rtl-claude',
+    };
+    // POST לדשבורד דורש Origin של cursor.com — בלעדיו חוזר ‎Invalid origin‎.
+    if (method !== 'GET' && method !== 'HEAD') {
+      headers.Origin = DASHBOARD;
+      headers.Referer = DASHBOARD + '/dashboard';
+    }
+    if (data) {
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Length'] = Buffer.byteLength(data);
+    }
+    const req = https.request(DASHBOARD + route, { method, headers }, (res) => {
+      let d = '';
+      res.on('data', (c) => d += c);
+      res.on('end', () => resolve({ status: res.statusCode, text: d }));
+    });
+    req.on('error', (e) => resolve({ status: 0, text: String(e.message) }));
+    req.setTimeout(8000, () => { req.destroy(); resolve({ status: 0, text: 'timeout' }); });
+    if (data) req.write(data);
+    req.end();
+  });
+}
+
+/** אותה קריאה, מנוקה: כל כישלון — רשת, 401, HTML במקום JSON — מחזיר null. */
+async function dashboard(method, route, cookie, body) {
+  const r = await dashboardRaw(method, route, cookie, body);
+  if (r.status !== 200) return null;
+  try { return JSON.parse(r.text); } catch { return null; }
+}
+
+const CURSOR_PLANS = {
+  free: 'Free', free_trial: 'ניסיון', pro: 'Pro', pro_plus: 'Pro+',
+  'pro-plus': 'Pro+', ultra: 'Ultra', team: 'Team', enterprise: 'Enterprise',
+};
+const planName = (p) => (p ? (CURSOR_PLANS[String(p).toLowerCase()] || p) : null);
+
+/** ‎/api/usage‎ הישן לא מחזיר "מתאפס ב" אלא רק את תחילת המחזור. חודש קדימה ממנה. */
+function cycleReset(startOfMonth) {
+  const t = new Date(startOfMonth);
+  if (isNaN(t)) return null;
+  const next = new Date(t);
+  next.setMonth(next.getMonth() + 1);
+  return next.toISOString();
+}
+const pctOf = (n) => (typeof n === 'number' && isFinite(n) ? Math.max(0, Math.min(100, n)) : null);
+
+/**
+ * מרכיב את החלונות משתי התשובות, ששייכות לשני דורות של תמחור:
+ *
+ * ‎summary‎ (‎/api/usage-summary‎) הוא ההווה — מחזור חיוב חודשי עם שני דליים
+ *   נפרדים: מודלים כלליים (Claude, GPT, Gemini וכו׳) ומודלים של קרסר
+ *   (Auto · Composer). משם מגיע גם מחזור החיוב.
+ * ‎legacy‎ (‎/api/usage‎) הוא החשבונות הישנים שנמדדו בבקשות פרימיום. בחשבון
+ *   מודרני ‎maxRequestUsage‎ חוזר null, ולכן החלון הזה פשוט לא נוצר.
+ * ‎sand‎ (‎/api/dashboard/get-sand-usage-status‎) הוא מכסת Grok Bot השבועית —
+ *   דלי נפרד לגמרי מהשימוש הכלול החודשי. נכשל בשקט: בלי זה עדיין יש מדים.
+ *
+ * האחוזים שמוצגים הם ‎apiPercentUsed‎ ו-‎autoPercentUsed‎ — שני המדים ש-Cursor
+ * עצמו מצייר בדשבורד — ולא ‎totalPercentUsed‎ (כותרת מעורבת שאינה תקרה)
+ * ולא ‎used/limit‎ (יחידות פנימיות שאין להן שם בממשק שלהם).
+ */
+function parseCursorUsage(summary, legacy, sand) {
+  const windows = [];
+  const plan = planName(
+    (summary && summary.membershipType) ||
+    (legacy && legacy.membershipType) ||
+    (sand && sand.cursorPlanName) || null
+  );
+
+  const iu = (summary && summary.individualUsage) || {};
+  const cycleEnd = (summary && summary.billingCycleEnd) || null;
+
+  if (summary && summary.isUnlimited) {
+    windows.push({
+      id: 'cursor-included', kind: 'included',
+      label: 'שימוש כלול', short: 'כלול',
+      pct: 0, detail: 'ללא הגבלה', resets_at: cycleEnd,
+    });
+  } else if (iu.plan && iu.plan.enabled) {
+    /* שני הדליים שהתשובה מודדת בנפרד. הם *אינם* מתחלקים זה בזה: כל אחד
+       נמדד מול תקרה משלו, והסה״כ המעורב (‎totalPercentUsed‎) אינו אף אחת
+       מהן — לכן הוא לא מוחזר. מודלים כלליים קודמים: זה המד שהמשתמש רואה. */
+    const buckets = [
+      ['cursor-api', 'מודלים כלליים', 'מודלים כלליים', iu.plan.apiPercentUsed, cycleEnd],
+      ['cursor-auto', 'מודלים של קרסר', 'מודלים של קרסר', iu.plan.autoPercentUsed, cycleEnd],
+    ];
+    for (const [id, label, short, raw, resets] of buckets) {
+      const pct = pctOf(raw);
+      if (pct == null) continue;
+      windows.push({ id, kind: 'included', label, short, pct, resets_at: resets });
+    }
+  }
+
+  // Grok Bot — מכסה שבועית נפרדת (Sand). רק כשיש תקרה כלולה לאפס.
+  if (sand && sand.hasNonZeroIncludedLimit === true && typeof sand.usagePercent === 'number') {
+    const pct = pctOf(sand.usagePercent);
+    if (pct != null) {
+      windows.push({
+        id: 'cursor-grok-bot', kind: 'weekly_scoped',
+        label: 'גרוק בוט', short: 'גרוק בוט',
+        pct, resets_at: sand.nextResetTimestampUtc || null,
+      });
+    }
+  }
+
+  // חיוב לפי שימוש מעבר לכלול — קיים רק כשהמשתמש הדליק אותו, ואז יש גם תקרה
+  const od = iu.onDemand;
+  if (od && od.enabled && typeof od.used === 'number' && od.limit > 0) {
+    windows.push({
+      id: 'cursor-ondemand', kind: 'ondemand',
+      label: 'חיוב לפי שימוש', short: 'חיוב',
+      pct: pctOf((od.used / od.limit) * 100),
+      detail: `$${(od.used / 100).toFixed(2)} מתוך תקרה של $${(od.limit / 100).toFixed(2)}`,
+      resets_at: cycleEnd,
+    });
+  }
+
+  const premium = legacy && legacy['gpt-4'];
+  if (premium && typeof premium.numRequests === 'number' && premium.maxRequestUsage > 0) {
+    windows.push({
+      id: 'cursor-requests', kind: 'requests',
+      label: 'בקשות פרימיום', short: 'בקשות',
+      pct: pctOf((premium.numRequests / premium.maxRequestUsage) * 100),
+      detail: `${premium.numRequests} מתוך ${premium.maxRequestUsage} בקשות`,
+      resets_at: cycleReset(legacy.startOfMonth),
+    });
+  }
+
+  if (!windows.length && !plan) return null;
+  return { windows, plan, cycle_end: cycleEnd };
+}
+
+/**
+ * מכסת חשבון Cursor, בסכמת המכסה של הממשק. מחזיר null כשאין התחברות או כשאף
+ * קריאה לא החזירה מספרים — המסך מבדיל בין השניים לפי ‎connected‎.
+ */
+async function fetchUsage() {
+  const sess = sessionCookie();
+  if (!sess) return null;
+  // ‎sand‎ נכשל בשקט (null) — המדים החודשיים נשארים גם בלי Grok Bot.
+  const [summary, legacy, sand] = await Promise.all([
+    dashboard('GET', '/api/usage-summary', sess.value),
+    dashboard('GET', '/api/usage?user=' + encodeURIComponent(sess.user), sess.value),
+    dashboard('POST', '/api/dashboard/get-sand-usage-status', sess.value, {}),
+  ]);
+  return parseCursorUsage(summary, legacy, sand);
+}
+
+/** האם יש בכלל ממה למשוך מכסה — מפריד "לא מחובר" מ"אין נתונים". */
+function usageConnected() { return !!sessionCookie(); }
 
 /* ==========================================================================
    תרגום כלים
@@ -977,7 +1180,8 @@ module.exports = {
   PREFIX, CURSOR_GROUP, PERM_MODES, PERM_DEFAULT,
   isCursorModel, bareModel,
   fetchModels, available, spawnCursor, resolveModel,
+  fetchUsage, usageConnected,
   listSessions, mcpList, listCommands, allowRule,
   // ליחידות בדיקה
-  _internal: { parseModels, splitDiff, Translator, CursorChild, TOOLS, resultText, collapse, splitVariant, resolveModel, realIds: () => realIds },
+  _internal: { parseModels, parseCursorUsage, sessionCookie, splitDiff, Translator, CursorChild, TOOLS, resultText, collapse, splitVariant, resolveModel, realIds: () => realIds },
 };

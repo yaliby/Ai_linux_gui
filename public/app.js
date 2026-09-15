@@ -145,23 +145,328 @@ function legacyCopy(text) {
   return ok;
 }
 
-// ---------- לוגו השמש (בהשראת Claude) ----------
-function sunburst(size, n = 12) {
-  const c = size / 2, ri = size * 0.11, ro = size * 0.47, sw = Math.max(1.4, size * 0.072);
-  let lines = '';
+// ---------- שמש Claude ----------
+/**
+ * קרני השמש כ-path יחיד, בתוך ריבוע ‎size‎.
+ *
+ * ‎ro‎ הוא 0.442 ולא חצי: עם ‎stroke-linecap: round‎ הקצה המעוגל מוסיף עוד חצי
+ * עובי-קו לכל צד, ובלי המרווח הזה הקרניים היו נחתכות על גבול ה-viewBox.
+ * זהו הסימן של Claude ב-BRANDS, ולכן הוא חי כאן כגנרטור ולא כמחרוזת קפואה.
+ */
+function rayPath(size, n = 12, riR = 0.108, roR = 0.442) {
+  const c = size / 2, ri = size * riR, ro = size * roR;
+  let d = '';
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 - Math.PI / 2;
-    const x1 = c + Math.cos(a) * ri, y1 = c + Math.sin(a) * ri, x2 = c + Math.cos(a) * ro, y2 = c + Math.sin(a) * ro;
-    lines += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
+    const x1 = c + Math.cos(a) * ri, y1 = c + Math.sin(a) * ri;
+    const x2 = c + Math.cos(a) * ro, y2 = c + Math.sin(a) * ro;
+    d += `M${x1.toFixed(2)} ${y1.toFixed(2)}L${x2.toFixed(2)} ${y2.toFixed(2)}`;
   }
-  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw.toFixed(2)}" stroke-linecap="round">${lines}</svg>`;
+  return d;
 }
-const AVATAR = sunburst(22);
 const NAME = 'yali';
 function greeting() {
   const h = new Date().getHours();
   const g = h < 5 ? 'עוד ערים' : h < 12 ? 'בוקר טוב' : h < 17 ? 'צהריים טובים' : h < 21 ? 'ערב טוב' : 'לילה טוב';
   return `${g}, ${NAME}`;
+}
+
+/* ==========================================================================
+   לוגואים לפי מודל
+   --------------------------------------------------------------------------
+   עד כאן לכל תשובה היה אותו אייקון — השמש של Claude — גם כשהתשובה נכתבה על-ידי
+   Gemini, GPT או Grok. ברשימה של מאות מודלים משבעה שערים זה לא קישוט חסר: אחרי
+   חצי שעה בשיחה כבר אי אפשר לזכור עם מי מדברים, והשם לבדו ("‎gemini-3-pro‎")
+   נקרא בעין כמו עוד מחרוזת ולא כמו זהות.
+
+   כל משפחת מודלים מקבלת כאן סימן משלה בצבע המותג שלה. הסימנים מצוירים כולם
+   באותה שפה — ‎viewBox‎ אחיד של 24, קווים מעוגלים, משקל קו זהה — כדי שהם
+   ייראו כמו סדרה אחת ולא כמו אוסף לוגואים מודבקים. בגודל של 20‑24 פיקסלים
+   רק הצללית נקראת, ולכן כל סימן מצומצם לצורה המזהה שלו: הניצוץ של Gemini,
+   הפריחה של OpenAI, הסהר של Kimi, הקובייה של Cursor. שני סימנים שנקראים אותו
+   דבר בגודל הזה הם באג, לא עניין של טעם — לכן כמה מהם צוירו מחדש אחרי שראינו
+   אותם מרונדרים זה לצד זה.
+
+   הצבע מגיע כמשתנה CSS על האלמנט (‎--bm-l‎ בהיר, ‎--bm-d‎ כהה) ולא כערך קשיח
+   בתוך ה-SVG — כך אותו סימן עובד בשני המצבים בלי לצייר אותו פעמיים. ראו
+   ‎.bmark‎ ב-style.css.
+   ========================================================================== */
+
+const RAYS_24 = rayPath(24);
+
+const FILL = ' fill="currentColor" stroke="none"';
+
+/** מפתח → { label, fg, fgDark, sw, body }. ‎body‎ הוא תוכן ה-SVG בלבד. */
+const BRANDS = {
+  anthropic: {
+    label: 'Anthropic', fg: '#c2603a', fgDark: '#d97757', sw: 1.75,
+    body: `<path d="${RAYS_24}"/>`,
+  },
+  openai: {
+    label: 'OpenAI', fg: '#0f8f72', fgDark: '#4cc5a4', sw: 1.7,
+    // הקשר בעל שש-הקפלים. הניסיון הראשון היה משושה עם Y פנימי — והוא נקרא
+    // כקובייה, כלומר בדיוק כמו הסימן של Cursor. שש עלים סביב מרכז משאירים את
+    // הסימטריה השש-קפלית של הסימן המקורי ואי-אפשר לבלבל אותם עם גוף תלת-ממדי.
+    body: [0, 60, 120, 180, 240, 300].map((a) =>
+      `<ellipse cx="12" cy="7.9" rx="3" ry="5"${a ? ` transform="rotate(${a} 12 12)"` : ''}/>`).join(''),
+  },
+  gemini: {
+    label: 'Google', fg: '#3a72e8', fgDark: '#7fa8f8', sw: 1.7,
+    // הניצוץ ארבע-הקצוות — הסימן של Gemini עצמו
+    body: `<path d="M12 2.6C12.92 7.58 16.42 11.08 21.4 12 16.42 12.92 12.92 16.42 12 21.4 11.08 16.42 7.58 12.92 2.6 12 7.58 11.08 11.08 7.58 12 2.6Z"${FILL}/>`,
+  },
+  gemma: {
+    label: 'Gemma', fg: '#0f8f8a', fgDark: '#4fc9c3', sw: 1.7,
+    // אבן חן — ‎gemma‎ היא «אבן טובה» בלטינית, וזה גם מה שמפריד אותה מ-Gemini
+    body: '<path d="M7.2 4.2h9.6L21 9.6 12 20.4 3 9.6z"/>'
+      + '<path d="M3 9.6h18M7.2 4.2 9.6 9.6 12 20.4 14.4 9.6 16.8 4.2"/>',
+  },
+  xai: {
+    label: 'xAI', fg: '#1d1d1f', fgDark: '#e9e7e2', sw: 1.7,
+    // ה-X השבור של xAI: אלכסון יורד שלם, ואלכסון עולה חתוך בנקודת החיתוך
+    body: `<path d="M3.6 3h4.3l12.5 18h-4.3z"${FILL}/>`
+      + `<path d="M20.4 3h-4.3l-2.9 4.2 2.15 3.1z"${FILL}/>`
+      + `<path d="M3.6 21h4.3l2.9-4.2-2.15-3.1z"${FILL}/>`,
+  },
+  zai: {
+    label: 'Z.ai', fg: '#4b4ddb', fgDark: '#9698f2', sw: 1.7,
+    body: `<path d="M4.8 3.6h14.4v3.6L10.5 16.8h8.7v3.6H4.8v-3.6l8.7-9.6H4.8z"${FILL}/>`,
+  },
+  moonshot: {
+    label: 'Moonshot', fg: '#2f4f9e', fgDark: '#8fb2e8', sw: 1.7,
+    // סהר — הסימן של Kimi
+    body: `<path d="M13.9 2.3A9.7 9.7 0 1 0 21.7 15.2 7.9 7.9 0 0 1 13.9 2.3Z"${FILL}/>`,
+  },
+  deepseek: {
+    label: 'DeepSeek', fg: '#3c62f5', fgDark: '#8aa2fb', sw: 1.7,
+    // לווייתן: גוף בשתי קשתות, סנפיר משולש ומדף זנב מפוצל
+    body: `<path d="M3.6 13.4A12 12 0 0 1 17 10.6l4.6-3.8-2.2 4.8 2.2 4.8-4.6-3A11 11 0 0 1 3.6 13.4Z"${FILL}/>`
+      + `<path d="M9 15.2h4l-2.8 3.6z"${FILL}/>`,
+  },
+  qwen: {
+    label: 'Qwen', fg: '#7b3fd4', fgDark: '#b18bef', sw: 1.7,
+    // Q — עיגול וזנב. הגרסה הקודמת הייתה משושה, וברשימה כבר יש קובייה משושה
+    // (Cursor); באות אמיתית אין מה להתבלבל.
+    body: '<circle cx="11.6" cy="11.4" r="7.6"/><path d="M14.4 14.2 19.6 19.4"/>',
+  },
+  meta: {
+    label: 'Meta', fg: '#0a66f0', fgDark: '#6ba3fb', sw: 1.9,
+    // לולאת האינסוף
+    body: '<path d="M7.25 7.5c2.75 0 3.75 4.5 4.75 4.5s2-4.5 4.75-4.5c2.625 0 4.25 2 4.25 4.5s-1.625 4.5-4.25 4.5c-2.75 0-3.75-4.5-4.75-4.5s-2 4.5-4.75 4.5C4.625 16.5 3 14.5 3 12s1.625-4.5 4.25-4.5z"/>',
+  },
+  mistral: {
+    label: 'Mistral', fg: '#e8590c', fgDark: '#ff9147', sw: 1.7,
+    // M בנוי מרשת פיקסלים 5×5 — שפת הבלוקים של Mistral. הגרסה הקודמת הייתה
+    // קורה עליונה מעל שלוש עמודות, וזה נקרא כשער טוריאי ולא כאות.
+    body: [[3, 3, 3.6, 18], [17.4, 3, 3.6, 18], [6.6, 6.6, 3.6, 3.6],
+      [13.8, 6.6, 3.6, 3.6], [10.2, 10.2, 3.6, 3.6]]
+      .map(([x, y, w, h]) => `<rect x="${x}" y="${y}" width="${w}" height="${h}"${FILL}/>`).join(''),
+  },
+  nvidia: {
+    label: 'NVIDIA', fg: '#5f9400', fgDark: '#9ed13a', sw: 1.7,
+    // ה«עין» — ספירלה שנסגרת פנימה
+    body: '<path d="M3.2 12c3-3.8 6.2-5.7 9.8-5.7 4.6 0 7.8 2.6 7.8 6.1 0 3.2-2.6 5.3-6.2 5.3-2.9 0-4.8-1.5-4.8-3.6 0-1.8 1.4-3 3.4-3 1.6 0 2.7.9 2.7 2.1 0 1-.7 1.7-1.7 1.7-.7 0-1.2-.4-1.2-1"/>',
+  },
+  minimax: {
+    label: 'MiniMax', fg: '#d93b45', fgDark: '#f08a90', sw: 1.9,
+    // שני שברונים — מינימום ומקסימום
+    body: '<path d="M4 13.2 12 5.2l8 8M4 18.8 12 10.8l8 8"/>',
+  },
+  perplexity: {
+    label: 'Perplexity', fg: '#1c7a86', fgDark: '#57c2cd', sw: 1.7,
+    // מסך סונאר — על שם משפחת המודלים (Sonar). קשתות מדורגות היו נקראות כסמל
+    // ה-Wi-Fi, ומסגרת משושה (הניסיון שלפניה) כמו ה-Q של Qwen; טבעות סגורות עם
+    // אלומת סריקה אינן דומות לאף אחד משניהם.
+    body: '<circle cx="12" cy="12" r="8.8"/><circle cx="12" cy="12" r="4.6"/>'
+      + `<path d="M12 12 18.2 5.8 20.2 9.9Z"${FILL}/><circle cx="12" cy="12" r="1.5"${FILL}/>`,
+  },
+  cursor: {
+    label: 'Cursor', fg: '#1f6f8b', fgDark: '#6bb9d6', sw: 1.7,
+    // קובייה איזומטרית
+    body: '<path d="M12 2.6 21 7.8v8.4L12 21.4 3 16.2V7.8z"/><path d="M12 12 21 7.8M12 12v9.4M12 12 3 7.8"/>',
+  },
+  auto: {
+    label: 'ניתוב אוטומטי', fg: '#8256d0', fgDark: '#b596ea', sw: 1.7,
+    body: '<path d="M2.8 7.8h3.9c1.7 0 2.6.8 3.6 2.3l2.2 3.4c1 1.5 1.9 2.3 3.6 2.3h3.1"/>'
+      + '<path d="M2.8 16.2h3.9c1.7 0 2.6-.8 3.6-2.3l2.2-3.4c1-1.5 1.9-2.3 3.6-2.3h3.1"/>'
+      + '<path d="M17.6 5.4 20.8 8.2l-3.2 2.8M17.6 13 20.8 15.8l-3.2 2.8"/>',
+  },
+  horde: {
+    label: 'תמונות', fg: '#c07a1e', fgDark: '#e0b165', sw: 1.7,
+    body: '<rect x="3.4" y="4.8" width="17.2" height="14.4" rx="2.6"/>'
+      + '<path d="M4.6 17.4 10.2 11.4l3 3 3-3.6 3.2 3.8"/>'
+      + `<circle cx="8.4" cy="9.2" r="1.5"${FILL}/>`,
+  },
+  veo: {
+    label: 'וידאו', fg: '#c93b2c', fgDark: '#ef8f82', sw: 1.7,
+    body: '<rect x="3.4" y="5.4" width="17.2" height="13.2" rx="3"/>'
+      + `<path d="M10.4 9.2 15.6 12l-5.2 2.8z"${FILL}/>`,
+  },
+  felo: {
+    label: 'חיפוש ברשת', fg: '#2a8a5f', fgDark: '#6ec79b', sw: 1.8,
+    body: '<circle cx="10.6" cy="10.6" r="6.2"/><path d="M15.2 15.2 20.4 20.4"/>',
+  },
+  local: {
+    label: 'מקומי', fg: '#5f6b78', fgDark: '#a3b0bd', sw: 1.7,
+    body: '<rect x="6.6" y="6.6" width="10.8" height="10.8" rx="2"/>'
+      + '<rect x="10.2" y="10.2" width="3.6" height="3.6" rx="1"/>'
+      + '<path d="M9.6 6.6V3.4M14.4 6.6V3.4M9.6 17.4v3.2M14.4 17.4v3.2'
+      + 'M6.6 9.6H3.4M6.6 14.4H3.4M17.4 9.6h3.2M17.4 14.4h3.2"/>',
+  },
+  fallback: {
+    label: 'מודל', fg: '#7a7468', fgDark: '#a8a294', sw: 1.7,
+    body: '<rect x="3.4" y="3.4" width="17.2" height="17.2" rx="5.2"/>'
+      + `<circle cx="12" cy="12" r="2.6"${FILL}/>`,
+  },
+};
+
+/* קטגוריות השרת → מותג. הקבוצה שהשרת כבר חישב היא מקור האמת: היא בדיוק
+   אותה הכרעה שקבעה איפה המודל יושב בבורר, ולכן הסימן והקטגוריה לעולם לא
+   יסתרו זה את זה. */
+const GROUP_BRAND = {
+  'Claude · חיבור ישיר': 'anthropic',
+  'Claude · דרך שערים': 'anthropic',
+  'Gemini · Google': 'gemini',
+  'GPT · OpenAI': 'openai',
+  'Grok · xAI': 'xai',
+  'GLM · Z.ai': 'zai',
+  'Kimi · Moonshot': 'moonshot',
+  DeepSeek: 'deepseek',
+  'Qwen · Alibaba': 'qwen',
+  'Llama · Meta': 'meta',
+  'Gemma · Google': 'gemma',
+  Mistral: 'mistral',
+  'Nemotron · NVIDIA': 'nvidia',
+  MiniMax: 'minimax',
+  Perplexity: 'perplexity',
+  'ניתוב אוטומטי': 'auto',
+  'מודלים מקומיים': 'local',
+  'חיפוש ברשת · Felo': 'felo',
+  'תמונות · AI Horde': 'horde',
+  'וידאו · Veo': 'veo',
+};
+
+/* גיבוי לפי שם, לאותם מקרים שבהם אין קבוצה: מודל של Cursor (שם הקבוצה היא
+   הסוכן ולא המשפחה), ומודל ששמור בתמליל ישן וכבר לא ברשימה של היום. הסדר
+   זהה ל-MODEL_FAMILIES בשרת — קודם Gemini, כדי ש-«gemini-claude-judge» לא
+   ייחטף בדרך. */
+const BRAND_RULES = [
+  ['gemini', /gemini|nano-banana|lyria|imagen|antigravity/i],
+  ['anthropic', /claude|opus|sonnet|haiku|fable/i],
+  ['openai', /gpt|codex|(^|[-_/])o[1-4]($|[-_])/i],
+  ['xai', /grok/i],
+  ['zai', /glm|(^|[-_/])zai($|[-_])/i],
+  ['moonshot', /kimi|moonshot/i],
+  ['deepseek', /deepseek/i],
+  ['qwen', /qwen|qwq/i],
+  ['meta', /llama/i],
+  ['gemma', /gemma/i],
+  ['mistral', /mistral|mixtral|magistral|codestral|ministral/i],
+  ['nvidia', /nemotron/i],
+  ['minimax', /minimax/i],
+  ['perplexity', /sonar|perplexity/i],
+  ['cursor', /composer|cheetah/i],
+];
+
+/** רשומת המודל מהקטלוג של השרת, אם הוא עדיין שם. */
+const modelEntry = (id) => (CONFIG.models || []).find((x) => x.id === id) || null;
+
+/**
+ * המותג של מודל: ‎{ key, brand, via }‎.
+ *
+ * ‎via‎ הוא הסוכן שמריץ את המודל כשהוא אינו המותג עצמו — כלומר Cursor. מודל
+ * Claude שרץ דרך Cursor מקבל את הסימן של Claude ותג פינתי של Cursor: מה
+ * שעונה על השאלה *עם מי אני מדבר* הוא המשפחה, ומה שעונה על *מי מריץ* הוא
+ * התג. עד כה שתי התשובות היו מכווצות לקידומת טקסט אחת ("Cursor · ...").
+ */
+function brandOf(id) {
+  const sid = String(id || '');
+  // בלי מודל — ברירת המחדל של ה-CLI, שהיא תמיד Claude
+  if (!sid) return { key: 'anthropic', brand: BRANDS.anthropic, via: null };
+  const m = modelEntry(sid);
+  const group = (m && m.group) || '';
+  const viaCursor = isCursorModel(sid) || group.startsWith('Cursor');
+  if (!viaCursor && GROUP_BRAND[group]) {
+    return { key: GROUP_BRAND[group], brand: BRANDS[GROUP_BRAND[group]], via: null };
+  }
+  const hay = leafId(sid) + ' ' + ((m && (m.short || m.name)) || '');
+  let key = '';
+  for (const [k, re] of BRAND_RULES) if (re.test(hay)) { key = k; break; }
+  if (!key) key = viaCursor ? 'cursor' : (GROUP_BRAND[group] || 'fallback');
+  // תג Cursor מיותר כשהסימן עצמו כבר Cursor (Composer, וגם 'Auto' שלו)
+  return { key, brand: BRANDS[key] || BRANDS.fallback, via: viaCursor && key !== 'cursor' ? BRANDS.cursor : null };
+}
+
+/** השם שמוצג לצד הסימן — קצר ככל שהקטלוג מרשה, ובלי קידומת השער. */
+function modelShort(id) {
+  if (!id) return 'Claude';
+  const m = modelEntry(id);
+  return (m && (m.short || m.name)) || leafId(id);
+}
+
+/** ‎--bm-l/--bm-d‎ כמחרוזת style — גם לעטיפה שרוצה את צבע המותג בלי הסימן. */
+const brandVars = (id) => { const b = brandOf(id).brand; return `--bm-l:${b.fg};--bm-d:${b.fgDark}`; };
+
+const brandSvg = (b, size) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none"`
+  + ` stroke="currentColor" stroke-width="${b.sw}" stroke-linecap="round" stroke-linejoin="round"`
+  + ` aria-hidden="true">${b.body}</svg>`;
+
+/**
+ * ה-HTML של סימן המותג של מודל. הצבע עובר כמשתני CSS ולא כ-attribute, כדי
+ * שהמעבר בהיר/כהה יקרה בלי לצייר מחדש שום דבר.
+ */
+function brandMarkHtml(id, size = 22) {
+  const { key, brand, via } = brandOf(id);
+  const style = `--bm-l:${brand.fg};--bm-d:${brand.fgDark};--bm-size:${size}px`;
+  const badge = via
+    ? `<span class="bmark-via" style="--bm-l:${via.fg};--bm-d:${via.fgDark}">${brandSvg(via, Math.round(size * 0.52))}</span>`
+    : '';
+  // ‎bm-<key>‎ מאפשר ל-CSS לדבר על מותג מסוים: הסיבוב האיטי במסך הפתיחה נכון
+  // לשמש של Claude ולא לרשת של Mistral.
+  return `<span class="bmark bm-${key}" style="${style}">${brandSvg(brand, size)}${badge}</span>`;
+}
+
+/**
+ * אותו סימן כאלמנט, לשימוש בקוד שבונה DOM ולא מחרוזות.
+ *
+ * הסימן מפוענח פעם אחת לכל צירוף של מותג-תג-גודל ואז משוכפל. חלונית המודלים
+ * מציירת מחדש את כל התוצאות בכל הקלדה — מעל ארבע מאות שורות ברשימה מלאה —
+ * ופענוח ‎innerHTML‎ לכל שורה בכל תו היה הופך את החיפוש למקוטע.
+ */
+const bmarkProtos = new Map();
+function brandMarkEl(id, size = 22) {
+  const { key, via } = brandOf(id);
+  const ck = key + '|' + (via ? via.label : '') + '|' + size;
+  let proto = bmarkProtos.get(ck);
+  if (!proto) {
+    const span = el('span');
+    span.innerHTML = brandMarkHtml(id, size);
+    proto = span.firstElementChild;
+    bmarkProtos.set(ck, proto);
+  }
+  return proto.cloneNode(true);
+}
+
+/**
+ * כותרת התשובה: הסימן של המודל שכתב אותה ושמו לצידו.
+ *
+ * קודם היה כתוב כאן "Claude" בכל תשובה, בלי קשר למי ענה — גם ב-Gemini וגם
+ * ב-Grok. עכשיו זו השורה שעונה על "עם מי אני מדבר עכשיו" בלי לפתוח את הבורר.
+ */
+function assistantHeadHtml(model) {
+  return `<div class="role-tag" title="${escHtml(brandTitle(model))}">`
+    + brandMarkHtml(model, 22)
+    + `<span class="role-name">${escHtml(modelShort(model))}</span></div>`;
+}
+
+/** «Claude Opus 5 · דרך Cursor» — כותרת ה-tooltip לכל מקום שמציג סימן. */
+function brandTitle(id) {
+  const { brand, via } = brandOf(id);
+  const name = id ? (modelName(id) || leafId(id)) : 'ברירת המחדל של ה-CLI';
+  const bits = [name];
+  if (brand.label && !name.toLowerCase().includes(brand.label.toLowerCase())) bits.push(brand.label);
+  if (via) bits.push('דרך ' + via.label);
+  return bits.join(' · ');
 }
 
 // ---------- Markdown ----------
@@ -1418,7 +1723,7 @@ function mountLiveDom() {
   const row = el('div', 'row assistant');
   const wrap = el('div', 'wrap');
   const msgObj = live.msgObj;
-  wrap.innerHTML = `<div class="role-tag"><span class="avatar">${AVATAR}</span>Claude</div><div class="content"></div>`;
+  wrap.innerHTML = assistantHeadHtml(msgObj.model) + '<div class="content"></div>';
   row.appendChild(wrap); $('log').appendChild(row);
   // "העתק" נחשף רק כשיש טקסט להעתיק. תור שהוא כולו כרטיס כלי או כרטיס אישור
   // הציג כפתור העתקה שלחיצה עליו לא עושה כלום. (הרינדור מהתמליל השמור כבר
@@ -1443,7 +1748,9 @@ function ensureLive() {
   }
 
   hideWelcome();
-  const msgObj = { role: 'assistant', blocks: [] };
+  // המודל נצרב בהודעה ברגע שהיא נולדת, ולא נקרא מהבורר בזמן הציור: שיחה
+  // שעברה בין מודלים באמצע צריכה להראות ליד כל תשובה את מי שבאמת כתב אותה.
+  const msgObj = { role: 'assistant', blocks: [], model: $('model').value || '' };
   conv.messages.push(msgObj);
   live = { convId: conv.id, msgObj, contentEl: null, blocks: new Map(), tools: new Map() };
   if (activeId === conv.id) mountLiveDom();
@@ -2214,7 +2521,7 @@ function renderConversation() {
       wrap.appendChild(col); row.appendChild(wrap); log.appendChild(row);
     } else if (m.role === 'assistant') {
       const row = el('div', 'row assistant'); const wrap = el('div', 'wrap');
-      wrap.innerHTML = `<div class="role-tag"><span class="avatar">${AVATAR}</span>Claude</div><div class="content"></div>`;
+      wrap.innerHTML = assistantHeadHtml(m.model) + '<div class="content"></div>';
       const content = wrap.querySelector('.content');
       for (const b of (m.blocks || [])) {
         if (b.type === 'text') { const box = el('div', 'md'); box.innerHTML = renderMd(b.text); content.appendChild(box); enhance(box); }
@@ -2374,8 +2681,18 @@ function updateStatusbar() {
   const model = $('model').value;
   const mName = modelName(model) || ($('model').selectedOptions[0] && $('model').selectedOptions[0].textContent) || 'מודל ברירת מחדל';
   // שם המודל לבדו אינו אומר איזה סוכן רץ — 'Claude Opus 5' קיים בשתי הרשימות.
-  // הסימון מופיע רק כשהסוכן אינו ברירת המחדל, כדי לא להוסיף רעש לכל שיחה.
-  $('sbModel').textContent = model ? (isCursorModel(model) ? 'Cursor · ' + mName : mName) : 'מודל ברירת מחדל';
+  // עד כה זה נאמר בקידומת "Cursor · " שאכלה מרוחב השורה; עכשיו זה התג הפינתי
+  // שעל הסימן, והשם נשאר השם.
+  //
+  // הפריט נבנה מחדש רק כשהמודל באמת התחלף: שורת המצב מתרעננת גם על כל עדכון
+  // עלות והקשר שמגיע בזמן תור, ואין טעם לפרסר SVG מחדש בכל אחד מהם.
+  const sb = $('sbModel');
+  const label = model ? mName : 'מודל ברירת מחדל';
+  if (sb._bmModel !== model || sb._bmLabel !== label) {
+    sb._bmModel = model; sb._bmLabel = label;
+    sb.innerHTML = brandMarkHtml(model, 15) + `<span class="sb-model-name">${escHtml(label)}</span>`;
+    sb.title = brandTitle(model);
+  }
   // בחירה שהגיעה ממכשיר אחר או מסנכרון שיחה משנה את הבורר ישירות, בלי אירוע
   // change — הנקודה הזו היא המקום שדרכו כולן עוברות, ולכן התווית מתיישרת כאן.
   if ($('model')._mpSync) $('model')._mpSync();
@@ -2425,8 +2742,13 @@ function fmtResetAbsolute(iso) {
   if (!iso) return '';
   const t = new Date(iso);
   if (isNaN(t)) return '';
+  // מחזור החיוב של Cursor חודשי: "מתאפס יום ג׳ 00:00" על תאריך שבעוד שלושה
+  // שבועות אינו מזהה שום דבר. מעבר לשבוע עוברים לתאריך.
+  const far = t - Date.now() > 6 * 864e5;
   try {
-    return 'מתאפס ' + t.toLocaleString('he-IL', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    return 'מתאפס ' + t.toLocaleString('he-IL', far
+      ? { day: 'numeric', month: 'long' }
+      : { weekday: 'short', hour: '2-digit', minute: '2-digit' });
   } catch {
     return fmtReset(iso);
   }
@@ -2451,77 +2773,184 @@ function usageWindowsFromPayload(u) {
   }
   return out;
 }
-function renderUsageMeter(w, absoluteReset) {
-  const pct = Math.max(0, Math.round(w.pct));
-  const level = usageLevel(pct);
-  const row = el('div', 'um-meter' + (level === 2 ? ' hot' : level === 1 ? ' warn' : ''));
+/* ‎Cursor‎ מדווח אחוזים קטנים מאוד (0.14%, 3.63%), ועיגול לשלם הופך אותם
+   ל‎"0%"‎ ול‎"4%"‎ — הראשון שקר גמור והשני מנפח. מתחת ל-10% מציגים ספרה אחת. */
+function fmtUsagePct(raw, precise) {
+  const v = Math.max(0, typeof raw === 'number' && isFinite(raw) ? raw : 0);
+  if (!precise || v === 0 || v >= 10) return Math.round(v) + '%';
+  return (Math.round(v * 10) / 10) + '%';
+}
+/**
+ * מד אחד. ‎opts.precise‎ — אחוז עם ספרה עשרונית בערכים קטנים,
+ * ‎opts.sliver‎ — רוחב מזערי לפס כשיש שימוש שקטן מכדי להיראות,
+ * ‎opts.sub‎ — שורת משנה תחת מד אחר (קטן יותר, מודגש פחות).
+ */
+function renderUsageMeter(w, absoluteReset, opts = {}) {
+  const raw = Math.max(0, typeof w.pct === 'number' && isFinite(w.pct) ? w.pct : 0);
+  const level = usageLevel(raw);
+  const row = el('div', 'um-meter' + (level === 2 ? ' hot' : level === 1 ? ' warn' : '') + (opts.sub ? ' um-sm' : ''));
   const meta = el('div', 'um-meta');
-  meta.appendChild(el('div', 'um-label', w.label || '—'));
+  const shown = CURSOR_WINDOW_NAMES[w.id] || w.label || '—';
+  meta.appendChild(el('div', 'um-label', shown));
   let sub = '';
-  if (w.kind === 'weekly_scoped' && pct === 0) sub = `עדיין לא השתמשת ב־${w.label}`;
+  // התנאי על הערך הגולמי ולא על המעוגל: 0.14% הוא שימוש, גם אם הוא מציג 0%.
+  if (w.kind === 'weekly_scoped' && raw === 0) sub = `עדיין לא השתמשת ב־${shown}`;
   else if (w.resets_at) sub = absoluteReset ? fmtResetAbsolute(w.resets_at) : fmtReset(w.resets_at);
+  // ‎detail‎ מגיע רק ממכסת Cursor: שם האחוז לבדו חסר משמעות ("47%" ממה?)
+  if (w.detail) sub = sub ? `${w.detail} · ${sub}` : w.detail;
   meta.appendChild(el('div', 'um-sub', sub));
   const track = el('div', 'um-track');
-  const fill = el('span', 'um-fill');
-  fill.style.width = Math.min(100, pct) + '%';
+  const fill = el('span', 'um-fill' + (opts.sliver && raw > 0 ? ' on' : ''));
+  fill.style.width = Math.min(100, raw) + '%';
   track.appendChild(fill);
   row.appendChild(meta);
   row.appendChild(track);
-  row.appendChild(el('div', 'um-pct', pct + '% בשימוש'));
+  row.appendChild(el('div', 'um-pct', fmtUsagePct(raw, opts.precise) + ' בשימוש'));
   return row;
 }
-function compactUsageLabel(w) {
-  if (!w) return '—';
-  if (w.kind === 'session') return 'סשן';
-  if (w.kind === 'weekly_all') return 'שבועי';
-  return w.label || 'מודל';
+/* ==========================================================================
+   מכסה: שני סוכנים, מד אחד
+   --------------------------------------------------------------------------
+   Claude ו-Cursor מדווחים על מכסה בסכמות שונות לגמרי — חלונות של חמש שעות
+   ושבוע מול מחזור חיוב חודשי — אבל השרת כבר משטח את שניהם לאותו ‎windows[]‎,
+   ולכן כאן אין ולו פונקציית ציור אחת שיודעת במי מדובר. מה שכן מחזיק את ההבדל
+   הוא הצבע: ‎--src‎ נקבע פעם אחת על הרצועה ועל כל קטע בחלון, וכל השאר יורש.
+
+   הרצועה הקומפקטית מציגה סוכן אחד (השבב מחליף ביניהם, והבחירה נשמרת), והחלון
+   הצף מציג תמיד את שניהם — שם יש מקום, ושם משווים.
+   ========================================================================== */
+const USAGE_SOURCES = ['claude', 'cursor'];
+/* המספרים ש‎Cursor‎ מחזיר חיים בקצה התחתון של הסולם — אחוזים בודדים של
+   מחזור חיוב שלם — ולכן המדים שלו מקבלים דיוק עשרוני ופס נראה גם בשבריר אחוז. */
+const CURSOR_METER = { precise: true, sliver: true };
+const CURSOR_TOTAL_ID = 'cursor-included';
+const CURSOR_PART_IDS = ['cursor-api', 'cursor-auto'];
+/* שמות התצוגה לפי מזהה — לא לפי ‎short‎ שבמטמון. כך שינוי השם חל מיד,
+   גם אם הרצועה עדיין מחזיקה «כללי» / «אוטו» / «גרוק» מתשובה ישנה. */
+const CURSOR_WINDOW_NAMES = {
+  'cursor-api': 'מודלים כלליים',
+  'cursor-auto': 'מודלים של קרסר',
+  'cursor-grok-bot': 'גרוק בוט',
+};
+let usageData = { claude: null, cursor: null };
+
+function usageSource() {
+  const s = store.settings && store.settings.usageSource;
+  return USAGE_SOURCES.includes(s) ? s : 'claude';
 }
-function renderComposerUsageMeter(w) {
-  const pct = Math.max(0, Math.round(w.pct));
-  const level = usageLevel(pct);
-  const row = el('div', 'cu-row' + (level === 2 ? ' hot' : level === 1 ? ' warn' : ''));
-  const top = el('div', 'cu-top');
-  top.appendChild(el('div', 'cu-label', compactUsageLabel(w)));
-  top.appendChild(el('div', 'cu-pct', pct + '%'));
-  row.appendChild(top);
-  const track = el('div', 'cu-track');
-  const fill = el('span', 'cu-fill');
-  fill.style.width = Math.min(100, pct) + '%';
-  track.appendChild(fill);
-  row.appendChild(track);
-  let sub = '';
-  if (w.kind === 'session' && w.resets_at) sub = fmtReset(w.resets_at);
-  else if (w.kind !== 'session' && w.resets_at) sub = fmtResetAbsolute(w.resets_at);
-  if (sub) row.appendChild(el('div', 'cu-sub', sub));
-  return row;
+const usageSourceName = (s) => (s === 'cursor' ? 'Cursor' : 'Claude');
+
+function setUsageSource(src) {
+  if (!USAGE_SOURCES.includes(src)) src = 'claude';
+  store.settings.usageSource = src;
+  save();
+  renderComposerUsage();
 }
-function renderComposerUsage(windows, maxLevel) {
-  const host = $('composerUsageMeters');
-  const btn = $('composerUsage');
-  if (!host || !btn) return;
-  // סשן קודם, ואז שבועי כללי + מודלים עם ניצול משמעותי (כדי לא להציף)
+
+/** החלונות של סוכן אחד, מכל צורת תשובה שהיא. */
+function usageWindowsOf(src, u) {
+  if (!u) return [];
+  if (src === 'cursor') return Array.isArray(u.windows) ? u.windows : [];
+  return usageWindowsFromPayload(u);
+}
+
+/** מה שנכנס לרצועה: סשן קודם, ואז שבועי כללי + מודלים בניצול משמעותי (לא להציף). */
+function stripWindows(src, u) {
+  const windows = usageWindowsOf(src, u);
+  if (src === 'cursor') {
+    // מודלים כלליים קודמים — זה המד שהמשתמש ביקש לראות במקום הסה״כ המעורב.
+    // הסה״כ (‎cursor-included‎ בלי ‎detail‎) מוסתר גם אם המטמון הישן עוד נושא אותו.
+    const general = windows.filter((w) => w.id === 'cursor-api');
+    const auto = windows.filter((w) => w.id === 'cursor-auto');
+    const bot = windows.filter((w) => w.id === 'cursor-grok-bot');
+    const unlimited = windows.filter((w) => w.id === CURSOR_TOTAL_ID && w.detail);
+    const rest = windows.filter((w) =>
+      w.id !== 'cursor-api' && w.id !== 'cursor-auto' && w.id !== 'cursor-grok-bot' && w.id !== CURSOR_TOTAL_ID);
+    // מודלים של קרסר אחרונים: השם ארוך, והוא מקבל שורה שלמה בתחתית התיבה.
+    return [...general, ...bot, ...auto, ...unlimited, ...rest].slice(0, 3);
+  }
   const session = windows.filter((w) => w.kind === 'session');
   const weekly = windows.filter((w) => w.kind === 'weekly_all');
   const scoped = windows
     .filter((w) => w.kind === 'weekly_scoped' && typeof w.pct === 'number' && w.pct > 0)
     .sort((a, b) => b.pct - a.pct)
     .slice(0, 2);
-  const shown = [...session, ...weekly, ...scoped];
-  host.innerHTML = '';
-  for (const w of shown) host.appendChild(renderComposerUsageMeter(w));
-  btn.classList.toggle('hidden', shown.length === 0);
-  btn.classList.toggle('warn', maxLevel === 1);
-  btn.classList.toggle('hot', maxLevel === 2);
-  const tip = shown.map((w) => `${compactUsageLabel(w)} ${Math.round(w.pct)}%`).join(' · ');
-  btn.title = tip ? `לחץ לפירוט · ${tip}` : 'לחץ לפירוט מגבלות הניצול';
+  return [...session, ...weekly, ...scoped];
 }
-function renderUsageModal(u) {
-  const windows = usageWindowsFromPayload(u);
+
+function compactUsageLabel(w) {
+  if (!w) return '—';
+  if (CURSOR_WINDOW_NAMES[w.id]) return CURSOR_WINDOW_NAMES[w.id];
+  if (w.short) return w.short;
+  if (w.kind === 'session') return 'סשן';
+  if (w.kind === 'weekly_all') return 'שבועי';
+  return w.label || 'מודל';
+}
+function renderComposerUsageMeter(w, opts = {}) {
+  const raw = Math.max(0, typeof w.pct === 'number' && isFinite(w.pct) ? w.pct : 0);
+  const level = usageLevel(raw);
+  const row = el('div', 'cu-row'
+    + (level === 2 ? ' hot' : level === 1 ? ' warn' : '')
+    + (w.id === 'cursor-auto' ? ' cu-span' : ''));
+  const top = el('div', 'cu-top');
+  top.appendChild(el('div', 'cu-label', compactUsageLabel(w)));
+  top.appendChild(el('div', 'cu-pct', fmtUsagePct(raw, opts.precise)));
+  row.appendChild(top);
+  const track = el('div', 'cu-track');
+  const fill = el('span', 'cu-fill' + (opts.sliver && raw > 0 ? ' on' : ''));
+  fill.style.width = Math.min(100, raw) + '%';
+  track.appendChild(fill);
+  row.appendChild(track);
+  let sub = '';
+  if (w.detail) sub = w.detail;
+  else if (w.kind === 'session' && w.resets_at) sub = fmtReset(w.resets_at);
+  else if (w.resets_at) sub = fmtResetAbsolute(w.resets_at);
+  if (sub) row.appendChild(el('div', 'cu-sub', sub));
+  return row;
+}
+
+/** הרצועה שמתחת לתיבה — הסוכן שנבחר בלבד. */
+function renderComposerUsage() {
+  const host = $('composerUsageMeters');
+  const strip = $('composerUsage');
+  const chip = $('usageSrcToggle');
+  const open = $('usageOpen');
+  if (!host || !strip || !chip || !open) return;
+
+  const src = usageSource();
+  const other = src === 'claude' ? 'cursor' : 'claude';
+  const shown = stripWindows(src, usageData[src]);
+
+  const mopts = src === 'cursor' ? CURSOR_METER : {};
+  host.innerHTML = '';
+  for (const w of shown) host.appendChild(renderComposerUsageMeter(w, mopts));
+  if (!shown.length) host.appendChild(el('div', 'cu-empty', `אין נתוני מכסה מ-${usageSourceName(src)}`));
+
+  const maxLevel = shown.reduce((m, w) => Math.max(m, usageLevel(w.pct)), 0);
+  strip.classList.remove('src-claude', 'src-cursor');
+  strip.classList.add('src-' + src);
+  strip.classList.toggle('warn', maxLevel === 1);
+  strip.classList.toggle('hot', maxLevel === 2);
+  // הרצועה נעלמת רק כששני הסוכנים ריקים: אם הסתרנו אותה בגלל צד ריק, השבב —
+  // הדרך היחידה לחזור לצד המלא — היה נעלם איתה.
+  strip.classList.toggle('hidden', !USAGE_SOURCES.some((s) => stripWindows(s, usageData[s]).length));
+
+  chip.dataset.src = src;
+  chip.textContent = usageSourceName(src);
+  chip.title = `החלף לתצוגת המכסה של ${usageSourceName(other)}`;
+  chip.setAttribute('aria-label', chip.title);
+
+  const tip = shown.map((w) => `${compactUsageLabel(w)} ${fmtUsagePct(w.pct, mopts.precise)}`).join(' · ');
+  open.title = tip ? `לחץ לפירוט שתי המכסות · ${tip}` : 'לחץ לפירוט מגבלות הניצול';
+}
+
+function renderClaudeUsage(u) {
   const sessionHost = $('usageSessionBlock');
   const weeklyBlock = $('usageWeeklyBlock');
   const weeklyHost = $('usageWeeklyMeters');
-  if (!sessionHost || !weeklyHost || !weeklyBlock) return 0;
+  if (!sessionHost || !weeklyHost || !weeklyBlock) return;
 
+  const windows = usageWindowsOf('claude', u);
   const session = windows.filter((w) => w.kind === 'session');
   const weekly = windows.filter((w) => w.kind !== 'session');
 
@@ -2532,24 +2961,89 @@ function renderUsageModal(u) {
   for (const w of weekly) weeklyHost.appendChild(renderUsageMeter(w, true));
   weeklyBlock.hidden = weekly.length === 0;
 
+  const empty = $('usageClaudeEmpty');
+  if (empty) empty.hidden = windows.length > 0;
+
   const planEl = $('usagePlan');
-  const label = planLabel(u.plan);
-  if (planEl) {
-    if (label) { planEl.textContent = label; planEl.hidden = false; }
-    else planEl.hidden = true;
+  const label = planLabel(u && u.plan);
+  if (planEl) { planEl.textContent = label || ''; planEl.hidden = !label; }
+}
+
+/* ---------- קטע Cursor בחלון הצף ----------
+   Cursor מודד שני דליים נפרדים באותו מחזור חודשי: מודלים כלליים ומודלים
+   של קרסר. הסה״כ המעורב
+   אינו מוצג — הוא אינו תקרה. מה שנמדד במחזור אחר לגמרי (Grok Bot השבועי,
+   חיוב לפי שימוש) מקבל כותרת משלו. תאריך האיפוס של המחזור עולה אל הכותרת:
+   הוא נכון לקבוצה ולא לשורה אחת. */
+function renderCursorUsage(u) {
+  const host = $('usageCursorMeters');
+  if (!host) return;
+  const windows = usageWindowsOf('cursor', u);
+
+  host.innerHTML = '';
+  const pools = CURSOR_PART_IDS.map((id) => windows.find((w) => w.id === id)).filter(Boolean);
+  const unlimited = windows.find((w) => w.id === CURSOR_TOTAL_ID && w.detail) || null;
+  const rest = windows.filter((w) => !CURSOR_PART_IDS.includes(w.id) && w.id !== CURSOR_TOTAL_ID);
+
+  if (unlimited || pools.length) {
+    const group = el('section', 'ug');
+    const head = el('h4', 'usage-sec', 'שימוש כלול');
+    const resetAt = (unlimited && unlimited.resets_at) || (pools.find((w) => w.resets_at) || {}).resets_at || '';
+    const when = resetAt ? fmtResetAbsolute(resetAt) : '';
+    if (when) head.appendChild(el('span', 'ug-when', when));
+    group.appendChild(head);
+
+    if (unlimited) {
+      const lead = { ...unlimited };
+      if (when) lead.resets_at = null;
+      group.appendChild(renderUsageMeter(lead, true, CURSOR_METER));
+    }
+    for (const w of pools) {
+      const row = { ...w };
+      if (when) row.resets_at = null;
+      group.appendChild(renderUsageMeter(row, true, CURSOR_METER));
+    }
+    if (pools.length > 1) {
+      group.appendChild(el('p', 'ug-note', 'כל דלי נמדד מול תקרה משלו — האחוזים לא מסתכמים זה בזה.'));
+    }
+    host.appendChild(group);
   }
 
-  let max = 0;
-  for (const w of windows) max = Math.max(max, usageLevel(w.pct));
-  renderComposerUsage(windows, max);
-  return max;
+  if (rest.length) {
+    const group = el('section', 'ug');
+    // כותרת רק כשיש ממה להבדיל — אחרת זו כותרת מעל כל מה שיש.
+    if (host.childElementCount) group.appendChild(el('h4', 'usage-sec', 'מכסות נפרדות'));
+    for (const w of rest) group.appendChild(renderUsageMeter(w, true, CURSOR_METER));
+    host.appendChild(group);
+  }
+
+  const empty = $('usageCursorEmpty');
+  if (empty) {
+    empty.hidden = !!(unlimited || pools.length || rest.length);
+    empty.textContent = !u
+      ? 'לא הצלחנו לקרוא את המכסה מ-Cursor.'
+      : u.connected
+        ? 'אין כרגע מספרים להצגה — ייתכן שהתוכנית לא מונה בקשות, או שהדשבורד לא ענה.'
+        : 'לא מחובר ל-Cursor. הריצו cursor-agent login, או הדביקו את עוגיית WorkosCursorSessionToken אל CURSOR_SESSION_TOKEN בקובץ .env.';
+  }
+
+  const planEl = $('usageCursorPlan');
+  const label = (u && u.plan) || '';
+  if (planEl) { planEl.textContent = label; planEl.hidden = !label; }
 }
+
+function paintUsage() {
+  renderClaudeUsage(usageData.claude);
+  renderCursorUsage(usageData.cursor);
+  renderComposerUsage();
+}
+
+const getJSON = (url) => fetch(url).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+
 async function refreshUsage() {
-  try {
-    const r = await fetch('/api/usage');
-    const u = r.ok ? await r.json() : {};
-    renderUsageModal(u);
-  } catch {}
+  const [claude, cursor] = await Promise.all([getJSON('/api/usage'), getJSON('/api/usage/cursor')]);
+  usageData = { claude, cursor };
+  paintUsage();
 }
 
 /* ---------- המתנה לחידוש מכסת הסשן ----------
@@ -2617,10 +3111,12 @@ function onLimitResumed(m) {
 function isUsageModalOpen() { return $('usageModal') && !$('usageModal').classList.contains('hidden'); }
 function setUsageModalOpen(open) {
   const modal = $('usageModal');
-  const rail = $('composerUsage');
+  const strip = $('composerUsage');
+  const btn = $('usageOpen');
   if (!modal) return;
   modal.classList.toggle('hidden', !open);
-  if (rail) rail.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (strip) strip.classList.toggle('open', open);
   document.body.style.overflow = open ? 'hidden' : '';
   if (open) {
     refreshUsage();
@@ -2775,7 +3271,12 @@ function showWelcome() {
   const log = $('log');
   if (log.querySelector('.welcome')) return;
   const w = el('div', 'welcome');
-  w.innerHTML = `<div class="hero"><div class="sun">${sunburst(60)}</div><h1></h1></div>`;
+  // הסימן במסך הפתיחה הוא של המודל שהשיחה תיפתח איתו — עוד לפני המילה
+  // הראשונה כבר רואים עם מי מתחילים.
+  const hm = $('model').value;
+  w.innerHTML = `<div class="hero"><div class="sun bmark-tint" style="${brandVars(hm)}">`
+    + `${brandMarkHtml(hm, 60)}</div><h1></h1></div>`;
+  w.querySelector('.hero .sun').title = brandTitle(hm);
   w.querySelector('h1').textContent = greeting();
   const sg = el('div', 'suggests');
   for (const s of SUGGESTS) {
@@ -3058,7 +3559,11 @@ function initSideResize() {
 }
 
 // ---------- חלונית ניצול מכסה (כפתור בסטטוסבר → מודאל מרכזי) ----------
-$('composerUsage').onclick = (e) => { e.stopPropagation(); toggleUsageModal(); };
+$('usageOpen').onclick = (e) => { e.stopPropagation(); toggleUsageModal(); };
+$('usageSrcToggle').onclick = (e) => {
+  e.stopPropagation();
+  setUsageSource(usageSource() === 'claude' ? 'cursor' : 'claude');
+};
 $('usageModalClose').onclick = () => setUsageModalOpen(false);
 $('usageModal').addEventListener('click', (e) => { if (e.target === $('usageModal')) setUsageModalOpen(false); });
 document.addEventListener('keydown', (e) => {
@@ -3469,8 +3974,9 @@ function attachModelSearch(sel) {
   sel._mpBtn = btn;
   sel._mpSync = () => {
     const o = sel.selectedOptions[0];
-    btn.textContent = o ? o.textContent : 'מודל ברירת מחדל';
-    btn.title = (modelName(sel.value) || btn.textContent) + ' — לחץ לחיפוש מודל';
+    const label = o ? o.textContent : 'מודל ברירת מחדל';
+    btn.innerHTML = brandMarkHtml(sel.value, 16) + `<span class="mp-btn-name">${escHtml(label)}</span>`;
+    btn.title = brandTitle(sel.value) + ' — לחץ לחיפוש מודל';
   };
   sel._mpSync();
   if (sel.parentElement) sel.parentElement.insertBefore(btn, sel);
@@ -3551,8 +4057,14 @@ function renderModelPicker() {
         if (isFav) host.appendChild(el('div', 'mp-favs-row'));
       }
     }
-    const row = el('div', 'pl-item mp-item' + (isFav ? ' mp-fav-chip' : '') + (i === st.idx ? ' sel' : ''));
-    row.appendChild(el('span', 'pl-ic', it.value === st.cur ? '✓' : '›'));
+    const row = el('div', 'pl-item mp-item' + (isFav ? ' mp-fav-chip' : '')
+      + (i === st.idx ? ' sel' : '') + (it.value === st.cur ? ' mp-cur' : ''));
+    // הסימן תופס את מקומו של החץ: באותו רוחב, ועם מידע שהחץ לא נשא. המודל
+    // הנבחר מסומן בפס האקצנט של ‎.mp-cur‎ ולא ב-✓, כדי לא להחליף את הסימן
+    // בדיוק בשורה שבה חשוב לראות אותו.
+    const ic = el('span', 'pl-ic');
+    ic.appendChild(brandMarkEl(it.value, 17));
+    row.appendChild(ic);
     row.appendChild(el('span', 'mp-name', it.label));
     // המזהה מוצג רק כשהוא מוסיף מידע: אצל רוב השערים שם המודל *הוא* המזהה,
     // ושורה שכתוב בה אותו דבר פעמיים רק מקשה על הסריקה.
@@ -5306,6 +5818,8 @@ const paletteActions = () => [
   { ic: '⌁', name: 'Remote Control — שליטה מ-claude.ai ומהנייד (/rc)', run: () => openRc() },
   { ic: '◐', name: 'החלף מצב תצוגה (בהיר/כהה)', run: () => $('themeToggle').click() },
   { ic: '⤢', name: 'מצב רחב', run: () => $('wideToggle').click() },
+  { ic: '▤', name: 'מכסה — Claude מול Cursor', run: () => setUsageModalOpen(true) },
+  { ic: '⇄', name: `החלף את רצועת המכסה ל-${usageSourceName(usageSource() === 'claude' ? 'cursor' : 'claude')}`, run: () => $('usageSrcToggle').click() },
   { ic: '⟳', name: 'בדוק מול השרת וסנכרן את המסך', run: () => manualCheck() },
   { ic: '☰', name: 'יומן ריצה — למה התור נעצר', run: () => openLogs() },
   { ic: '⌂', name: 'תיקיית העבודה של השיחה', run: () => openDirPicker($('cwd').value.trim()) },
@@ -5857,17 +6371,28 @@ document.addEventListener('keydown', (e) => {
 // ב-iOS המקלדת לא מקטינה את 100dvh, ולכן המחבר נדחף מתחת למקלדת בדיוק ברגע
 // שמתחילים להקליד. visualViewport הוא היחיד שיודע כמה מסך באמת נשאר.
 // רק במגע: בדסקטופ זום של הדפדפן משנה את visualViewport ויכווץ את הממשק לחינם.
+//
+// compose-compact: *רק* כשהמקלדת באמת פתוחה. משווים לגובה המנוחה (הגבוה
+// ביותר שראינו), לא לפוקוס בשדה — אחרת המטא־נתונים נעלמים גם בלי מקלדת.
+// הסף 150px מבדיל מקלדת מצמצום סרגל הכתובת (~50–100).
 (function trackVisualViewport() {
   const vv = window.visualViewport;
   if (!vv || !matchMedia('(pointer: coarse)').matches) return;
+  let resting = vv.height;
   const apply = () => {
-    document.documentElement.style.setProperty('--app-h', Math.round(vv.height) + 'px');
+    const h = Math.round(vv.height);
+    document.documentElement.style.setProperty('--app-h', h + 'px');
     // ה-layout viewport עצמו נגלל כשהמקלדת נפתחת, והממשק "בורח" כלפי מעלה
     if (vv.offsetTop > 0 || window.scrollY > 0) window.scrollTo(0, 0);
     if (stick) autoScroll(true);
+    if (h > resting) resting = h;
+    document.body.classList.toggle('compose-compact', (resting - h) > 150);
   };
   vv.addEventListener('resize', apply);
   vv.addEventListener('scroll', apply);
+  addEventListener('orientationchange', () => {
+    setTimeout(() => { resting = vv.height; apply(); }, 400);
+  });
   apply();
 })();
 
@@ -6276,8 +6801,10 @@ function duetTurnCard(t) {
   h.appendChild(roleBadge(t.speaker));
   h.appendChild(el('b', null, ROLE_LABEL[t.speaker] || t.speaker));
   h.appendChild(el('span', 'dt-vtag', 'גרסה ' + t.version));
-  const mdl = el('span', 'dt-model', t.model || 'ברירת מחדל');
-  mdl.dir = 'ltr';
+  const mdl = el('span', 'dt-model');
+  mdl.appendChild(brandMarkEl(t.model, 14));
+  mdl.appendChild(el('span', 'dt-model-name', t.model ? modelShort(t.model) : 'ברירת מחדל'));
+  mdl.title = brandTitle(t.model);
   h.appendChild(mdl);
   h.appendChild(el('span', 'dt-spacer'));
   if (t.done) h.appendChild(el('span', 'dt-flag', 'אין מה לשנות'));
@@ -6453,8 +6980,10 @@ function duetMountLive() {
   h.appendChild(roleBadge(duetLive.role));
   h.appendChild(el('b', null, ROLE_LABEL[duetLive.role] || duetLive.role));
   h.appendChild(el('span', 'dt-vtag', 'גרסה ' + duetLive.version));
-  const mdl = el('span', 'dt-model', modelName(duetLive.model) || duetLive.model || 'ברירת מחדל');
-  mdl.dir = 'ltr';
+  const mdl = el('span', 'dt-model');
+  mdl.appendChild(brandMarkEl(duetLive.model, 14));
+  mdl.appendChild(el('span', 'dt-model-name', duetLive.model ? modelShort(duetLive.model) : 'ברירת מחדל'));
+  mdl.title = brandTitle(duetLive.model);
   h.appendChild(mdl);
   h.appendChild(el('span', 'dt-spacer'));
   h.appendChild(el('span', 'spinner sm'));

@@ -287,10 +287,14 @@
           </button>
         </div>
       </div>
-      <!-- מדדי מכסה — רצועה ויזואלית מתחת לתיבת הטקסט -->
-      <button type="button" class="usage-strip hidden" id="composerUsage" title="לחץ לפירוט מגבלות הניצול" aria-expanded="false" aria-controls="usageModal">
-        <div class="cu-meters" id="composerUsageMeters"></div>
-      </button>
+      <!-- מדדי מכסה — רצועה ויזואלית מתחת לתיבת הטקסט.
+           השבב מחליף בין הסוכנים; שאר הרצועה פותחת את החלון הצף עם שניהם. -->
+      <div class="usage-strip hidden" id="composerUsage">
+        <button type="button" class="cu-src" id="usageSrcToggle" data-src="claude" title="החלף לתצוגת המכסה של Cursor">Claude</button>
+        <button type="button" class="cu-open" id="usageOpen" title="לחץ לפירוט מגבלות הניצול" aria-expanded="false" aria-controls="usageModal">
+          <div class="cu-meters" id="composerUsageMeters"></div>
+        </button>
+      </div>
       <!-- המפרידים נוצרים ב-CSS, כדי שהסתרת פריט ריק לא תשאיר "·" יתום -->
       <div class="statusbar" id="statusbar">
         <span class="sb-item" id="sbModel">מודל ברירת מחדל</span>
@@ -308,14 +312,36 @@
     <button type="button" id="usageModalClose" class="usage-close" title="סגור" aria-label="סגור">✕</button>
     <header class="usage-head">
       <h2 id="usageModalTitle">מגבלות ניצול התוכנית</h2>
-      <span class="usage-plan" id="usagePlan" hidden></span>
     </header>
 
-    <section class="usage-block" id="usageSessionBlock"></section>
+    <!-- שני הסוכנים זה תחת זה, כל אחד בצבע שלו -->
+    <section class="usage-agent src-claude" id="usageClaudeBlock">
+      <div class="usage-agent-head">
+        <span class="usage-dot" aria-hidden="true"></span>
+        <h3 class="usage-agent-name">Claude</h3>
+        <span class="usage-plan" id="usagePlan" hidden></span>
+      </div>
 
-    <section class="usage-block" id="usageWeeklyBlock" hidden>
-      <h3 class="usage-sec">מגבלות שבועיות</h3>
-      <div id="usageWeeklyMeters"></div>
+      <section class="usage-block" id="usageSessionBlock"></section>
+
+      <section class="usage-block" id="usageWeeklyBlock" hidden>
+        <h4 class="usage-sec">מגבלות שבועיות</h4>
+        <div id="usageWeeklyMeters"></div>
+      </section>
+
+      <p class="usage-empty" id="usageClaudeEmpty" hidden>אין עדיין נתוני מכסה.</p>
+    </section>
+
+    <section class="usage-agent src-cursor" id="usageCursorBlock">
+      <div class="usage-agent-head">
+        <span class="usage-dot" aria-hidden="true"></span>
+        <h3 class="usage-agent-name">Cursor</h3>
+        <span class="usage-plan" id="usageCursorPlan" hidden></span>
+      </div>
+
+      <div class="usage-block" id="usageCursorMeters"></div>
+
+      <p class="usage-empty" id="usageCursorEmpty" hidden></p>
     </section>
   </div>
 </div>

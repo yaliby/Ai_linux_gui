@@ -419,6 +419,36 @@ app.get('/api/usage', async (req, res) => {
   }
 });
 
+/* ---------- מכסת Cursor ----------
+   אותה סכמה ואותה מדיניות מטמון כמו מכסת Claude, כדי שהמסך יצייר את שתיהן
+   באותו קוד. השדה שמבדיל ביניהן הוא `connected`: בלעדיו אי-אפשר להבחין בין
+   "אין תוכנית Cursor" לבין "יש, אבל הדשבורד לא ענה עכשיו", ועל ההבדל הזה
+   נשענת ההודעה שמוצגת בחלון הצף. */
+const CURSOR_USAGE_CACHE_FILE = path.join(os.tmpdir(), 'rtl-claude-cursor-usage.json');
+function loadCursorUsageCache() { try { return JSON.parse(fs.readFileSync(CURSOR_USAGE_CACHE_FILE, 'utf8')); } catch { return null; } }
+function saveCursorUsageCache(data) { try { fs.writeFileSync(CURSOR_USAGE_CACHE_FILE, JSON.stringify(data)); } catch {} }
+let cursorUsageCache = { t: 0, lastTry: 0, data: loadCursorUsageCache() };
+app.get('/api/usage/cursor', async (req, res) => {
+  const connected = cursor.usageConnected();
+  try {
+    const now = Date.now();
+    const fresh = cursorUsageCache.data && now - cursorUsageCache.t < 60000;
+    // מחזור החיוב של Cursor חודשי, לא חמש-שעתי — אין טעם לדפוק על הדשבורד
+    // באותו קצב שבו נמשכת מכסת הסשן של Claude.
+    const mayTry = now - cursorUsageCache.lastTry > 30000;
+    if (connected && !fresh && mayTry) {
+      cursorUsageCache.lastTry = now;
+      const u = await cursor.fetchUsage();
+      if (u) { cursorUsageCache.data = u; cursorUsageCache.t = now; saveCursorUsageCache(u); }
+    }
+    const data = cursorUsageCache.data || { windows: [], plan: null };
+    res.json({ ...data, connected });
+  } catch {
+    const data = cursorUsageCache.data || { windows: [], plan: null };
+    res.json({ ...data, connected });
+  }
+});
+
 /**
  * מצרף למודלים את הקבוצה שאליה הם שייכים בבורר.
  *
@@ -1062,7 +1092,10 @@ function sanitizeConv(c) {
       }
       return null;
     }).filter(Boolean);
-    return { role: 'assistant', blocks };
+    // המודל שכתב את התשובה נשמר בהודעה עצמה ולא נגזר מהבורר בזמן הצגה: שיחה
+    // שעברה בין מודלים באמצע חייבת להראות ליד כל תשובה את מי שבאמת כתב אותה,
+    // גם אחרי רענון. ראו brandOf ב-app.js.
+    return { role: 'assistant', blocks, ...(m.model ? { model: String(m.model).slice(0, 120) } : {}) };
   }).filter(Boolean);
   const now = Date.now();
   return {
