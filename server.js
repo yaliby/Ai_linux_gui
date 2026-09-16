@@ -1166,35 +1166,39 @@ function convMeta(c) {
   }
   return meta;
 }
+/* הקריאה, הכתיבה והמטמון יושבים ב-lib/conv-store.js — ראו שם למה הם ירדו
+   מה-event loop ומה זה עשה להזרמה. כאן נשארת רק ההגנה על הצ'אט האנונימי,
+   כי היא מדיניות של השרת ולא של האחסון: זו הבדיקה האחרונה לפני הדיסק, ואם
+   מזהה אנונימי הגיע עד לכאן — זה באג, והוא נעצר ברעש ולא בשקט. */
+const store = require('./lib/conv-store')({
+  dir: CONV_DIR,
+  guard: (c) => { if (isAnonId(c && c.id)) throw new Error('anon conversation must never reach disk'); },
+  dbg,
+});
+const { readConv, writeConv } = store;
+const listConvIds = store.listIds;
+
 // בניית האינדקס דורשת פענוח JSON של כל קובץ. השרת חי לאורך זמן ורענון דף הוא
-// פעולה נפוצה, לכן שומרים את התקציר במטמון לפי mtime — רק קובץ שהשתנה נקרא שוב.
+// פעולה נפוצה, לכן שומרים את התקציר במטמון — ומתיישנים לפי אסימון הגרסה של
+// האחסון ולא לפי mtime, שמפגר אחרי כתיבה שעדיין בדרך לדיסק.
 const metaCache = new Map();
 function convMetaCached(id) {
-  let st;
-  try { st = fs.statSync(convPath(id)); } catch { metaCache.delete(id); return null; }
-  const hit = metaCache.get(id);
-  if (hit && hit.mtimeMs === st.mtimeMs) return hit.meta;
   const c = readConv(id);
-  if (!c || !c.id) return null;
+  if (!c || !c.id) { metaCache.delete(id); return null; }
+  const st = store.stamp(id);
+  const hit = metaCache.get(id);
+  if (hit && hit.stamp === st) return hit.meta;
   const meta = convMeta(c);
-  metaCache.set(id, { mtimeMs: st.mtimeMs, meta });
+  metaCache.set(id, { stamp: st, meta });
   return meta;
 }
-function readConv(id) {
-  try { return JSON.parse(fs.readFileSync(convPath(id), 'utf8')); } catch { return null; }
-}
-function writeConv(c) {
-  // הבדיקה האחרונה לפני הדיסק. כל מסלול כתיבה כבר סינן מזהה אנונימי; אם
-  // בכל זאת הגיע לכאן אחד — זה באג, והוא נעצר ברעש ולא בשקט.
-  if (isAnonId(c.id)) throw new Error('anon conversation must never reach disk');
-  const tmp = convPath(c.id) + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(c));
-  fs.renameSync(tmp, convPath(c.id));
-}
-function listConvIds() {
-  try { return fs.readdirSync(CONV_DIR).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)); }
-  catch { return []; }
-}
+
+/* כתיבה שהלקוח כבר קיבל עליה ok עדיין יכולה להיות בדרך לדיסק. יציאה בלי
+   ניקוז הייתה מאבדת בדיוק את מה שהובטח לו.
+   ‎exit‎ ולא ‎SIGINT/SIGTERM‎ במכוון: הסיגנלים כבר נתפסים למטה (עצירת המאזין
+   המרוחק), ומטפל נוסף כאן היה רץ לפניהם ומסיים את התהליך במקומם. ‎exit‎ יורה
+   גם כשהם קוראים ל-‎process.exit‎, והוא סינכרוני — בדיוק מה ש-flushSync צריך. */
+process.on('exit', () => { store.flushSync(); });
 function readSettings() {
   try {
     const s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
@@ -1240,7 +1244,7 @@ app.get('/api/conversations/:id', (req, res) => {
 // ולכן כתיבה בו-זמנית בדרך כלל זהה — אבל מכשיר שהיה מנותק ופספס חלק מהזרם
 // עלול לכתוב תמליל ישן על החדש. baseRev חוסם בדיוק את המקרה הזה: אם הגרסה
 // בדיסק התקדמה מאז הקריאה, הכתיבה נדחית והקליינט קורא מחדש במקום לדרוס.
-app.put('/api/conversations/:id', storeJson, (req, res) => {
+app.put('/api/conversations/:id', storeJson, async (req, res) => {
   try {
     const id = req.params.id;
     if (!VALID_ID.test(id)) return res.status(400).json({ ok: false, error: 'bad id' });
@@ -1277,7 +1281,9 @@ app.put('/api/conversations/:id', storeJson, (req, res) => {
       c.messages = prefix.slice(0, from).concat(c.messages);
     }
     c.rev = curRev + 1;
-    writeConv(c);
+    // ההמתנה כאן אינה חוסמת: ה-event loop פנוי להזרים לשאר המכשירים בזמנה.
+    // מה שהיא כן מבטיחה הוא ש-‎ok‎ נאמר על מה שכבר על הדיסק, ולא על הבטחה.
+    await writeConv(c);
     broadcastAll({ kind: 'conv_meta', meta: convMeta(c) });
     res.json({ ok: true, rev: c.rev, meta: convMeta(c) });
   } catch (e) {
@@ -1291,7 +1297,10 @@ app.delete('/api/conversations/:id', (req, res) => {
   if (!VALID_ID.test(id)) return res.status(400).json({ ok: false });
   // אנונימית: אין קובץ למחוק, יש רק תהליך וזיכרון להשמיד.
   if (isAnonId(id)) { destroyAnon(sessions.get(id)); return res.json({ ok: true, anon: true }); }
-  try { fs.unlinkSync(convPath(id)); } catch {}
+  // דרך האחסון ולא דרך fs: מחיקה צריכה לבטל גם כתיבה שעוד ממתינה, אחרת היא
+  // הייתה נוחתת רגע אחרי המחיקה ומחזירה את השיחה לחיים.
+  store.remove(id);
+  metaCache.delete(id);
   duet.dispose(id);
   const s = sessions.get(id);
   if (s) { killChild(s); sessions.delete(id); }
@@ -1312,7 +1321,7 @@ app.put('/api/settings', storeJson, (req, res) => {
 });
 
 // שמירה אחרונה בעת סגירת החלון — נשלח ב-sendBeacon, לכן POST יחיד לכל המידע.
-app.post('/api/flush', storeJson, (req, res) => {
+app.post('/api/flush', storeJson, async (req, res) => {
   try {
     const b = req.body || {};
     for (const raw of (Array.isArray(b.conversations) ? b.conversations : [])) {
@@ -1325,7 +1334,9 @@ app.post('/api/flush', storeJson, (req, res) => {
       const curRev = (cur && Number(cur.rev)) || 0;
       if (raw.baseRev !== undefined && Number(raw.baseRev) !== curRev) continue;
       c.rev = curRev + 1;
-      writeConv(c);
+      // ה-beacon הוא ההזדמנות האחרונה של חלון שנסגר. ממתינים לנחיתה בפועל
+      // כדי שהתשובה תיאמר על מה שנשמר, ולא על מה שנקבע בתור.
+      await writeConv(c);
       broadcastAll({ kind: 'conv_meta', meta: convMeta(c) });
     }
     if (b.settings || b.history || b.activeId !== undefined) {
@@ -1340,16 +1351,20 @@ app.post('/api/flush', storeJson, (req, res) => {
 });
 
 // הגירה חד-פעמית מה-localStorage הישן — לא דורסת שיחה שכבר קיימת בדיסק.
-app.post('/api/import', storeJson, (req, res) => {
+app.post('/api/import', storeJson, async (req, res) => {
   try {
     const convs = Array.isArray((req.body || {}).convs) ? req.body.convs : [];
     const existing = new Set(listConvIds());
     let imported = 0;
+    // ההגירה רצה פעם אחת בחיי ההתקנה, וכל השיחות נכתבות במקביל — ההמתנה
+    // המשותפת בסוף חוסכת סבב נפרד לכל אחת מהן.
+    const landings = [];
     for (const raw of convs) {
       const c = sanitizeConv(raw);
       if (!c || existing.has(c.id) || isAnonId(c.id)) continue;
-      writeConv(c); imported++;
+      landings.push(writeConv(c)); imported++;
     }
+    await Promise.all(landings);
     console.log(`[store] הגירה מ-localStorage: ${imported} שיחות נוספו`);
     res.json({ ok: true, imported });
   } catch (e) { res.status(500).json({ ok: false, error: String(e.message || e) }); }
@@ -1362,21 +1377,19 @@ app.post('/api/import', storeJson, (req, res) => {
    באותו thread שמזרים ברגע זה תשובה לדפדפן. החיפוש בממשק מופעל אחרי השהיה
    של 220ms מכל הקלדה, כלומר כל מילה שמקלידים בסרגל הצד עצרה את הסטרימינג
    למשך פענוח של מגה-בייטים. הפתרון הוא אותה תבנית שכבר משרתת את רשימת
-   השיחות (‎convMetaCached‎): מטמון לפי חתימת הקובץ, כך שרק שיחה שהשתנתה
-   נקראת שוב. החתימה היא mtime *וגודל* — בשתי כתיבות באותה מילישנייה mtime
-   לבדו היה מחזיר תוכן ישן.
+   השיחות (‎convMetaCached‎): מטמון שמתיישן לפי אסימון הגרסה של האחסון, כך
+   שרק שיחה שהשתנתה נקראת שוב. האסימון ולא mtime — כתיבה שעוד בדרך לדיסק
+   טרם נגעה ב-mtime, ולכן חיפוש היה ממשיך למצוא את התוכן הישן.
    ‎lower‎ הוא כל הטקסט מוקטן פעם אחת, ומשמש רק לשאלה "האם יש כאן התאמה
    בכלל". קטע ההקשר עצמו נחתך תמיד מהטקסט המקורי, כדי שמה שמוצג יישאר
    בדיוק כפי שנכתב. */
 const searchCache = new Map();
 function searchDoc(id) {
-  let st;
-  try { st = fs.statSync(convPath(id)); } catch { searchCache.delete(id); return null; }
-  const sig = st.mtimeMs + ':' + st.size;
-  const hit = searchCache.get(id);
-  if (hit && hit.sig === sig) return hit.doc;
   const c = readConv(id);
   if (!c) { searchCache.delete(id); return null; }
+  const sig = store.stamp(id);
+  const hit = searchCache.get(id);
+  if (hit && hit.sig === sig) return hit.doc;
   const parts = [];
   for (const m of (c.messages || [])) {
     if (m.role === 'user') { if (m.text) parts.push(m.text); }

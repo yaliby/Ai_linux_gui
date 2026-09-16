@@ -830,18 +830,23 @@ module.exports = function createDuet(D) {
       },
       maxTurns: run.cfg.maxTurns,
       noteVisibility: run.cfg.noteVisibility,
-      versions: run.versions,
-      turns: run.history,
-      supervisorNotes: run.supervisorNotes,
-      userNotes: run.userNotes,
+      // עותקים ולא הפניות: מה שנמסר לאחסון הוא *תצלום* של הריצה, והריצה
+      // ממשיכה לדחוף לאותם מערכים אחרי הקריאה. כל עוד הכתיבה הייתה מיידית
+      // וסינכרונית אי-אפשר היה להבחין בהבדל; מרגע שהאחסון מחזיק את האובייקט
+      // במטמון, הפניה חיה פירושה שהמטמון זוחל אחרי הריצה במקום לשקף את הדיסק.
+      // (המערכים נדחפים בלבד — אף איבר אינו משתנה במקומו — ולכן slice מספיק.)
+      versions: run.versions.slice(),
+      turns: run.history.slice(),
+      supervisorNotes: run.supervisorNotes.slice(),
+      userNotes: run.userNotes.slice(),
       // ריצה שהייתה באוויר כשהשרת ירד תיטען כמושהית, עם כפתור המשך — ולא
       // תיראה לנצח כאילו היא עדיין רצה
       status: run.status === 'running' ? 'paused' : run.status,
       phase: run.phase,
       endReason: run.endReason,
       endKind: run.endKind,
-      progress: run.progress,
-      usage: run.cost,
+      progress: run.progress && typeof run.progress === 'object' ? { ...run.progress } : run.progress,
+      usage: { ...run.cost },
       ceilingHit: run.ceilingHit,
     };
   }
@@ -856,7 +861,10 @@ module.exports = function createDuet(D) {
         const prev = D.readConv(run.convId);
         const c = convOf(run, prev);
         c.rev = ((prev && Number(prev.rev)) || 0) + 1;
-        D.writeConv(c);
+        // הכתיבה אסינכרונית, ולכן כישלון שלה מגיע כדחייה ולא כזריקה. בלי
+        // התפיסה הזו הוא היה יוצא כ-unhandledRejection במקום כשורת יומן.
+        Promise.resolve(D.writeConv(c)).catch((e) =>
+          D.dbg('duet.persist.fail', { convId: run.convId, err: String((e && e.message) || e) }));
         D.broadcastAll({ kind: 'conv_meta', meta: D.convMeta(c) });
       } catch (e) { D.dbg('duet.persist.fail', { convId: run.convId, err: String(e.message || e) }); }
     };
