@@ -385,6 +385,33 @@ function parseSse(buf, onData) {
   }
   return buf;
 }
+// ---------- מדיניות בדיקת הזמינות ----------
+
+/*
+ * שני סוגי כישלון, ולא אחד. ספק ש*עולה* ייענה בעוד שניות, ולכן כדאי לנסות
+ * אותו מהר. ספק ש*נעדר* — כתובת שכבר לא קיימת ברשת, מכונה שכובתה, פורט
+ * שהוחלף — לא ייענה היום, ובדיקה כל 30 שנ׳ מולו היא 2,880 שורות ביומן ליממה.
+ * היומן מסתובב ב-4MB, ולכן המחיר אינו רעש בלבד אלא מחיקת ההיסטוריה שבשבילה
+ * הוא קיים: ביומן אמיתי כאן 60% מהשורות היו בדיוק הכישלון החוזר הזה.
+ *
+ * לכן התקרה כפולה: RETRY_MAX כל עוד סביר שהספק רק מתאחר, ו-ABSENT_MAX אחרי
+ * ABSENT_AFTER כישלונות רצופים. ספק שיחזור עדיין נקלט מעצמו תוך רבע שעה —
+ * בלי להפעיל מחדש — ומי שלא חוזר פשוט שותק.
+ */
+const PROBE = {
+  RETRY_MIN: 2000,      // הניסיון החוזר הראשון
+  RETRY_MAX: 30000,     // תקרה כל עוד מניחים שהספק עולה
+  ABSENT_MAX: 900000,   // תקרה אחרי שהוכרז נעדר — רבע שעה
+  STEADY: 300000,       // רענון שגרתי אחרי הצלחה, לקליטת מודלים שנוספו
+  ABSENT_AFTER: 6,      // כישלונות רצופים (~90 שנ׳) עד ההכרזה
+};
+
+/** ההשהיה הבאה בבדיקת זמינות: הכפלה עד לתקרה שנגזרת ממספר הכישלונות ברצף. */
+function nextProbeDelay(delay, fails) {
+  const ceiling = fails >= PROBE.ABSENT_AFTER ? PROBE.ABSENT_MAX : PROBE.RETRY_MAX;
+  return Math.min(delay * 2, ceiling);
+}
+
 // ---------- ספק בודד ----------
 
 /**
@@ -408,6 +435,10 @@ function createProvider({ id, label, baseUrl, apiKey, prefix, timeoutMs, envHint
 
   let modelIds = new Set();
   let lastModels = null;
+  // סיבת הכישלון האחרון של בדיקת הזמינות. ‎fetchModels‎ רק רושם אותה כאן;
+  // מי שמחליט אם היא ראויה לשורה ביומן הוא ‎startModelWatcher‎, שלבדו יודע אם
+  // זה כישלון ראשון או המאה-וחמישים ברצף.
+  let lastFailReason = null;
 
   const hasModel = (mid) => !!mid && modelIds.has(mid);
   const upstreamModel = (mid) => (String(mid || '').startsWith(PREFIX) ? String(mid).slice(PREFIX.length) : String(mid || ''));
@@ -461,12 +492,12 @@ function createProvider({ id, label, baseUrl, apiKey, prefix, timeoutMs, envHint
       const res = await upstream('/models', { timeout: MODELS_TIMEOUT_MS });
       const text = await readBody(res);
       if (res.statusCode < 200 || res.statusCode >= 300) {
-        console.warn(tag + ' /v1/models החזיר HTTP ' + res.statusCode);
+        lastFailReason = '/v1/models החזיר HTTP ' + res.statusCode;
         return null;
       }
       const j = JSON.parse(text);
       const data = Array.isArray(j) ? j : (Array.isArray(j && j.data) ? j.data : null);
-      if (!data) { console.warn(tag + ' /v1/models לא החזיר data'); return null; }
+      if (!data) { lastFailReason = '/v1/models לא החזיר data'; return null; }
       const models = data.map((m) => {
         const raw = typeof m === 'string' ? m : (m && (m.id || m.name));
         if (!raw) return null;
@@ -491,7 +522,7 @@ function createProvider({ id, label, baseUrl, apiKey, prefix, timeoutMs, envHint
           efforts: [],
         };
       }).filter(Boolean);
-      if (!models.length) return null;
+      if (!models.length) { lastFailReason = '/v1/models לא החזיר אף מודל שמיש'; return null; }
       // הספק מחזיר את המודלים בסדר משלו, ובו מודלים מאותה קבוצה מפוזרים.
       // מיון יציב לפי סדר ההופעה הראשון של כל קבוצה שומר על סדר הספק בתוך
       // הקבוצה, ובכל זאת מגיש את הרשימה כשהקבוצות שלמות.
@@ -500,9 +531,10 @@ function createProvider({ id, label, baseUrl, apiKey, prefix, timeoutMs, envHint
       models.sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
       modelIds = new Set(models.map((m) => m.id));
       lastModels = models;
+      lastFailReason = null;
       return models;
     } catch (e) {
-      console.warn(tag + ' /v1/models נכשל:', errText(e));
+      lastFailReason = '/v1/models נכשל: ' + errText(e);
       return null;
     }
   }
@@ -518,28 +550,37 @@ function createProvider({ id, label, baseUrl, apiKey, prefix, timeoutMs, envHint
    * ברקע עם השהיה גדלה, עד 30 שנ׳. ברגע שהוא זמין המודלים נכנסים לתפריט מעצמם,
    * בלי להפעיל מחדש. אחרי הצלחה עוברים לרענון איטי, שגם קולט מודלים שנטענו
    * בצד הספק אחרי שהשרת כבר רץ.
+   *
+   * ההשהיה בין בדיקות נקבעת ב-nextProbeDelay — שם גם ההסבר למה יש שתי תקרות.
+   * ביומן נרשמים מעברי מצב בלבד: הכישלון הראשון, ההכרזה על היעדרות, וההתאוששות.
+   * ניסיון שנכשל שוב מאותה סיבה אינו חדשות, ואין לו מה לעשות ביומן.
    */
   function startModelWatcher(onChange) {
-    const RETRY_MIN = 2000, RETRY_MAX = 30000, STEADY = 300000;
-    let delay = RETRY_MIN;
+    let delay = PROBE.RETRY_MIN;
     let timer = null;
     let stopped = false;
     let announced = false;
+    let fails = 0;
 
     const tick = async () => {
       if (stopped) return;
       const models = await fetchModels();
       if (models) {
+        if (fails >= PROBE.ABSENT_AFTER) console.log(`  \x1b[90m${label}: חזר\x1b[0m`);
+        fails = 0;
         if (!announced) {
           console.log(`  \x1b[90m${label}: ${models.length} מודלים זמינים\x1b[0m`);
           announced = true;
         }
-        delay = STEADY;
+        delay = PROBE.STEADY;
         try { onChange(models); } catch { /* המאזין לא אמור להפיל את המעקב */ }
       } else {
-        // ריווח גדל: ספק שלא רץ בכלל לא ייצור רעש בלוג כל שתי שניות.
-        if (announced) { announced = false; }
-        delay = Math.min(delay * 2, RETRY_MAX);
+        fails += 1;
+        announced = false;
+        const why = lastFailReason || 'לא זמין';
+        if (fails === 1) console.warn(tag + ' ' + why);
+        else if (fails === PROBE.ABSENT_AFTER) console.warn(tag + ' ' + why + ' — נעדר, ממשיכים לבדוק בריווח של עד רבע שעה');
+        delay = nextProbeDelay(delay, fails);
       }
       timer = setTimeout(tick, delay);
       timer.unref?.();
@@ -706,5 +747,5 @@ module.exports = {
   createProvider,
   loadProviders,
   // מיוצא לבדיקות ידניות של התרגום בלי להרים תהליך CLI
-  _internal: { translateRequest, translateResponse, createStreamTranslator, parseSse },
+  _internal: { translateRequest, translateResponse, createStreamTranslator, parseSse, PROBE, nextProbeDelay },
 };

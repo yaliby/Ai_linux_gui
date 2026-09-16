@@ -944,8 +944,14 @@ const LOG_ROTATE_BYTES = 4 * 1024 * 1024;
 let logBytes = 0;
 try { logBytes = fs.statSync(LOG_FILE).size; } catch {}
 
-function logLine(text) {
-  const line = text.replace(/\n+$/, '') + '\n';
+// שעון מקומי ולא UTC: היומן נקרא מול השעון שבפינת המסך ומול הרגע שבו ראית את התקלה
+const logStamp = () => {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+};
+const HHMMSS = /^\d{2}:\d{2}:\d{2}\.\d{3}$/;
+
+function logWrite(line) {
   try {
     // סיבוב לפני הכתיבה ולא אחריה, כדי שהמידה תיבדק מול הקובץ שאליו כותבים
     if (logBytes > LOG_ROTATE_BYTES) { fs.renameSync(LOG_FILE, LOG_FILE + '.1'); logBytes = 0; }
@@ -954,12 +960,44 @@ function logLine(text) {
   } catch {}   // יומן שנכשל לעולם לא יפיל את השרת
 }
 
-// שעון מקומי ולא UTC: היומן נקרא מול השעון שבפינת המסך ומול הרגע שבו ראית את התקלה
-const logStamp = () => {
-  const d = new Date();
-  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
-};
-const HHMMSS = /^\d{2}:\d{2}:\d{2}\.\d{3}$/;
+/* ---------- קיפול שורות חוזרות ----------
+   תקלה שחוזרת בלולאה כותבת את עצמה ליומן בלי סוף. ספק מקומי שכתובתו כבר לא
+   קיימת ברשת, למשל, נכשל כל 30 שנ׳ — 2,880 שורות זהות ביום. היומן מסתובב
+   ב-4MB, ולכן התקלה החוזרת לא רק מרעישה: היא *מוחקת* את מה שהיומן נועד לשמר.
+   במדידה על יומן אמיתי כאן 60% מהשורות היו שורה אחת כזו.
+
+   לכן שורה שזהה לקודמת נספרת ולא נכתבת, ובנוסח syslog: כשמגיעה שורה אחרת
+   נכתב לפניה סיכום של מה שנבלע. ההשוואה מתעלמת מחותמת הזמן — היא מה שמבדיל
+   בין שתי הופעות של אותו אירוע בדיוק.
+
+   הקיפול לא שותק לנצח: תקלה שחוזרת שעה שלמה בלי ששום דבר אחר נכתב ביניים
+   הייתה נעלמת מהיומן לגמרי, ולכן כל LOG_REPEAT_MS יוצא סיכום ביניים. כך
+   "עדיין קורה" נשאר גלוי, בלי לשלם עליו שורה לכל ניסיון. */
+const LOG_REPEAT_MS = 5 * 60 * 1000;
+const LOG_STAMP_PREFIX = /^\d{2}:\d{2}:\d{2}\.\d{3} /;
+let repeatBody = null, repeatCount = 0, repeatSince = 0;
+
+function logFlushRepeats() {
+  if (!repeatCount) return;
+  const n = repeatCount, mins = Math.round((Date.now() - repeatSince) / 60000);
+  repeatCount = 0;
+  repeatSince = Date.now();
+  logWrite(logStamp() + ` ↑ חזר עוד ${n} פעמים${mins ? ` במשך ${mins} דק׳` : ''}\n`);
+}
+
+function logLine(text) {
+  const line = text.replace(/\n+$/, '') + '\n';
+  const body = line.replace(LOG_STAMP_PREFIX, '');
+  if (body === repeatBody) {
+    repeatCount += 1;
+    if (Date.now() - repeatSince >= LOG_REPEAT_MS) logFlushRepeats();
+    return;
+  }
+  logFlushRepeats();           // הסיכום מופיע לפני השורה ששברה את הרצף
+  repeatBody = body;
+  repeatSince = Date.now();
+  logWrite(line);
+}
 const logFmt = (v) => {
   if (v instanceof Error) return v.stack || v.message;
   if (typeof v === 'string') return v;
@@ -1003,6 +1041,10 @@ app.post('/api/client-log', express.json({ limit: '256kb' }), (req, res) => {
 
 /* קריאת היומן מהמכשיר שבו התקלה קרתה, בלי SSH ובלי כבל. */
 app.get('/api/logs', (req, res) => {
+  // ריצת חזרות פתוחה נסגרת לפני הקריאה. בלי זה מי שמסתכל ביומן *בזמן* שהתקלה
+  // חוזרת היה רואה אותה פעם אחת בלי שום רמז לכך שהיא קורית עכשיו שוב ושוב —
+  // כלומר בדיוק המצב שבשבילו פותחים את המסך הזה.
+  logFlushRepeats();
   const n = Math.min(Math.max(parseInt(req.query.n, 10) || 300, 1), 5000);
   const grep = String(req.query.grep || '');
   let text = '';
