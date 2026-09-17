@@ -442,3 +442,6 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F147 Ctrl+F / Shift+F ignore drawer mode → FIXED (Round 27)
 [CONFUSION] closeDrawer before find; open side for convSearch · Source: Worker Round 27
+
+### F148 wideToggle aria-label stale after applyWide → FIXED (Round 28)
+[ACCESSIBILITY] sync title/aria-label/aria-pressed · Source: residual dig

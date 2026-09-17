@@ -6963,12 +6963,28 @@ $('openRc').onclick = () => { closeDrawer(); openRc(); };
 // ---------- מצב רחב: הגדלת שטח העבודה ----------
 // ההגדרות נטענות מהשרת אחרי עליית הדף, לכן ההחלה עצמה קורית מתוך init().
 function applyWide() {
-  document.querySelector('.app').classList.toggle('wide', !!store.settings.wide);
+  const on = !!store.settings.wide;
+  document.querySelector('.app').classList.toggle('wide', on);
+  const btn = $('wideToggle');
+  if (btn) {
+    const label = on ? 'צמצם את שטח העבודה' : 'הרחב את שטח העבודה';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
 }
 (function wireWide() {
   const app = document.querySelector('.app');
   const btn = $('wideToggle');
-  if (btn) btn.onclick = () => { const on = app.classList.toggle('wide'); store.settings.wide = on; btn.title = on ? 'צמצם את שטח העבודה' : 'הרחב את שטח העבודה'; save(); };
+  if (btn) btn.onclick = () => {
+    const on = app.classList.toggle('wide');
+    store.settings.wide = on;
+    const label = on ? 'צמצם את שטח העבודה' : 'הרחב את שטח העבודה';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    save();
+  };
 })();
 
 // ---------- לוח פקודות (Ctrl/Cmd+K) — ניווט ופעולות מהירות ----------
