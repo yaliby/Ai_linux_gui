@@ -5,6 +5,8 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
+    "test": "node test/run-all.mjs",
+    "icons": "node tools/build-icons.mjs",
     "omni:up": "docker compose up -d --wait",
     "omni:down": "docker compose down",
     "omni:restart": "docker compose restart omniroute",

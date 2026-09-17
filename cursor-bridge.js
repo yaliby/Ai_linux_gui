@@ -332,8 +332,15 @@ const planName = (p) => (p ? (CURSOR_PLANS[String(p).toLowerCase()] || p) : null
 function cycleReset(startOfMonth) {
   const t = new Date(startOfMonth);
   if (isNaN(t)) return null;
+  // ‎setMonth‎ לבדו גולש: 31 בינואר ועוד חודש הוא "31 בפברואר", כלומר 3 במרץ —
+  // וזה מה שהיה מוצג כתאריך האיפוס. לכן קודם מתייצבים על ה-1, מזיזים חודש,
+  // ורק אז מחזירים את היום עצמו כשהוא חסום לאורך החודש שהגענו אליו.
+  const day = t.getDate();
   const next = new Date(t);
+  next.setDate(1);
   next.setMonth(next.getMonth() + 1);
+  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(day, lastDay));
   return next.toISOString();
 }
 const pctOf = (n) => (typeof n === 'number' && isFinite(n) ? Math.max(0, Math.min(100, n)) : null);
@@ -981,11 +988,14 @@ class Translator {
       session_id: this.c.sessionId || undefined,
       duration_ms: e.duration_ms || 0,
       num_turns: 1,
+      // ‎cursor-agent‎ מדווח ב-camelCase. שמות ה-snake_case מתקבלים גם הם, כי
+      // השדה הזה מזין את חשבון הטוקנים בשורת המצב — וגרסה שתשנה את השמות
+      // הייתה מציגה אפס במקום לשגות בקול.
       usage: {
-        input_tokens: u.inputTokens || 0,
-        output_tokens: u.outputTokens || 0,
-        cache_read_input_tokens: u.cacheReadTokens || 0,
-        cache_creation_input_tokens: u.cacheWriteTokens || 0,
+        input_tokens: u.inputTokens ?? u.input_tokens ?? 0,
+        output_tokens: u.outputTokens ?? u.output_tokens ?? 0,
+        cache_read_input_tokens: u.cacheReadTokens ?? u.cache_read_input_tokens ?? 0,
+        cache_creation_input_tokens: u.cacheWriteTokens ?? u.cache_creation_input_tokens ?? 0,
       },
     });
   }
