@@ -347,8 +347,8 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 ### F115 fileFetch race overwrites newer query → FIXED (Round 17)
 [FRICTION] ac.token.q === q guard · Source: Worker A Round 16b
 
-### F116 Shortcuts modal Tab escapes → OPEN
-[ACCESSIBILITY] no focus trap · Source: Worker A Round 16b
+### F116 Shortcuts modal Tab escapes → FIXED (Round 18)
+[ACCESSIBILITY] onModalKeydown Tab trap · Source: Worker A Round 16b
 
 ### F117 Enter ignores pending tool permissions → FIXED (Round 17)
 [FRICTION] pendingPerms.size gate · Source: Worker B Round 16
@@ -358,3 +358,21 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F119 Active anon × leaveAnon keepActive leaves null → FIXED (Round 17)
 [RECOVERY] restore sibling after leaveAnon · Source: Worker B Round 16
+
+### F120 Send button bypasses pending-ask gate → FIXED (Round 18)
+[FRICTION] sendMessage early return · Source: Worker Round 18
+
+### F121 Reconnect leaves stale ask cards → FIXED (Round 18)
+[RECOVERY] closePermission for ids absent from sync · Source: Worker Round 18
+
+### F122 Limit-bar countdown stale → FIXED (Round 18)
+[FEEDBACK] 1s ticker + seconds under 1min · Source: Worker Round 18
+
+### F123 Ctrl+F opens find under palette → FIXED (Round 18)
+[CONFUSION] closePalette before openFind · Source: Worker Round 18
+
+### F124 Share non-image silent drop → FIXED (Round 18)
+[FEEDBACK] toast images-only · Source: Worker Round 18
+
+### F125 Escape closes wrong visual layer → FIXED (Round 18)
+[CONFUSION] z-order Escape stack · Source: Worker Round 18 Escape

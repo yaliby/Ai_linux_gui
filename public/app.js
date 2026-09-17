@@ -1519,6 +1519,14 @@ async function onSync(m) {
   // כרטיסים שנפתחו בזמן שלא היינו מחוברים — כדי שאפשר יהיה לענות עליהם מכאן
   for (const p of (m.perms || [])) if (!pendingPerms.has(p.id)) showPermission(p.id, p.req);
   for (const d of (m.dialogs || [])) if (!pendingPerms.has(d.id)) showDialog(d.id, d.req);
+  // כרטיס שנענה במכשיר אחר בזמן ניתוק — הסנכרון לא מביא אותו שוב, ולכן סוגרים
+  // מקומית כל id שאינו ברשימת השרת (אחרת askBar נשאר אחרי שהתור כבר המשיך).
+  {
+    const live = new Set([...(m.perms || []).map((p) => p.id), ...(m.dialogs || []).map((d) => d.id)]);
+    for (const id of [...pendingPerms.keys()]) {
+      if (!live.has(id)) closePermission(id, 'ended');
+    }
+  }
   // התור וההמתנה למכסה שייכים לשיחה ולא למכשיר — נטענים מהשרת בכל התחברות
   onQueueUpdate(m.queue || []);
   setLimitState(m.limit || null);
@@ -2410,6 +2418,15 @@ async function sendMessage(text) {
   text = (text != null ? text : $('input').value).trim();
   const atts = pendingAtts.slice();
   if (!text && !atts.length) { toast('כתוב הודעה או צרף תמונה'); return; }
+  // כרטיס שאלה/אישור פתוח — גם לחיצה על שלח (לא רק Enter) לא אמורה לשרשר במקום לענות
+  if (pendingPerms && pendingPerms.size > 0) {
+    const asks = pendingAskCount();
+    toast(asks
+      ? 'יש שאלה שממתינה לתשובה — ענה בכרטיס או לחץ על הפס למעלה'
+      : 'יש בקשת אישור שממתינה — אשר או דחה בכרטיס או בפס למעלה');
+    jumpToPendingAsk();
+    return;
+  }
   // פקודת-לקוח שנכתבה ביד (בלי תפריט ההשלמה) נתפסת גם כאן, אחרת היא הייתה
   // נשלחת למודל כטקסט
   const cc = !atts.length && text.match(/^(\/[\w-]+)(?:\s+([\s\S]*))?$/);
@@ -3293,6 +3310,7 @@ let limitTicker = null;
 
 function fmtCountdown(ms) {
   if (ms <= 0) return 'עוד רגע';
+  if (ms < 60000) return `בעוד ${Math.max(1, Math.ceil(ms / 1000))} שנ׳`;
   const total = Math.ceil(ms / 60000);
   const h = Math.floor(total / 60), m = total % 60;
   if (h >= 1) return `בעוד ${h} שע׳${m ? ` ו־${m} דק׳` : ''}`;
@@ -3316,8 +3334,9 @@ function setLimitState(limit) {
   limitState = limit || null;
   renderLimitBar();
   syncSendAffordance();
-  if (limitState && !limitTicker) limitTicker = setInterval(renderLimitBar, 30000);
-  if (!limitState && limitTicker) { clearInterval(limitTicker); limitTicker = null; }
+  if (limitTicker) { clearInterval(limitTicker); limitTicker = null; }
+  // רזולוציית שניות כשנותרה דקה; אחרת עדיין 1 שנ׳ — זול, והפס לא נראה תקוע
+  if (limitState) limitTicker = setInterval(renderLimitBar, 1000);
   // מתריעים רק על עצירה *טרייה*. אותו מצב מגיע שוב בכל sync — רענון דף או
   // פתיחת הטלפון לא אמורים לצלצל על משהו שקרה לפני שעתיים.
   const fresh = limitState && !had && Date.now() - (limitState.at || 0) < 2 * 60 * 1000;
@@ -4379,16 +4398,22 @@ function renderMsgAtts(atts) {
 function readAsDataURL(file) {
   return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
 }
-async function addAttachment(file, forceTemp) {
-  if (!file || !(file.type || '').startsWith('image/')) return;
+async function addAttachment(file, forceTemp, quiet) {
+  if (!file || !(file.type || '').startsWith('image/')) {
+    if (!quiet && file && (file.type || file.name)) {
+      toast('ניתן לצרף תמונות בלבד — קבצים אחרים לא נתמכים', true);
+    }
+    return false;
+  }
   if (file.size > MAX_IMAGE_BYTES) {
     toast('התמונה גדולה מדי (מקסימום 30MB)', true);
-    return;
+    return false;
   }
   const url = URL.createObjectURL(file);
   const att = { name: file.name || 'הדבקה.png', url, kind: 'temp', path: '', status: 'up', data: '', media: file.type || 'image/png', file, forceTemp: !!forceTemp };
   pendingAtts.push(att); renderAttStrip();
   att.ready = uploadAttachment(att);
+  return true;
 }
 /** העלאה / קריאת base64 לצירוף קיים — משמש גם לניסיון חוזר אחרי כשל. */
 async function uploadAttachment(att) {
@@ -5264,10 +5289,16 @@ async function takeSharedInput() {
       input.value = input.value ? input.value.replace(/\s*$/, '') + '\n' + text : text;
       autoGrow(); stashDraft();
     }
-    for (const f of files) await addAttachment(f, true);
+    let attached = 0, skipped = 0;
+    for (const f of files) {
+      if (await addAttachment(f, true, true)) attached++;
+      else skipped++;
+    }
     $('input').focus();
-    dlog('share.in', { chars: text.length, files: files.length });
-    if (files.length) toast(files.length === 1 ? 'תמונה צורפה מהשיתוף' : files.length + ' תמונות צורפו מהשיתוף');
+    dlog('share.in', { chars: text.length, files: files.length, attached, skipped });
+    if (attached) toast(attached === 1 ? 'תמונה צורפה מהשיתוף' : attached + ' תמונות צורפו מהשיתוף');
+    else if (skipped) toast('ניתן לצרף תמונות בלבד — הקובץ ששותף לא נתמך', true);
+    else if (!text) toast('השיתוף לא כלל תמונה או טקסט שניתן לצרף', true);
   } catch (e) {
     dlog('share.fail', { err: String((e && e.message) || e) });
     toast('קליטת השיתוף נכשלה', true);
@@ -5967,27 +5998,46 @@ $('input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === 'Tab') {
       e.preventDefault(); e.stopImmediatePropagation();
       if (ac.empty || ac.error) closeAc();
-    } else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeAc(); }
+    } else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation(); closeAc(); }
     return;
   }
   if (e.key === 'ArrowDown') { e.preventDefault(); e.stopImmediatePropagation(); ac.sel = (ac.sel + 1) % Math.min(ac.items.length, 40); renderAc(); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); const n = Math.min(ac.items.length, 40); ac.sel = (ac.sel - 1 + n) % n; renderAc(); }
   else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopImmediatePropagation(); acceptAc(); }
-  else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeAc(); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation(); closeAc(); }
 }, true);
 $('input').addEventListener('blur', () => setTimeout(closeAc, 120));
 
 // ---------- מודאל כללי ----------
 let modalReturnFocus = null;
+function modalFocusables() {
+  const root = $('modal');
+  if (!root || root.classList.contains('hidden')) return [];
+  return [...root.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => !el.disabled && el.offsetParent !== null);
+}
+function onModalKeydown(e) {
+  if ($('modal').classList.contains('hidden')) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeModal(); return; }
+  if (e.key !== 'Tab') return;
+  const list = modalFocusables();
+  if (!list.length) { e.preventDefault(); return; }
+  const first = list[0], last = list[list.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  else if (!list.includes(document.activeElement)) { e.preventDefault(); first.focus(); }
+}
 function openModal(title, node) {
   modalReturnFocus = document.activeElement;
   $('modalTitle').textContent = title;
   const b = $('modalBody'); b.innerHTML = ''; b.appendChild(node);
   $('modal').classList.remove('hidden');
+  document.addEventListener('keydown', onModalKeydown, true);
   const close = $('modalClose');
   if (close) try { close.focus(); } catch {}
 }
 function closeModal() {
+  document.removeEventListener('keydown', onModalKeydown, true);
   $('modal').classList.add('hidden');
   const back = modalReturnFocus;
   modalReturnFocus = null;
@@ -7366,7 +7416,10 @@ document.addEventListener('keydown', (e) => {
   if (mod && (e.key === 'f' || e.key === 'F')) {
     e.preventDefault();
     if (e.shiftKey) { document.querySelector('.app').classList.remove('side-collapsed'); $('convSearch').focus(); $('convSearch').select(); }
-    else openFind();
+    else {
+      if (!$('palette').classList.contains('hidden')) closePalette();
+      openFind();
+    }
     return;
   }
   if (mod && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); $('newChat').click(); return; }
@@ -7374,14 +7427,14 @@ document.addEventListener('keydown', (e) => {
   if (mod && e.shiftKey && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); dictToggle(); return; }
   if (e.key === '?' && !typing && !mod) { e.preventDefault(); openShortcuts(); return; }
   if (e.key === 'Escape' && dictOn) { e.preventDefault(); dictStop(); return; }
-  if (e.key === 'Escape' && !$('findBar').classList.contains('hidden')) { closeFind(); return; }
-  // לוח "עוד" בטלפון נפתח בלי פוקוס בשדה — Escape על הקלט לא קיים שם.
+  // סדר לפי שכבה ויזואלית (גבוה → נמוך)
   if (e.key === 'Escape' && !$('palette').classList.contains('hidden')) { e.preventDefault(); closePalette(); return; }
-  if (e.key === 'Escape' && !$('settings').classList.contains('hidden')) { e.preventDefault(); closeSettings(); return; }
+  if (e.key === 'Escape' && !$('modelPicker').classList.contains('hidden')) { e.preventDefault(); closeModelPicker(); return; }
   if (e.key === 'Escape' && !$('usageModal').classList.contains('hidden')) { e.preventDefault(); setUsageModalOpen(false); return; }
   if (e.key === 'Escape' && !$('modal').classList.contains('hidden')) { e.preventDefault(); closeModal(); return; }
-  if (e.key === 'Escape' && !$('modelPicker').classList.contains('hidden')) { e.preventDefault(); closeModelPicker(); return; }
   if (e.key === 'Escape' && !$('dropzone').classList.contains('hidden')) { e.preventDefault(); hideDropzone(); return; }
+  if (e.key === 'Escape' && !$('findBar').classList.contains('hidden')) { closeFind(); return; }
+  if (e.key === 'Escape' && !$('settings').classList.contains('hidden')) { e.preventDefault(); closeSettings(); return; }
   if (e.key === 'Escape' && document.querySelector('.app')?.classList.contains('side-open')) {
     e.preventDefault(); closeDrawer(); return;
   }
