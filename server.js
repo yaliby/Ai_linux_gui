@@ -3803,6 +3803,23 @@ setInterval(() => {
 loadResumeState();
 setTimeout(() => { limitTick().catch(() => {}); }, 4000).unref?.();
 
+/* הפורט תפוס כמעט תמיד מסיבה אחת: האפליקציה כבר רצה. בלי הטיפול הזה
+   ההודעה על כך הייתה ‎uncaughtException‎ עם עקבות מחסנית של ‎node:net‎ —
+   כלומר מי שהריץ פעמיים במקום לפתוח לשונית מקבל דיווח על תקלה במקום על
+   מה שבאמת קרה. יציאה 1 בשקט, עם משפט שאומר מה לעשות. */
+function onListenError(e) {
+  if (!e || e.code !== 'EADDRINUSE') throw e;
+  console.error(`\n  \x1b[1mפורט ${PORT} כבר תפוס\x1b[0m`);
+  console.error(`  \x1b[90mכנראה ש-Sol כבר רץ — נסה לפתוח https://localhost:${PORT}`);
+  console.error(`  אחרת: PORT=4174 node server.js, או בדוק מי מחזיק בפורט עם  ss -tlnp | grep :${PORT}\x1b[0m\n`);
+  process.exit(1);
+}
+server.on('error', onListenError);
+// ‎ws‎ משכפל את שגיאת ה-listen גם אל ה-‎WebSocketServer‎ שעוטף את השרת. בלי
+// מאזין *שם* היא נשארת ‎'error'‎ ללא טיפול, וזו לבדה מפילה את התהליך — גם
+// כשהמאזין שלמעלה כבר טיפל בה.
+wss.on('error', onListenError);
+
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`\n  \x1b[1mSol · ממשק RTL ל-Claude Code\x1b[0m`);
   const proto = server instanceof https.Server ? 'https' : 'http';
