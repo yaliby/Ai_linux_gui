@@ -541,6 +541,13 @@ let godTurn = [];
 
 function renderWorking() {
   const t = $('workingText'); if (!t) return;
+  // הרשאה/שאלה ממתינה גוברת על «חושב…» — אחרת פריים סטרימינג דורס את
+  // permWaiting() והמשתמש רואה סתירה מול פס askBar.
+  if (pendingPerms.size) {
+    t.classList.remove('retrying');
+    permWaiting();
+    return;
+  }
   const parts = [];
   const out = turnTok.out + turnTok.curOut;
   if (out) parts.push(`פלט ${fmtTok(out)} טוקנים`);
@@ -2515,7 +2522,11 @@ function persist() { save(); }
 
 function renderConversation() {
   stickRo.disconnect();
-  findState = { q: '', marks: [], idx: -1 };   // ה-DOM נבנה מחדש — הסימונים כבר לא תקפים
+  // הסימונים ב-DOM נמחקים עם innerHTML — שומרים את השאילתה מהשדה כדי לשחזר
+  // אחרי הרינדור אם פס החיפוש עדיין פתוח (אחרת נשאר טקסט ישן עם ספירה ריקה).
+  const findQ = (!$('findBar').classList.contains('hidden') && $('findInput'))
+    ? $('findInput').value.trim() : '';
+  findState = { q: '', marks: [], idx: -1 };
   updateFindCount();
   const keepLive = !!(busy && live && streamOwnerId);
   if (keepLive) detachLiveDom();
@@ -2530,7 +2541,11 @@ function renderConversation() {
   // מה שנשלח שם נשלח בכפתורים של הריצה ולא כהודעה חופשית.
   log.classList.toggle('duet', isDuet(conv));
   document.body.classList.toggle('duet-mode', isDuet(conv));
-  if (isDuet(conv)) { renderDuet(conv, log); updateStatusbar(); return; }
+  if (isDuet(conv)) {
+    renderDuet(conv, log); updateStatusbar();
+    if (findQ.length >= 2) runFind(findQ);
+    return;
+  }
   if (conv && !conv.loaded) {
     // גוף השיחה עדיין נקרא מהדיסק — שלד קצר במקום קפיצה לברכת הפתיחה
     const sk = el('div', 'conv-loading');
@@ -2572,7 +2587,9 @@ function renderConversation() {
   }
   hideWelcome();
   if (keepLive && activeId === streamOwnerId && live) rebindLiveDom();
-  updateStatusbar(); requestAnimationFrame(() => autoScroll(true));
+  updateStatusbar();
+  if (findQ.length >= 2) runFind(findQ);
+  requestAnimationFrame(() => autoScroll(true));
 }
 
 // ---------- סרגל שיחות: חיפוש · קיבוץ לפי זמן · חותמת זמן · שינוי-שם ----------
@@ -7000,7 +7017,8 @@ document.addEventListener('keydown', (e) => {
     document.documentElement.style.setProperty('--app-top', top + 'px');
     // ה-layout viewport עצמו נגלל כשהמקלדת נפתחת, והממשק "בורח" כלפי מעלה
     if (window.scrollY > 0) window.scrollTo(0, 0);
-    if (stick) autoScroll(true);
+    // בלי force: מי שגלל למעלה לקרוא באמצע סטרימינג לא ייזרק לתחתית כשהמקלדת נפתחת
+    if (stick) autoScroll();
     if (h > resting) resting = h;
     // פתיחת המקלדת וסגירתה משנות את הפריסה של שורת הכתיבה: החריץ שבו הטקסט
     // צריך להיכנס, הריפוד, והתקרה לגובה התיבה. בלי חישוב מחדש כאן, המצב

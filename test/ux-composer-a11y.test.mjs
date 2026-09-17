@@ -183,4 +183,41 @@ t.section('ask/limit go — מגע 44');
   t.ok('.ab-go/.lb-go ≥ 44px', /\.ab-go,\s*\.lb-go\s*\{\s*min-height:\s*44px/.test(chunk));
 }
 
+t.section('חיפוש — שימור אחרי render');
+{
+  const snip = slice('function renderConversation()', 'function convBucket(');
+  t.ok('שומרים findQ לפני איפוס', /findQ/.test(snip) && /runFind\(findQ\)/.test(snip));
+}
+
+t.section('working מול הרשאה');
+{
+  const snip = slice('function renderWorking()', 'function markDirty(');
+  t.ok('renderWorking מכבד pendingPerms', /pendingPerms/.test(snip) && /permWaiting/.test(snip));
+}
+
+t.section('תור — aria-live');
+{
+  t.ok('queueStrip עם aria-live', /id="queueStrip"[^>]*aria-live=/.test(html));
+}
+
+t.section('מקלדת לא כופה stick');
+{
+  const snip = slice('(function trackVisualViewport()', '})();');
+  t.ok('autoScroll בלי force במקלדת', /if\s*\(\s*stick\s*\)\s*autoScroll\s*\(\s*\)/.test(snip));
+  t.ok('אין autoScroll(true) ב-viewport', !/autoScroll\s*\(\s*true\s*\)/.test(snip));
+}
+
+t.section('ניגודיות text-faint על panel-2 (בהיר)');
+{
+  const root = css.match(/:root\s*\{([\s\S]*?)\n\}/);
+  const block = root ? root[1] : '';
+  const faint = (block.match(/--text-faint:\s*(#[0-9a-fA-F]+)/) || [])[1];
+  const panel2 = (block.match(/--panel-2:\s*(#[0-9a-fA-F]+)/) || [])[1];
+  t.ok('tokens קיימים', !!(faint && panel2));
+  if (faint && panel2) {
+    const ratio = contrast(faint, panel2);
+    t.ok(`text-faint על panel-2 ≥ 4.5 (נמדד ${ratio.toFixed(2)}:1)`, ratio >= 4.5, { faint, panel2, ratio });
+  }
+}
+
 t.done();
