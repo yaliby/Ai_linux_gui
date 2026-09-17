@@ -1746,6 +1746,7 @@ body.awaiting .working { opacity: .55; }
   .find-bar input { min-height: 44px; }
   .usage-close { width: 44px; height: 44px; top: 10px; inset-inline-end: 10px; }
   .stop { min-height: 44px; padding: 10px 16px; }
+  .resync { min-height: 44px; padding: 10px 16px; font-size: 13.5px; }
   .ask-opt { padding-block: 13px; }
   .ac-item { min-height: 46px; }
   .pl-item { min-height: 48px; }

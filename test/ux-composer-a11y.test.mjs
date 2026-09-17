@@ -267,4 +267,17 @@ t.section('AC scrollIntoView');
   t.ok('פריט נבחר נגלל לטווח', /scrollIntoView/.test(snip));
 }
 
+t.section('עצור בלי חיבור');
+{
+  const snip = slice('function interruptTurn()', 'function abandonTurn(');
+  t.ok('interruptTurn מציג toast בלי WS', /toast\(/.test(snip) && /manualCheck/.test(snip));
+}
+
+t.section('resync מגע');
+{
+  const start = css.indexOf('@media (hover: none), (pointer: coarse)');
+  const chunk = css.slice(start, start + 2800);
+  t.ok('.resync ≥ 44px', /\.resync\s*\{\s*min-height:\s*44px/.test(chunk));
+}
+
 t.done();

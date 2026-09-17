@@ -1133,7 +1133,13 @@ function applyAnonMode() {
 }
 
 function interruptTurn() {
-  if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'interrupt' }));
+  if (ws && ws.readyState === ws.OPEN) {
+    ws.send(JSON.stringify({ type: 'interrupt' }));
+    return;
+  }
+  // עצור נראה פעיל גם אחרי ניתוק (busy נשאר) — בלי משוב זה נראה שבור.
+  toast('אין חיבור — מנסה לסנכרן…', true);
+  manualCheck('stop');
 }
 function abandonTurn() {
   dlog('abandon', { activeId, streamOwnerId, busy, blocks: live ? (live.blocks || []).length : 0 });
