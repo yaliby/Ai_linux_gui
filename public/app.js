@@ -1685,11 +1685,13 @@ function onRemoteConvDeleted(id) {
   store.convs = store.convs.filter((c) => c.id !== id);
   dirtyConvs.delete(id);
   if (activeId === id) {
+    stick = true;
     activeId = store.convs[0] ? store.convs[0].id : null;
     if (!activeId) newConv(); else subscribeActive();
     const c = activeConv();
     if (c && !c.loaded) ensureLoaded(c.id).then(() => { if (activeId === c.id) { renderConversation(); restoreDraft(); syncConvCwd(); } });
     renderConversation();
+    if (c && c.loaded && activeId === c.id) { restoreDraft(); syncConvCwd(); renderQueue(); }
     toast('השיחה נמחקה ממכשיר אחר');
   }
   renderConvList();
@@ -2883,9 +2885,14 @@ function deleteConv(id) {
     .catch(() => toast('המחיקה מהשרת נכשלה — השיחה עלולה לחזור אחרי רענון', true));
   if (activeId === id) activeId = store.convs[0] ? store.convs[0].id : null;
   if (!activeId) newConv();
+  else {
+    stick = true;
+    subscribeActive();
+  }
   const c = activeConv();
   if (c && !c.loaded) ensureLoaded(c.id).then(() => { if (activeId === c.id) { renderConversation(); restoreDraft(); syncConvCwd(); } });
   markSettings(); renderConversation(); renderConvList();
+  if (c && c.loaded && activeId === c.id) { restoreDraft(); syncConvCwd(); renderQueue(); }
 }
 
 // ---------- סרגל סטטוס ----------
@@ -6756,9 +6763,9 @@ const paletteActions = () => [
   { ic: '⟳', name: 'בדוק מול השרת וסנכרן את המסך', run: () => manualCheck() },
   { ic: '☰', name: 'יומן ריצה — למה התור נעצר', run: () => openLogs() },
   { ic: '⌂', name: 'תיקיית העבודה של השיחה', run: () => openDirPicker($('cwd').value.trim()) },
-  { ic: '⚙', name: 'הגדרות', run: () => openSettings() },
-  { ic: '⌕', name: 'חיפוש בתוך השיחה', run: () => openFind() },
-  { ic: '✎', name: 'שנה שם לשיחה הפעילה', run: () => renameConvPrompt() },
+  { ic: '⚙', name: 'הגדרות', run: () => { closeDrawer(); openSettings(); } },
+  { ic: '⌕', name: 'חיפוש בתוך השיחה', run: () => { closeDrawer(); openFind(); } },
+  { ic: '✎', name: 'שנה שם לשיחה הפעילה', run: () => { closeDrawer(); renameConvPrompt(); } },
   { ic: '⇩', name: 'ייצוא השיחה ל-Markdown', run: () => exportActiveConv() },
   ...(dictSupported() ? [
     { ic: '🎙', name: dictOn ? 'עצור את ההכתבה הקולית' : 'הכתבה קולית — הכתב את ההודעה', run: () => dictToggle() },
@@ -7248,6 +7255,12 @@ function closeFind() {
   $('findBar').classList.add('hidden');
   clearFindMarks(); findState.q = '';
   $('findInput').value = ''; updateFindCount();
+  // בדואט התיבה מוסתרת — פוקוס אליה הוא מלכודת מקלדת
+  if (document.body.classList.contains('duet-mode')) {
+    const t = $('findBtn') || $('moreBtn');
+    if (t) try { t.focus(); } catch {}
+    return;
+  }
   $('input').focus();
 }
 

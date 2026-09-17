@@ -454,4 +454,15 @@ t.section('סבב 15 — קיצור השקה / לוח / resume');
   t.ok('מחיקה מהשרת מדווחת בכשל', /המחיקה מהשרת נכשלה/.test(app));
 }
 
+t.section('סבב 16 — מחיקה / מגירה / חיפוש בדואט');
+{
+  const del = slice('function deleteConv(', 'function updateStatusbar(');
+  t.ok('מחיקה משחזרת טיוטה בשיחה הבאה', /restoreDraft\(\)/.test(del) && /subscribeActive\(\)/.test(del) && /stick\s*=\s*true/.test(del));
+  const remote = slice('function onRemoteConvDeleted(', 'function handleEvent(');
+  t.ok('מחיקה מרחוק משחזרת טיוטה', /restoreDraft\(\)/.test(remote) && /stick\s*=\s*true/.test(remote));
+  t.ok('לוח פקודות סוגר מגירה לפני הגדרות/חיפוש', /closeDrawer\(\);\s*openSettings\(\)/.test(app) && /closeDrawer\(\);\s*openFind\(\)/.test(app));
+  const cf = slice('function closeFind(', 'const SHORTCUTS');
+  t.ok('סגירת חיפוש בדואט לא ממקדת את תיבת הקלט', /duet-mode[\s\S]{0,120}findBtn/.test(cf));
+}
+
 t.done();

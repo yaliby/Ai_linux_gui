@@ -319,3 +319,42 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F106 Delete DELETE fail silent → FIXED (Round 15)
 [FEEDBACK] toast on failed DELETE · Source: Worker Round 15
+
+### F107 deleteConv skips restoreDraft/subscribeActive → FIXED (Round 16)
+[FRICTION] stick + restoreDraft + syncConvCwd + renderQueue · Source: Worker Round 16
+
+### F108 onRemoteConvDeleted draft gap → FIXED (Round 16)
+[FRICTION] parity with local delete · Source: Worker Round 16
+
+### F109 Palette settings/find under drawer → FIXED (Round 16)
+[CONFUSION] closeDrawer before open · Source: Worker Round 16
+
+### F110 closeFind duet focuses hidden input → FIXED (Round 16)
+[ACCESSIBILITY] focus findBtn/moreBtn · Source: Worker Round 16
+
+### F111 Offline send blocks queue-while-busy → OPEN
+[RECOVERY] sendMessage offline toast before queue_add · Source: Worker A Round 16b
+
+### F112 askBar jump takes first perm not AskUserQuestion → OPEN
+[CONFUSION] jumpToPendingAsk Map order · Source: Worker A Round 16b
+
+### F113 Enter sends while @ autocomplete still loading → OPEN
+[FRICTION] acMenu open, items empty → sendMessage · Source: Worker A Round 16b
+
+### F114 Notification tap no jumpToPendingAsk → OPEN
+[DISCOVERABILITY] notification-click only clears badge · Source: Worker A Round 16b
+
+### F115 fileFetch race overwrites newer query → OPEN
+[FRICTION] no ac.token.q check · Source: Worker A Round 16b
+
+### F116 Shortcuts modal Tab escapes → OPEN
+[ACCESSIBILITY] no focus trap · Source: Worker A Round 16b
+
+### F117 Enter ignores pending tool permissions → OPEN
+[FRICTION] pendingAskCount only AskUserQuestion · Source: Worker B Round 16
+
+### F118 switchConv while busy → abandonTurn on idle sync → OPEN
+[RECOVERY] subscribeActive idle clears local busy · Source: Worker B Round 16
+
+### F119 Active anon × leaveAnon keepActive leaves null → OPEN
+[RECOVERY] no sibling restore vs anonExit · Source: Worker B Round 16
