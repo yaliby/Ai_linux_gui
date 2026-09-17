@@ -508,4 +508,11 @@ t.section('סבב 20 — mermaid / מועדפים / halt');
   t.ok('נסה שוב לוקח הודעת משתמש מהשיחה', /role === 'user'[\s\S]{0,80}last = m\.text/.test(app));
 }
 
+t.section('סבב 21 — שליחה כפולה / working live');
+{
+  t.ok('sendGate מונע שליחה חופפת', /let sendGate = false/.test(app) && /if \(sendGate\) return/.test(app));
+  t.ok('Enter מתעלם מ-repeat', /!e\.repeat/.test(app));
+  t.ok('working עם aria-live', /id="working"[^>]*aria-live="polite"/.test(html));
+}
+
 t.done();

@@ -2456,7 +2456,12 @@ function onHalt(m) {
 
 // ---------- שליחה ----------
 // שיגור מהתור נעשה בשרת, ולכן כאן נשארה רק הדרך האחת: מה שהוקלד בתיבה
+let sendGate = false;
 async function sendMessage(text) {
+  // לחיצה כפולה / Enter חוזר לפני setBusy — בלי שער היו נכנסים שני תורים לאותו טקסט
+  if (sendGate) return;
+  sendGate = true;
+  try {
   // ההודעה יוצאת — אין למי להכתיב. חשוב שזה יקרה *לפני* קריאת התיבה, כדי
   // שתוצאת ביניים שעדיין לא נסגרה תיכנס לטקסט הנשלח ולא תיזרק.
   if (dictOn) dictStop();
@@ -2564,6 +2569,9 @@ async function sendMessage(text) {
   clearPendingAtts();
   ensureNotifyPermission();
   setBusy(true); save(); renderConvList();
+  } finally {
+    sendGate = false;
+  }
 }
 
 /**
@@ -3824,7 +3832,7 @@ $('input').addEventListener('input', () => { histIdx = -1; stashDraftSoon(); });
 $('input').addEventListener('keydown', (e) => {
   // Esc בזמן הכתבה עוצר אותה ולא סוגר חלונית — זה המצב הפעיל ביותר במסך
   if (e.key === 'Escape' && dictOn) { e.preventDefault(); e.stopPropagation(); dictStop(); return; }
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !e.repeat) {
     // כרטיס שאלה/אישור פתוח — Enter בתור לא צריך לשרשר פרומפט במקום לענות
     if (typeof pendingPerms !== 'undefined' && pendingPerms && pendingPerms.size > 0) {
       e.preventDefault();

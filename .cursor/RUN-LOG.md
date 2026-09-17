@@ -45,7 +45,9 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 12:03 | COMMIT | Round 17 F111–F115,F117–F119 | perms/ac/anon/busy · CACHE v40 · F116 OPEN |
 | 12:09 | COMMIT | Round 18 F116,F120–F125 | modal trap, Escape, share, limit · CACHE v41 |
 | 12:13 | COMMIT | Round 19 F126–F129 | usage trap, rewind, cwd, pair · CACHE v42 |
-| 12:13 | HEARTBEAT | Round 20 hunt | F01–F129 · 16/16 · →16:08 |
+| 12:17 | COMMIT | Round 20 F130–F133 | mermaid/fav/halt · CACHE v43 |
+| 12:21 | COMMIT | Round 21 F134–F135 | sendGate, working live · CACHE v44 |
+| 12:21 | HEARTBEAT | continue discovery | F01–F135 · diminishing · →16:08 |
 ## Decisions
 
 - Parallel workers; serialize writers on same files.
@@ -56,7 +58,7 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 
 ## Commits (local only)
 
-Rounds 1–19 on `ux-optimization-run` through `4619d12`
+Rounds 1–21 on `ux-optimization-run` through Round 21
 
 ## Existing dirty (owner — do not commit)
 

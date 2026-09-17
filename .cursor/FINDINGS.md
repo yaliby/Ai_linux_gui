@@ -400,3 +400,9 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F133 Halt retry wrong in anon → FIXED (Round 20)
 [RECOVERY] last user msg from conv · Source: Worker Round 20
+
+### F134 Double send queues duplicate → FIXED (Round 21)
+[RACE] sendGate + Enter !repeat · Source: Worker Round 21
+
+### F135 workingText no aria-live → FIXED (Round 21)
+[ACCESSIBILITY] #working role=status aria-live · Source: Worker Round 21
