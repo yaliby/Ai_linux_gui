@@ -49,7 +49,8 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 12:21 | COMMIT | Round 21 F134–F135 | sendGate, working live · CACHE v44 |
 | 12:27 | COMMIT | Round 22 F136–F138 | touch regressions, find focus · CACHE v45 |
 | 12:31 | COMMIT | Round 23 F139–F141 | presence/SW/dict · CACHE v46 |
-| 12:31 | HEARTBEAT | Round 24 hunt | F01–F141 · USER-FLOWS updated · →16:08 |
+| 12:36 | COMMIT | Round 24 F142–F143 | OS mermaid + sync toast · CACHE v47 |
+| 12:37 | HEARTBEAT | residual hunt | F01–F143 · diminishing · →16:08 |
 ## Decisions
 
 - Parallel workers; serialize writers on same files.
@@ -60,7 +61,7 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 
 ## Commits (local only)
 
-Rounds 1–23 on `ux-optimization-run` through `3c8fcf8`
+Rounds 1–24 on `ux-optimization-run` through `76d65f1`
 
 ## Existing dirty (owner — do not commit)
 
