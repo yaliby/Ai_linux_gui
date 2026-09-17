@@ -486,7 +486,10 @@ t.section('סבב 18 — מודאל / שליחה / Escape / שיתוף');
   t.ok('ספירת מכסה מתעדכנת כל שנייה', /setInterval\(renderLimitBar,\s*1000\)/.test(app));
   t.ok('Ctrl+F סוגר לוח לפני חיפוש', /closePalette\(\)[\s\S]{0,40}openFind\(\)/.test(app));
   t.ok('שיתוף לא-תמונה מדווח', /ניתן לצרף תמונות בלבד/.test(app));
-  t.ok('Escape סוגר palette לפני settings', /Escape[\s\S]*?closePalette\(\)[\s\S]*?closeSettings\(\)/.test(app));
+  const escBlock = slice("document.addEventListener('keydown'", 'trackComposerHeight');
+  const iPal = escBlock.indexOf('closePalette');
+  const iSet = escBlock.indexOf('closeSettings');
+  t.ok('Escape סוגר palette לפני settings', iPal >= 0 && iSet > iPal);
 }
 
 t.done();
