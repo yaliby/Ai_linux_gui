@@ -52,6 +52,9 @@
      Claude, כדי שרגע של אזהרה לא ידרוש הבחנה בין שני גוונים שכנים. */
   --warn: #9a611a; --warn-soft: #fbf0dc; --danger: #bd3b2b; --danger-soft: #f9e5e1;
   --add-bg: #e6f2e9; --add-fg: #1f6e3a; --del-bg: #fae7e3; --del-fg: #a8402c;
+  /* הדגשת הקוד — ראו «הצבעים שהודלפו מהתמה» לקראת סוף הקובץ. */
+  --hl-keyword: #c11626; --hl-builtin: #8f4400; --hl-comment: #57606a;
+  --hl-name: #116329; --hl-section: #005cc5;
   /* GOD — סגול, הצד הנגדי של הגלגל מול הפטרול. כשמצב ההרשאות מאשר הכול,
      אסור שהוא ייראה כמו עוד בחירה ברשימה. */
   --god: #5b34d6; --god-soft: #ebe6fd;
@@ -77,6 +80,9 @@
   --accent: #6fb6ae; --accent-2: #97cdc6; --accent-soft: #16302d; --on-accent: #08201e;
   --user-bg: #30353a; --user-border: #3e444a; --code-bg: #1a1d20;
   --good: #74c775; --good-soft: #1e2a22; --warn: #d9a24e; --warn-soft: #2e2617; --danger: #ef7055; --danger-soft: #331e19;
+  /* בכהה רק ‎section‎ נפל (3.65:1 על ‎--code-bg‎); השאר עוברים כמות שהם. */
+  --hl-keyword: #ff7b72; --hl-builtin: #ffa657; --hl-comment: #8b949e;
+  --hl-name: #7ee787; --hl-section: #79c0ff;
   --add-bg: #17281c; --add-fg: #7fc894; --del-bg: #301b15; --del-fg: #ef8069;
   --god: #9d8cff; --god-soft: #262040;
   --claude: #d97757; --claude-soft: #392b23;
@@ -91,6 +97,9 @@
   --accent: #6fb6ae; --accent-2: #97cdc6; --accent-soft: #16302d; --on-accent: #08201e;
   --user-bg: #30353a; --user-border: #3e444a; --code-bg: #1a1d20;
   --good: #74c775; --good-soft: #1e2a22; --warn: #d9a24e; --warn-soft: #2e2617; --danger: #ef7055; --danger-soft: #331e19;
+  /* בכהה רק ‎section‎ נפל (3.65:1 על ‎--code-bg‎); השאר עוברים כמות שהם. */
+  --hl-keyword: #ff7b72; --hl-builtin: #ffa657; --hl-comment: #8b949e;
+  --hl-name: #7ee787; --hl-section: #79c0ff;
   --add-bg: #17281c; --add-fg: #7fc894; --del-bg: #301b15; --del-fg: #ef8069;
   --god: #9d8cff; --god-soft: #262040;
   --claude: #d97757; --claude-soft: #392b23;
@@ -616,7 +625,11 @@ body.just-done .composer-card { animation: doneRing 1.3s ease-out; }
   flex: none; appearance: none; cursor: pointer; font: inherit;
   font-size: 12px; font-weight: 650; line-height: 1;
   padding: 6px 11px; border-radius: 999px;
-  color: var(--src); background: var(--src-soft);
+  /* ‎--src‎ נקי על ‎--src-soft‎ נותן 3.46:1 בבהיר ו-4.38:1 בכהה — מתחת ל-4.5
+     שדורש טקסט של 11‑12px. צבעי המותג לא נבחרו להיות קריאים על הגוון שלהם
+     עצמם. הדחיפה אל ‎--text‎ (כהה בבהיר, בהיר בכהה) מחזירה את הקריאוּת ועדיין
+     נשארת ברור בצבע של הספק. */
+  color: color-mix(in srgb, var(--src) 75%, var(--text)); background: var(--src-soft);
   border: 1px solid color-mix(in srgb, var(--src) 30%, transparent);
   transition: background .15s, border-color .15s, color .15s;
 }
@@ -1476,7 +1489,9 @@ option.opt-god { color: var(--god); font-weight: 700; }
 .notify-chip {
   display: inline-flex; align-items: center; gap: 6px; flex: none;
   font-size: 11px; font-weight: 600; white-space: nowrap;
-  color: var(--warn); background: color-mix(in srgb, var(--warn) 13%, transparent);
+  /* ‎--warn‎ נקי נתן 4.19:1 על הגוון שלו ב-11px — ראו ‎.cu-src‎ לאותו נימוק. */
+  color: color-mix(in srgb, var(--warn) 80%, var(--text));
+  background: color-mix(in srgb, var(--warn) 13%, transparent);
   border: 1px solid color-mix(in srgb, var(--warn) 34%, transparent);
   border-radius: 999px; padding: 3px 9px; cursor: pointer;
   transition: background .12s, border-color .12s;
@@ -2462,3 +2477,34 @@ body.anon-mode .composer-card {
      ו-34px זה המינימום שעוד אפשר לפגוע בו בלי לכוון. */
   .anon-tools, .anon-exit { font-size: 11.5px; padding: 6px 9px; border-radius: 8px; }
 }
+
+/* ==========================================================================
+   הצבעים שהודלפו מהתמה של highlight.js
+   --------------------------------------------------------------------------
+   ערכות ‎github‎ ו-‎github-dark‎ נבנו מול הרקעים של GitHub — ‎#fff‎ ו-‎#0d1117‎.
+   כאן הקוד יושב על ‎--code-bg‎, שהוא נייר בסלייט קר ולא לבן, וההזזה הזאת
+   מפילה חלק מהאסימונים מתחת ל-4.5:1. נמדד על ‎#f3f4f7‎:
+
+     built_in ‎#e36209‎  3.17    ← הגרוע ביותר: ‎console‎, ‎require‎, ‎JSON‎
+     keyword  ‎#d73a49‎  4.16
+     name/tag ‎#22863a‎  4.21
+     comment  ‎#6a737d‎  4.38
+
+   בכהה (‎#1a1d20‎) כולם עוברים חוץ מ-‎section‎ (3.65). לכן ההחלפה אינה "תמה
+   חדשה" אלא חמישה אסימונים בלבד, באותם גוונים ורק כהים/בהירים די הצורך:
+   ‎6.38 · 5.60 · 6.72 · 5.81‎ בבהיר, ו-‎8.70‎ ל-‎section‎ בכהה.
+
+   הקובץ הזה נטען *אחרי* ערכות ה-vendor ב-‎index.html‎, ולכן הוא גובר עליהן
+   בלי ‎!important‎ — ראו את שלושת ה-‎<link>‎ שם. */
+.hljs-doctag, .hljs-keyword, .hljs-meta .hljs-keyword,
+.hljs-template-tag, .hljs-template-variable, .hljs-type,
+.hljs-variable.language_ { color: var(--hl-keyword); }
+
+.hljs-built_in, .hljs-symbol { color: var(--hl-builtin); }
+
+.hljs-code, .hljs-comment, .hljs-formula { color: var(--hl-comment); }
+
+.hljs-name, .hljs-quote, .hljs-selector-pseudo,
+.hljs-selector-tag { color: var(--hl-name); }
+
+.hljs-section { color: var(--hl-section); }
