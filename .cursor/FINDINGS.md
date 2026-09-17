@@ -265,3 +265,12 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F88 Landscape viewport untested → FIXED (Round 9)
 [RESPONSIVENESS] 844×390 in ux-viewport-matrix · Source: simulation
+
+### F89 toast.err not assertive → FIXED (Round 10)
+[ACCESSIBILITY] role=alert · Source: Worker B
+
+### F90 compact hides hot context → FIXED (Round 10)
+[FEEDBACK] statusbar.has-hot stays visible · Source: Worker B
+
+### F91 Enter queues while ask pending → FIXED (Round 10)
+[FRICTION] toast + jumpToPendingAsk · Source: Worker B

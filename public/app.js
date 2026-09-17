@@ -2900,6 +2900,9 @@ function updateStatusbar() {
     const pct = Math.min(100, Math.round(conv.ctx.used / conv.ctx.win * 100));
     ctxEl.textContent = `הקשר ${pct}% · ${fmtTok(conv.ctx.used)}/${fmtTok(conv.ctx.win)}`;
     ctxEl.className = 'sb-item' + (pct >= 85 ? ' hot' : pct >= 65 ? ' warn' : '');
+    $('statusbar')?.classList.toggle('has-hot', pct >= 85);
+  } else {
+    $('statusbar')?.classList.remove('has-hot');
   }
   ctxEl.classList.toggle('hidden', !hasCtx);
   const dur = hasCtx && conv.ctx.dur;
@@ -3501,7 +3504,9 @@ function toast(text, err) {
     host.setAttribute('aria-live', 'polite');
     host.setAttribute('role', 'status');
   }
-  const t = el('div', 'toast' + (err ? ' err' : ''), text); host.appendChild(t);
+  const t = el('div', 'toast' + (err ? ' err' : ''), text);
+  if (err) { t.setAttribute('role', 'alert'); t.setAttribute('aria-live', 'assertive'); }
+  host.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(() => t.remove(), 300); }, 4200);
 }
 
@@ -3694,7 +3699,16 @@ $('input').addEventListener('input', () => { histIdx = -1; stashDraftSoon(); });
 $('input').addEventListener('keydown', (e) => {
   // Esc בזמן הכתבה עוצר אותה ולא סוגר חלונית — זה המצב הפעיל ביותר במסך
   if (e.key === 'Escape' && dictOn) { e.preventDefault(); e.stopPropagation(); dictStop(); return; }
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); return; }
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    // כרטיס שאלה פתוח — Enter בתור לא צריך לשרשר פרומפט במקום לענות
+    if (typeof pendingAskCount === 'function' && pendingAskCount() > 0) {
+      e.preventDefault();
+      toast('יש שאלה שממתינה לתשובה — ענה בכרטיס או לחץ על הפס למעלה');
+      jumpToPendingAsk();
+      return;
+    }
+    e.preventDefault(); sendMessage(); return;
+  }
   const i = $('input');
   // קיצור «↑/↓ בתיבה ריקה» — לא לדרוס טיוטה כשהסמן רק בתחילת שורה
   if (e.key === 'ArrowUp' && i.selectionStart === 0 && i.selectionEnd === 0

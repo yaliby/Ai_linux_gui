@@ -1785,9 +1785,16 @@ body.awaiting .working { opacity: .55; }
    ‎body.compose-tall‎ נדלק כשהטקסט עובר שורה אחת: התיבה עולה לרוחב מלא מעל
    הכפתורים, ובורר המודל חוזר לשורת הפקדים במקום שמתפנה. */
 body.compose-compact .usage-strip,
-body.compose-compact .statusbar,
+body.compose-compact .statusbar:not(.has-hot),
 body.compose-compact .pill-row,
 body.compose-compact .bar-spacer { display: none !important; }
+/* כשהקשר לוהט — לא מסתירים את האזהרה גם עם מקלדת פתוחה */
+body.compose-compact .statusbar.has-hot {
+  display: flex !important;
+  padding-block: 2px 0;
+  font-size: 12px;
+}
+body.compose-compact .statusbar.has-hot .sb-item:not(.hot) { display: none; }
 /* ריפוד תחתון קטן בלבד: בלי safe-area (המקלדת כבר תופסת את התחתית),
    אבל לא צמוד לגמרי — נשימה קלה בין התיבה למקלדת. */
 body.compose-compact .composer {
