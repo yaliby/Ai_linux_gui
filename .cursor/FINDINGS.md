@@ -304,3 +304,18 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F101 Logs copy skips legacyCopy → FIXED (Round 14)
 [FEEDBACK] uses copyText() · Source: Worker Round 14
+
+### F102 PWA ?go=new bypasses startNewChat → FIXED (Round 15)
+[RECOVERY] runLaunchShortcut → startNewChat · Source: Worker Round 15
+
+### F103 resumeSession skips switchConv → FIXED (Round 15)
+[FRICTION] uses switchConv pipeline · Source: Worker Round 15
+
+### F104 Logs copy while loading → FIXED (Round 15)
+[FEEDBACK] guard placeholder/error · Source: Worker Round 15
+
+### F105 Palette Escape focus trap → FIXED (Round 15)
+[ACCESSIBILITY] paletteReturnFocus · Source: Worker Round 15
+
+### F106 Delete DELETE fail silent → FIXED (Round 15)
+[FEEDBACK] toast on failed DELETE · Source: Worker Round 15

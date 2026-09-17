@@ -2878,7 +2878,9 @@ function deleteConv(id) {
   }
   store.convs = store.convs.filter(c => c.id !== id);
   dirtyConvs.delete(id);
-  fetch('/api/conversations/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
+  fetch('/api/conversations/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); })
+    .catch(() => toast('המחיקה מהשרת נכשלה — השיחה עלולה לחזור אחרי רענון', true));
   if (activeId === id) activeId = store.convs[0] ? store.convs[0].id : null;
   if (!activeId) newConv();
   const c = activeConv();
@@ -5190,7 +5192,8 @@ function runLaunchShortcut() {
   const go = new URLSearchParams(location.search).get('go');
   if (!go) return;
   history.replaceState(null, '', location.pathname);
-  if (go === 'new') newConv();
+  // אותו מסלול כמו הכפתורים — כולל אישור לפני עצירת תור ו־leaveAnon
+  if (go === 'new') startNewChat();
   else if (go === 'duet') $('newDuet').click();
 }
 init();
@@ -6040,13 +6043,21 @@ function openLogs(preset) {
   const copy = el('button', 'logs-btn', '⧉ העתק');
   copy.type = 'button';
   copy.onclick = async () => {
-    const ok = await copyText(pre.textContent || '');
+    const body = (pre.textContent || '').trim();
+    if (!body || body === 'טוען…' || body.startsWith('קריאת היומן נכשלה')) {
+      toast('אין יומן להעתקה עדיין', true); return;
+    }
+    const ok = await copyText(body);
     toast(ok ? 'היומן הועתק' : 'ההעתקה נכשלה', !ok);
   };
   const dl = el('button', 'logs-btn', '⇩ הורד');
   dl.type = 'button';
   dl.onclick = () => {
-    const blob = new Blob([pre.textContent], { type: 'text/plain;charset=utf-8' });
+    const body = (pre.textContent || '').trim();
+    if (!body || body === 'טוען…' || body.startsWith('קריאת היומן נכשלה')) {
+      toast('אין יומן להורדה עדיין', true); return;
+    }
+    const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -6105,14 +6116,21 @@ function resumeSession(s) {
   const existing = store.convs.find(c => c.sessionId === s.id);
   if (!leaveAnon(existing ? existing.id : null)) return;
   if (existing) { switchConv(existing.id); closeModal(); return; }
+  if (busy && streamOwnerId === activeId) {
+    if (!confirm('יש תשובה פעילה בשיחה הזו.\nלעצור אותה ולהמשיך סשן מהדיסק?')) return;
+    interruptTurn(); abandonTurn();
+  } else if (busy) { interruptTurn(); abandonTurn(); }
+  stashDraft();
   const c = {
     id: uid(), title: clamp(s.title, 42), sessionId: s.id, sessionAgent: s.agent || 'claude',
     messages: [], cost: 0, ctx: null,
     cwd: $('cwd').value, draft: '', createdAt: Date.now(), updatedAt: Date.now(), loaded: true,
   };
-  store.convs.unshift(c); activeId = c.id; save();
-  restoreDraft();
-  renderConversation(); renderConvList(); closeModal();
+  store.convs.unshift(c);
+  markDirty(c); markSettings();
+  // switchConv מטפל בסנכרון/תור/דואט — גם כשזו שיחה חדשה ברשימה
+  switchConv(c.id);
+  closeModal();
   addNote('ממשיך סשן קיים מהדיסק — ההקשר ייטען אוטומטית בהודעה הבאה.');
   $('input').focus();
 }
@@ -6749,9 +6767,11 @@ const paletteActions = () => [
   { ic: '⌨', name: 'מקשי קיצור', run: () => openShortcuts() },
 ];
 let pal = null;
+let paletteReturnFocus = null;
 // focus=false כשהלוח נפתח ככפתור "עוד" בטלפון: שם הוא תפריט פעולות, ומקלדת
 // שקופצת ובולעת חצי מסך על תפריט של עשר שורות היא בדיוק ההפך ממה שצריך.
 function openPalette(focus = true) {
+  paletteReturnFocus = document.activeElement;
   $('palette').classList.remove('hidden');
   const more = $('moreBtn');
   if (more) more.setAttribute('aria-expanded', 'true');
@@ -6768,6 +6788,11 @@ function closePalette() {
   pal = null;
   const more = $('moreBtn');
   if (more) more.setAttribute('aria-expanded', 'false');
+  const back = paletteReturnFocus || more;
+  paletteReturnFocus = null;
+  if (back && typeof back.focus === 'function') {
+    try { back.focus(); } catch {}
+  }
 }
 function buildPalette(q) {
   q = q.trim().toLowerCase();

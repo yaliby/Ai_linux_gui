@@ -443,7 +443,15 @@ t.section('סבב 14 — מחיקה / דואט / שיתוף / יומן');
   t.ok('שיחה חדשה מאשרת עצירת תור פעיל', /לעצור אותה ולפתוח שיחה חדשה/.test(app));
   t.ok('דואט ממתין לסנכרון במקום טופס', /_awaitDuetSync/.test(app) && /טוען את מצב הדואט/.test(app));
   t.ok('שיתוף ריק → toast', /השיתוף לא הגיע/.test(app));
-  t.ok('העתקת יומן דרך copyText', /העתק[\s\S]{0,200}copyText\(pre\.textContent/.test(app));
+  t.ok('העתקת יומן דרך copyText', /copyText\(body\)/.test(app) && /אין יומן להעתקה/.test(app));
+}
+
+t.section('סבב 15 — קיצור השקה / לוח / resume');
+{
+  t.ok('go=new קורא startNewChat', /go === 'new'\)\s*startNewChat\(/.test(app));
+  t.ok('closePalette מחזיר focus', /paletteReturnFocus/.test(app));
+  t.ok('resumeSession דרך switchConv', /function resumeSession\(/.test(app) && /switchConv\(c\.id\)/.test(app));
+  t.ok('מחיקה מהשרת מדווחת בכשל', /המחיקה מהשרת נכשלה/.test(app));
 }
 
 t.done();

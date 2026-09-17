@@ -36,7 +36,10 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 09:51 | COMMIT | Round 13 F96 | modal focus restore · CACHE v36 |
 | 10:12 | HEARTBEAT | Round 14 discover | F01–F96 · evidence-only |
 | 10:18 | COMMIT | Round 14 F97–F101 | delete confirm, duet sync wait, share/logs · CACHE v37 |
+| 11:05 | HEARTBEAT | Round 15 hunt | F01–F101 · 16/16 |
+| 11:09 | COMMIT | Round 15 F102–F106 | launch/resume/palette/delete · CACHE v38 |
 | 10:12 | HEARTBEAT | Round 14 discover | F01–F96 · evidence-only |
+| 11:05 | HEARTBEAT | Round 15 hunt | F01–F101 · 16/16 |
 ## Decisions
 
 - Parallel workers; serialize writers on same files.
