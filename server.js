@@ -1455,79 +1455,18 @@ app.get('/api/search', (req, res) => {
   res.json({ results: results.slice(0, 50) });
 });
 
-// ---------- שרתי MCP ----------
-let mcpCache = { t: 0, data: null };
-let mcpInflight = null;
-app.get('/api/mcp', (req, res) => {
-  const now = Date.now();
-  if (mcpCache.data && now - mcpCache.t < 30000) return res.json(mcpCache.data);
-  if (!mcpInflight) {
-    mcpInflight = new Promise((resolve) => {
-      execFile('claude', ['mcp', 'list'], { timeout: 15000 }, async (err, stdout) => {
-        const servers = [];
-        for (const line of (stdout || '').split('\n')) {
-          const m = line.match(/^([^:]+):\s*(.*?)\s*-\s*(✔|✗|.*?(?:Connected|Failed|Disconnected|error).*)$/i);
-          if (m) servers.push({ name: m[1].trim(), url: m[2].trim(), connected: /✔|connected/i.test(m[3]) });
-        }
-        // שרתי ה-MCP של Cursor הם רשימה נפרדת לגמרי (‎.cursor/mcp.json‎). הם
-        // מוצגים באותו מסך ומסומנים בשם הסוכן, כדי שיהיה ברור למי כל שרת זמין.
-        let cur = [];
-        try { cur = await cursor.mcpList(); } catch {}
-        for (const c of cur) servers.push({ name: c.name, url: c.detail || '', connected: c.status === 'connected', agent: 'cursor' });
-        const data = { servers, raw: (stdout || '').trim() };
-        mcpCache = { t: Date.now(), data };
-        mcpInflight = null;
-        resolve(data);
-      });
-    });
-  }
-  mcpInflight.then((data) => res.json(data)).catch(() => res.json({ servers: [], raw: '' }));
+// ---------- שרתי MCP ופקודות סלאש ----------
+// שתי רשימות שנקראות מהדיסק ומהתהליכים של המשתמש. ‎lib/agent-capabilities.js‎
+// מחזיק אותן יחד עם הבדיקות שלהן — סריקה של שמונה רמות שעוקבת אחרי קישורים
+// סימבוליים היא בדיוק המקום שבו תקלה נראית כמו "התפריט ריק".
+const agentCaps = require('./lib/agent-capabilities')({
+  execFile, cursor, home: os.homedir(),
 });
-
-// ---------- פקודות סלאש (מובנות + מותאמות אישית) ----------
-const BUILTIN_COMMANDS = [
-  { name: '/clear', desc: 'שיחה חדשה (מנקה הקשר)', client: true },
-  { name: '/compact', desc: 'דחיסת ההקשר לסיכום קצר' },
-  { name: '/init', desc: 'יצירת קובץ CLAUDE.md לפרויקט' },
-  { name: '/review', desc: 'סקירת קוד של השינויים' },
-  { name: '/security-review', desc: 'סקירת אבטחה של השינויים' },
-  { name: '/pr-comments', desc: 'קריאת תגובות על ה-PR' },
-  { name: '/rc', desc: 'Remote Control — שליטה במחשב מ-claude.ai/code ומהנייד', client: true },
-];
-function scanCommands(dir, scope, out, visited = new Set(), depth = 0) {
-  if (depth > 8) return;
-  let real;
-  try { real = fs.realpathSync(dir); } catch { return; }
-  if (visited.has(real)) return;
-  visited.add(real);
-  let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
-  for (const e of entries) {
-    if (e.isDirectory()) scanCommands(path.join(dir, e.name), scope, out, visited, depth + 1);
-    else if (e.name.endsWith('.md')) {
-      let desc = '';
-      try {
-        const txt = fs.readFileSync(path.join(dir, e.name), 'utf8');
-        const fm = txt.match(/^---[\s\S]*?description:\s*(.+)$[\s\S]*?---/m);
-        if (fm) desc = fm[1].trim(); else desc = (txt.split('\n').find((l) => l.trim() && !l.startsWith('---')) || '').slice(0, 80);
-      } catch {}
-      out.push({ name: '/' + e.name.replace(/\.md$/, ''), desc, scope, custom: true });
-    }
-  }
-}
+app.get('/api/mcp', (req, res) => {
+  agentCaps.mcpList().then((data) => res.json(data)).catch(() => res.json({ servers: [], raw: '' }));
+});
 app.get('/api/commands', (req, res) => {
-  const root = resolveDirGlobal(req.query.cwd);
-  // תפריט ה-'/' הוא של הסוכן שרץ. ל-Cursor אין את הפקודות המובנות של Claude
-  // (‎/compact‎, ‎/rc‎…) ואין לו ‎.claude/commands‎ — מה שממלא שם את התפקיד הוא
-  // skills. הצגת התפריט הלא-נכון הייתה מציעה פקודות שפשוט לא יקרו.
-  if (req.query.agent === 'cursor') {
-    try { return res.json({ commands: cursor.listCommands(root), agent: 'cursor' }); }
-    catch { return res.json({ commands: [], agent: 'cursor' }); }
-  }
-  const out = [];
-  scanCommands(path.join(root, '.claude', 'commands'), 'פרויקט', out);
-  scanCommands(path.join(os.homedir(), '.claude', 'commands'), 'אישי', out);
-  res.json({ commands: [...BUILTIN_COMMANDS, ...out] });
+  res.json(agentCaps.listCommands(resolveDirGlobal(req.query.cwd), req.query.agent));
 });
 
 // ---------- רשימת ההיתר של Cursor ----------
