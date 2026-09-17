@@ -22,6 +22,7 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 08:55 | COMMIT | Round 5 F71–F72 | duet note/save/version feedback · CACHE v28 |
 | 08:56 | COMMIT | Round 6 F73–F74 | search toast, icon/cwd 44px · CACHE v29 |
 | 08:57 | COMMIT | Round 7 F75 | rename long-press + title + palette · CACHE v30 |
+| 09:00 | COMMIT | Round 8 F76–F85 | touch+a11y batch from Workers · CACHE v31 |
 
 ## Decisions
 

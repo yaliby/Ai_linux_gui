@@ -1119,7 +1119,8 @@ function applyAnonMode() {
   const tools = $('anonTools');
   if (tools && c) {
     tools.classList.toggle('on', !!c.tools);
-    // הכפתור מחזיק שתי תוויות ו-CSS בוחר איזו מהן נראית; כתיבה ל-textContent
+    tools.setAttribute('aria-pressed', c.tools ? 'true' : 'false');
+    // הכפתון מחזיק שתי תוויות ו-CSS בוחר איזו מהן נראית; כתיבה ל-textContent
     // כאן הייתה מוחקת את שתיהן ומחזירה את הכיתוב הארוך למסך הצר.
     const tl = tools.querySelector('.t-long'), ts = tools.querySelector('.t-short');
     if (tl) tl.textContent = c.tools ? 'כלים: פעילים' : 'כלים: כבויים';
@@ -1127,6 +1128,7 @@ function applyAnonMode() {
     tools.title = c.tools
       ? 'הכלים פעילים — פעולות על קבצים ובטרמינל משאירות עקבות משל עצמן, מחוץ לשיחה'
       : 'הכלים כבויים — שיחה בלבד, בלי קריאה/כתיבה של קבצים ובלי טרמינל';
+    tools.setAttribute('aria-label', tools.title);
   }
   // חיווי השמירה לא שייך כאן: אין מה לשמור, ו"נשמר" היה שקר על המסך
   if (on) setSaveState('idle');
@@ -3684,7 +3686,7 @@ function autoGrow() {
   else setComposeTall(want);
 }
 $('input').addEventListener('input', autoGrow);
-$('input').addEventListener('input', () => stashDraftSoon());
+$('input').addEventListener('input', () => { histIdx = -1; stashDraftSoon(); });
 $('input').addEventListener('keydown', (e) => {
   // Esc בזמן הכתבה עוצר אותה ולא סוגר חלונית — זה המצב הפעיל ביותר במסך
   if (e.key === 'Escape' && dictOn) { e.preventDefault(); e.stopPropagation(); dictStop(); return; }
@@ -4070,20 +4072,23 @@ let settingsReturnFocus = null;
 function openSettings() {
   settingsReturnFocus = document.activeElement;
   $('settings').classList.remove('hidden');
+  const tog = $('settingsToggle');
+  if (tog) tog.setAttribute('aria-expanded', 'true');
   settingsOpenedAt = Date.now();
   renderNotifyRow();
   renderInstallRow();
+  const first = $('settings').querySelector('input, select, button, textarea');
+  if (first) try { first.focus(); } catch {}
 }
 function closeSettings() {
   $('settings').classList.add('hidden');
+  const tog = $('settingsToggle');
+  if (tog) tog.setAttribute('aria-expanded', 'false');
   const back = settingsReturnFocus;
   settingsReturnFocus = null;
   if (back && typeof back.focus === 'function') {
     try { back.focus(); } catch {}
-  } else {
-    const t = $('settingsToggle');
-    if (t) t.focus();
-  }
+  } else if (tog) tog.focus();
 }
 
 // ---------- מתג ההתרעות ----------
@@ -4120,6 +4125,8 @@ const drawerMode = isNarrow;
 function closeDrawer() {
   if (!drawerMode()) return;
   document.querySelector('.app').classList.remove('side-open');
+  const t = $('sideToggle');
+  if (t) try { t.focus(); } catch {}
 }
 function toggleSide() { const app = document.querySelector('.app'); if (drawerMode()) app.classList.toggle('side-open'); else app.classList.toggle('side-collapsed'); }
 $('sideToggle').onclick = toggleSide;
@@ -4755,8 +4762,12 @@ function openModelPicker(sel) {
 }
 function closeModelPicker() {
   const sel = mpState && mpState.sel;
+  const btn = sel && sel._mpBtn;
   $('modelPicker').classList.add('hidden');
-  if (sel && sel._mpBtn) sel._mpBtn.setAttribute('aria-expanded', 'false');
+  if (btn) {
+    btn.setAttribute('aria-expanded', 'false');
+    try { btn.focus(); } catch {}
+  }
   mpState = null;
 }
 
@@ -5018,6 +5029,7 @@ function updateCwdChip() {
     $('cwdChipText').textContent = isNarrow() ? 'שיחה' : 'ללא תיקייה';
     chip.title = 'שיחה ללא תיקייה — בלי כלים ובלי גישה לקבצים · לחץ לשינוי';
     chip.classList.remove('icon-only');
+    chip.setAttribute('aria-label', chip.title);
     return;
   }
   const short = v ? v.replace(/^\/home\/[^/]+/, '~') : '~';
@@ -5038,6 +5050,7 @@ function updateCwdChip() {
   chip.classList.remove('icon-only');
   const visible = label.clientWidth, needed = label.scrollWidth;
   if (needed > 0 && visible < Math.min(needed, 34)) chip.classList.add('icon-only');
+  chip.setAttribute('aria-label', chip.title || 'תיקיית העבודה');
 }
 // גם המפרידים בשורת המצב תלויים ברוחב: מעבר מעל/מתחת ל-760px מסתיר או מחזיר
 // פריטים ב-media query, ובלי חישוב מחדש נשאר "·" יתום עד העדכון הבא.
@@ -6146,8 +6159,10 @@ function renderRemote(wrap) {
     if (s.pairCode) {
       const man = el('div', 'pair-code-box');
       man.appendChild(el('div', 'remote-meta', 'או פתחו במכשיר החדש את הכתובת שלמעלה והקלידו:'));
-      const code = el('div', 'pair-code', s.pairCode);
+      const code = el('button', 'pair-code', s.pairCode);
+      code.type = 'button';
       code.title = 'לחיצה מעתיקה';
+      code.setAttribute('aria-label', 'העתק קוד קישור ' + s.pairCode);
       code.onclick = async () => { (await copyText(s.pairCode)) ? toast('הקוד הועתק') : toast('ההעתקה נכשלה', true); };
       man.appendChild(code);
       box.appendChild(man);
@@ -7219,6 +7234,9 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !$('modal').classList.contains('hidden')) { e.preventDefault(); closeModal(); return; }
   if (e.key === 'Escape' && !$('modelPicker').classList.contains('hidden')) { e.preventDefault(); closeModelPicker(); return; }
   if (e.key === 'Escape' && !$('dropzone').classList.contains('hidden')) { e.preventDefault(); hideDropzone(); return; }
+  if (e.key === 'Escape' && document.querySelector('.app')?.classList.contains('side-open')) {
+    e.preventDefault(); closeDrawer(); return;
+  }
 });
 
 /* ==========================================================================
@@ -7317,7 +7335,7 @@ function isDuet(c) { return !!(c && c.mode === 'duet'); }
 const ROLE_LABEL = { A: 'משתתף א׳', B: 'משתתף ב׳', S: 'מפקח', user: 'ממך' };
 const DUET_STATUS_LABEL = {
   setup: 'הגדרת ריצה', idle: 'מוכן', running: 'רצה', paused: 'מושהית',
-  error: 'נעצרה על שגיאה', done: 'הסתיימה',
+  error: 'נעצרה על שגיאה', done: 'הסתיימה', stopping: 'עוצר…',
 };
 const END_LABEL = {
   complete: 'המטרה הושגה', stalled: 'התכנסות — אין רווח נוסף',
@@ -7566,8 +7584,11 @@ function renderDuetRun(log) {
   duetDom = { root, artBody, verSel, verNote, prog, progBar: prog.querySelector('i'), progTxt, cards, lane, ctl, statusWrap, acts, costChip, goalChip, noteRow, noteIn, copyBtn, saveBtn, liveCard: null, liveBody: null };
 
   copyBtn.onclick = async () => {
-    const ok = await copyText(duetShownText());
+    const text = duetShownText();
+    if (!text) { toast('אין תוצר להעתקה עדיין', true); return; }
+    const ok = await copyText(text);
     copyBtn.textContent = ok ? 'הועתק ✓' : 'נכשל';
+    if (!ok) toast('ההעתקה נכשלה', true);
     setTimeout(() => { copyBtn.textContent = 'העתק'; }, 1400);
   };
   saveBtn.onclick = () => duetSaveFile();
@@ -7811,8 +7832,11 @@ function duetEndCard() {
   const acts = el('div', 'dt-end-acts');
   const copy = el('button', 'dt-go', 'העתק את התוצר הסופי');
   copy.onclick = async () => {
-    const ok = await copyText(duetRun.artifact || '');
+    const text = duetRun.artifact || '';
+    if (!text) { toast('אין תוצר להעתקה', true); return; }
+    const ok = await copyText(text);
     copy.textContent = ok ? 'הועתק ✓' : 'ההעתקה נכשלה';
+    if (!ok) toast('ההעתקה נכשלה', true);
     setTimeout(() => { copy.textContent = 'העתק את התוצר הסופי'; }, 1500);
   };
   const save = el('button', 'dt-mini', 'שמור לקובץ');
@@ -7899,9 +7923,11 @@ function duetPaintStatus() {
   const st = duetRun.status;
   const w = duetDom.statusWrap;
   w.innerHTML = '';
-  w.className = 'dt-state dt-state-' + st + (duetRun.pausing ? ' dt-pausing' : '');
-  if (st === 'running') w.appendChild(el('span', 'spinner sm'));
-  const label = el('b', null, st === 'running' && duetRun.pausing ? 'משהים בסוף התור' : (DUET_STATUS_LABEL[st] || st));
+  w.className = 'dt-state dt-state-' + st + (duetRun.pausing ? ' dt-pausing' : '') + (duetRun.stopping ? ' dt-stopping' : '');
+  if (st === 'running' || duetRun.stopping) w.appendChild(el('span', 'spinner sm'));
+  const label = el('b', null,
+    duetRun.stopping ? 'עוצר…'
+      : (st === 'running' && duetRun.pausing ? 'משהים בסוף התור' : (DUET_STATUS_LABEL[st] || st)));
   w.appendChild(label);
   const bits = [];
   if (duetRun.version) bits.push('גרסה ' + duetRun.version);

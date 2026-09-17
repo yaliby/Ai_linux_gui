@@ -409,4 +409,22 @@ t.section('סבב 7 — שינוי שם במגע');
   t.ok('convTitle לחיץ עם role=button', /id="convTitle"[^>]*role="button"/.test(html));
 }
 
+t.section('סבב 8 — מגע נוסף ונגישות');
+{
+  const start = css.indexOf('@media (hover: none), (pointer: coarse)');
+  const chunk = css.slice(start, start + 4000);
+  t.ok('.notify-chip ≥ 44px', /\.notify-chip\s*\{[^}]*min-height:\s*44px/.test(chunk));
+  t.ok('.dt-mini/.dt-go ≥ 44px', /\.dt-mini,\s*\.dt-go\s*\{[^}]*min-height:\s*44px/.test(chunk));
+  t.ok('.anon-tools ≥ 44px', /\.anon-tools,\s*\.anon-exit\s*\{[^}]*min-height:\s*44px/.test(chunk));
+  t.ok('findCount aria-live', /id="findCount"[^>]*aria-live=/.test(html));
+  t.ok('settings role=dialog', /id="settings"[^>]*role="dialog"/.test(html));
+  t.ok('settingsToggle aria-expanded', /id="settingsToggle"[^>]*aria-expanded=/.test(html));
+  t.ok('closeModelPicker מחזיר focus', /function closeModelPicker\([\s\S]{0,200}btn\.focus/.test(app));
+  t.ok('Escape סוגר מגירה', /side-open[\s\S]{0,80}closeDrawer/.test(app));
+  t.ok('anonTools aria-pressed', /anonTools[\s\S]{0,200}aria-pressed|tools\.setAttribute\(\s*['\"]aria-pressed['\"]/.test(app));
+  t.ok('העתקת דואט ריק → toast', /אין תוצר להעתקה/.test(app));
+  t.ok('pair-code הוא button', /el\('button',\s*'pair-code'/.test(app));
+  t.ok('histIdx מתאפס בהקלדה', /histIdx\s*=\s*-1;\s*stashDraftSoon/.test(app));
+}
+
 t.done();

@@ -226,3 +226,33 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F75 Rename only via dblclick — broken on touch → FIXED (Round 7)
 [DISCOVERABILITY] long-press + convTitle click + palette · Source: [חקירה עצמאית]
+
+### F76 notify/anon/duet/tool-rej touch undersized → FIXED (Round 8)
+[RESPONSIVENESS] 44px coarse · Source: Worker A/B
+
+### F77 findCount not live → FIXED (Round 8)
+[ACCESSIBILITY] aria-live · Source: Worker A
+
+### F78 settings dialog semantics + focus in → FIXED (Round 8)
+[ACCESSIBILITY] role=dialog, aria-expanded, focus first · Source: Worker A/B
+
+### F79 model picker / drawer Escape focus → FIXED (Round 8)
+[ACCESSIBILITY] closeModelPicker focus; Escape closes drawer · Source: Worker B
+
+### F80 pair-code not a button → FIXED (Round 8)
+[ACCESSIBILITY] `<button class=pair-code>` · Source: Worker A
+
+### F81 histIdx stuck after edit → FIXED (Round 8)
+[FRICTION] reset on input · Source: Worker B
+
+### F82 duet copy empty says «נכשל» → FIXED (Round 8)
+[CONFUSION] toast «אין תוצר» · Source: Worker duet
+
+### F83 duet stopping not painted → FIXED (Round 8)
+[FEEDBACK] stopping label + spinner · Source: Worker duet
+
+### F84 anon tools aria-pressed → FIXED (Round 8)
+[ACCESSIBILITY] · Source: Worker B
+
+### F85 cwdChip aria-label when icon-only → FIXED (Round 8)
+[ACCESSIBILITY] · Source: Worker B

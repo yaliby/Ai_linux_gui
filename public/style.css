@@ -1186,6 +1186,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
   font-family: var(--mono); font-size: 21px; font-weight: 650; letter-spacing: .16em;
   direction: ltr; cursor: pointer; user-select: all; padding: 8px 14px;
   border-radius: 10px; border: 1px dashed var(--border); background: var(--panel-2);
+  color: inherit; appearance: none; -webkit-appearance: none;
 }
 .pair-code:hover { border-color: var(--accent); color: var(--accent); }
 
@@ -1765,6 +1766,12 @@ body.awaiting .working { opacity: .55; }
      ו-29px גובה היה יעד שמפספסים בדיוק כשהכי חשוב לא לפספס. */
   .ab-go, .lb-go { min-height: 44px; padding: 10px 16px; }
   .lb-x { width: 38px; height: 38px; }
+  .notify-chip { min-height: 44px; min-width: 44px; padding: 8px 12px; }
+  .anon-tools, .anon-exit { min-height: 44px; padding: 10px 14px; }
+  .tool-rej-btn { min-height: 40px; padding: 10px 14px; }
+  .dt-mini, .dt-go { min-height: 44px; padding: 10px 14px; }
+  .dt-note-in { min-height: 44px; font-size: 16px; }
+  .mp-fav { width: 36px; height: 36px; }
 
   /* 16px = בלי זום אוטומטי של iOS בפוקוס (גם באייפד, לא רק בטלפון) */
   textarea#input, #convSearch, #findInput, #cwd, #paletteInput,
