@@ -1517,8 +1517,9 @@ async function onSync(m) {
   if (modelDirty && ws && ws.readyState === ws.OPEN && subId) pushModel();
   else if (typeof m.model === 'string') adoptModel(m.model, m.effort);
   // כרטיסים שנפתחו בזמן שלא היינו מחוברים — כדי שאפשר יהיה לענות עליהם מכאן
-  for (const p of (m.perms || [])) if (!pendingPerms.has(p.id)) showPermission(p.id, p.req);
-  for (const d of (m.dialogs || [])) if (!pendingPerms.has(d.id)) showDialog(d.id, d.req);
+  let revived = 0;
+  for (const p of (m.perms || [])) if (!pendingPerms.has(p.id)) { showPermission(p.id, p.req, { silent: true }); revived++; }
+  for (const d of (m.dialogs || [])) if (!pendingPerms.has(d.id)) { showDialog(d.id, d.req); revived++; }
   // כרטיס שנענה במכשיר אחר בזמן ניתוק — הסנכרון לא מביא אותו שוב, ולכן סוגרים
   // מקומית כל id שאינו ברשימת השרת (אחרת askBar נשאר אחרי שהתור כבר המשיך).
   {
@@ -1526,6 +1527,9 @@ async function onSync(m) {
     for (const id of [...pendingPerms.keys()]) {
       if (!live.has(id)) closePermission(id, 'ended');
     }
+  }
+  if (revived && streamOwnerId && activeId !== streamOwnerId) {
+    toast(revived === 1 ? 'Claude ממתין לתשובה בשיחה אחרת' : `Claude ממתין ל-${revived} תשובות בשיחה אחרת`);
   }
   // התור וההמתנה למכסה שייכים לשיחה ולא למכשיר — נטענים מהשרת בכל התחברות
   onQueueUpdate(m.queue || []);
@@ -4789,7 +4793,11 @@ $('themeToggle').onclick = () => {
 
 // בלי העדפה מפורשת הערכה עדיין הולכת אחרי מערכת ההפעלה, ולכן שינוי שם
 // חייב להגיע גם לערכת הקוד. ‎isDark‎ מכריע מי גובר, ולכן הקריאה בטוחה תמיד.
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncHljsTheme);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  syncHljsTheme();
+  // בלי העדפת משתמש מפורשת — גם דיאגרמות mermaid עוקבות אחרי המערכת
+  if (!store.settings.theme) rethemeMermaid();
+});
 
 // ---------- קונפיג דינמי (נמשך מה-CLI) ----------
 let CONFIG = { models: [], permissionModes: [], cursorPermissionModes: [], cursorPrefix: 'cursor/' };
@@ -5468,7 +5476,7 @@ function newAskRef(id, tool, input, description) {
   return { type: 'ask', id, tool, input: input || {}, description: description || '', decision: null, answers: null, response: '' };
 }
 
-function showPermission(id, req) {
+function showPermission(id, req, opts) {
   req = req || {};
   const ref = newAskRef(id, req.tool_name || 'כלי', req.input || {}, req.description || '');
   ref.suggestions = Array.isArray(req.permission_suggestions) ? req.permission_suggestions : [];
@@ -5477,6 +5485,8 @@ function showPermission(id, req) {
   renderAskBar();
   notifyQuestion(ref);
   // לא קופצים בכוח לשיחה אחרת — הפס העליון "ממתין לתשובה" מוביל לשם בלחיצה
+  // silent: סנכרון מחדש עלול להחיות כמה כרטיסים בבת אחת — toast אחד בחוץ
+  if (opts && opts.silent) return;
   if (streamOwnerId && activeId !== streamOwnerId) toast('Claude ממתין לתשובה בשיחה אחרת');
   else autoScroll();
 }

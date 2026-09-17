@@ -424,3 +424,9 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F141 Dict lang switch keeps stale interim → FIXED (Round 23)
 [CONFUSION] clear interim + dictRender · Source: Worker Round 23
+
+### F142 OS theme change skips mermaid → FIXED (Round 24)
+[CONFUSION] rethemeMermaid on prefers-color-scheme · Source: regression dig
+
+### F143 Sync revive spams N toasts → FIXED (Round 24)
+[FEEDBACK] silent showPermission + one toast · Source: regression dig
