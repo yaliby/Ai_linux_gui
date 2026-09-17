@@ -2710,6 +2710,53 @@ function startRename(c, item, titleEl) {
   inp.onblur = commit;
   inp.onclick = (e) => e.stopPropagation();
 }
+
+/** שינוי שם בלי לחיצה כפולה — לטלפון וללוח הפקודות. */
+function renameConvPrompt(c) {
+  if (!c) c = activeConv();
+  if (!c) { toast('אין שיחה פעילה', true); return; }
+  if (c.anon) { toast('לצ׳אט אנונימי אין שם לשינוי', true); return; }
+  const v = prompt('שם חדש לשיחה', c.title || '');
+  if (v == null) return;
+  const t = v.trim();
+  if (!t) return;
+  c.title = clamp(t, 80);
+  markDirty(c); renderConvList();
+  if (c.id === activeId) $('convTitle').textContent = c.title;
+  toast('השם עודכן');
+}
+
+/** לחיצה ארוכה לשינוי שם במגע — לחיצה כפולה לא אמינה באצבע. */
+function bindTitleRename(t, c, item) {
+  if (c.anon) {
+    t.title = 'צ׳אט אנונימי — הכותרת קבועה, כדי שתוכן השיחה לא יופיע ברשימה';
+    return;
+  }
+  t.title = isTouch() ? 'לחיצה ארוכה לשינוי שם' : 'לחיצה כפולה לשינוי שם';
+  t.ondblclick = (e) => { e.stopPropagation(); startRename(c, item, t); };
+  let hold = 0;
+  let sx = 0, sy = 0;
+  let armed = false;
+  t.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') return;
+    sx = e.clientX; sy = e.clientY; armed = false;
+    hold = setTimeout(() => {
+      hold = 0; armed = true;
+      item._renameHold = true;
+      startRename(c, item, t);
+    }, 500);
+  });
+  const clear = (e) => {
+    if (hold) { clearTimeout(hold); hold = 0; }
+    if (armed && e) { e.preventDefault(); e.stopPropagation(); }
+  };
+  t.addEventListener('pointerup', clear);
+  t.addEventListener('pointercancel', clear);
+  t.addEventListener('pointermove', (e) => {
+    if (!hold) return;
+    if (Math.hypot(e.clientX - sx, e.clientY - sy) > 12) clear();
+  });
+}
 function renderConvList() {
   const list = $('convList'); list.innerHTML = '';
   const q = convQuery.trim().toLowerCase();
@@ -2736,13 +2783,11 @@ function renderConvList() {
     item.appendChild(del);
     // closeDrawer לפני switchConv ולא בתוכו: בחירה בשיחה שכבר פעילה יוצאת
     // מ-switchConv מיד, והמגירה נשארה פתוחה בדיוק כשהתכוונת לחזור אל השיחה.
-    item.onclick = () => { closeDrawer(); switchConv(c.id); };
-    if (!c.anon) {
-      t.ondblclick = (e) => { e.stopPropagation(); startRename(c, item, t); };
-      t.title = 'לחיצה כפולה לשינוי שם';
-    } else {
-      t.title = 'צ׳אט אנונימי — הכותרת קבועה, כדי שתוכן השיחה לא יופיע ברשימה';
-    }
+    item.onclick = () => {
+      if (item._renameHold) { item._renameHold = false; return; }
+      closeDrawer(); switchConv(c.id);
+    };
+    bindTitleRename(t, c, item);
     list.appendChild(item);
     // קטע ההקשר שהשרת מצא בגוף השיחה — מראה למה השיחה הזו תואמת
     const snip = searchHits && searchHits.get(c.id);
@@ -6607,6 +6652,7 @@ const paletteActions = () => [
   { ic: '⌂', name: 'תיקיית העבודה של השיחה', run: () => openDirPicker($('cwd').value.trim()) },
   { ic: '⚙', name: 'הגדרות', run: () => openSettings() },
   { ic: '⌕', name: 'חיפוש בתוך השיחה', run: () => openFind() },
+  { ic: '✎', name: 'שנה שם לשיחה הפעילה', run: () => renameConvPrompt() },
   { ic: '⇩', name: 'ייצוא השיחה ל-Markdown', run: () => exportActiveConv() },
   ...(dictSupported() ? [
     { ic: '🎙', name: dictOn ? 'עצור את ההכתבה הקולית' : 'הכתבה קולית — הכתב את ההודעה', run: () => dictToggle() },
@@ -7133,6 +7179,15 @@ $('askBarGo').onclick = jumpToPendingAsk;
 $('askBar').onclick = (e) => { if (e.target === $('askBar')) jumpToPendingAsk(); };
 $('exportBtn').onclick = exportActiveConv;
 $('findBtn').onclick = openFind;
+(function wireConvTitleRename() {
+  const t = $('convTitle');
+  if (!t) return;
+  const go = (e) => { e.preventDefault(); renameConvPrompt(); };
+  t.addEventListener('click', go);
+  t.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') go(e);
+  });
+})();
 $('findClose').onclick = closeFind;
 $('findPrev').onclick = () => stepFind(-1);
 $('findNext').onclick = () => stepFind(1);

@@ -223,3 +223,6 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F74 icon-btn / cwd-chip undersized on coarse → FIXED (Round 6)
 [RESPONSIVENESS] 44px · Source: [חקירה עצמאית]
+
+### F75 Rename only via dblclick — broken on touch → FIXED (Round 7)
+[DISCOVERABILITY] long-press + convTitle click + palette · Source: [חקירה עצמאית]

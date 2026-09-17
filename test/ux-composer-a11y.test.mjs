@@ -401,4 +401,12 @@ t.section('סבב 6 — מגע וחיפוש');
   t.ok('חיפוש שיחות נכשל → toast', /חיפוש בגוף השיחות נכשל/.test(app));
 }
 
+t.section('סבב 7 — שינוי שם במגע');
+{
+  t.ok('bindTitleRename קיים', /function bindTitleRename\(/.test(app));
+  t.ok('לחיצה ארוכה 500ms', /setTimeout\([\s\S]{0,80}startRename[\s\S]{0,40}500\)/.test(app));
+  t.ok('renameConvPrompt בלוח פקודות', /שנה שם לשיחה הפעילה/.test(app));
+  t.ok('convTitle לחיץ עם role=button', /id="convTitle"[^>]*role="button"/.test(html));
+}
+
 t.done();
