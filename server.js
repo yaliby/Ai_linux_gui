@@ -38,12 +38,30 @@ const oaiProviders = loadProviders();
 const PORT = process.env.PORT || 4173;
 const app = express();
 
-app.use(express.static(path.join(__dirname, 'public')));
-// ספריות צד-לקוח (אפליקציה מקומית — אין הגבלת CSP)
-app.use('/vendor/marked', express.static(path.join(__dirname, 'node_modules/marked')));
-app.use('/vendor/dompurify', express.static(path.join(__dirname, 'node_modules/dompurify/dist')));
-app.use('/vendor/highlight', express.static(path.join(__dirname, 'node_modules/@highlightjs/cdn-assets')));
-app.use('/vendor/mermaid', express.static(path.join(__dirname, 'node_modules/mermaid/dist')));
+// הנכסים הסטטיים ומקורותיהם. הרשימה משותפת לשכבת הדחיסה ול-‎express.static‎
+// כדי ששתיהן לא יוכלו להיפרד: שורש שנרשם רק באחת מהן היה מוגש בלי דחיסה
+// (או גרוע מזה, נדחס בלי להיות מוגש).
+const STATIC_MOUNTS = [
+  { prefix: '/', dir: path.join(__dirname, 'public') },
+  // ספריות צד-לקוח (אפליקציה מקומית — אין הגבלת CSP)
+  { prefix: '/vendor/marked', dir: path.join(__dirname, 'node_modules/marked') },
+  { prefix: '/vendor/dompurify', dir: path.join(__dirname, 'node_modules/dompurify/dist') },
+  { prefix: '/vendor/highlight', dir: path.join(__dirname, 'node_modules/@highlightjs/cdn-assets') },
+  { prefix: '/vendor/mermaid', dir: path.join(__dirname, 'node_modules/mermaid/dist') },
+];
+
+// brotli/gzip לפני ההגשה הרגילה. טעינה קרה של הקליפה ירדה מ-819KB ל-199KB.
+// ‎express.static‎ נשאר מאחוריו ומטפל בכל מה שהוא מוותר עליו: קבצים קטנים,
+// לקוח בלי ‎Accept-Encoding‎, ‎Range‎, ומה שעדיין לא נדחס.
+const staticCompress = require('./lib/static-compress')({
+  mounts: STATIC_MOUNTS,
+  onError: (e) => dbg('static-compress', { err: String(e && e.message || e) }),
+});
+app.use(staticCompress);
+for (const m of STATIC_MOUNTS) {
+  if (m.prefix === '/') app.use(express.static(m.dir));
+  else app.use(m.prefix, express.static(m.dir));
+}
 
 // בדיקת קיום תיקייה (לוולידציה של שדה "תיקיית עבודה")
 app.get('/api/check-dir', (req, res) => {
@@ -3789,4 +3807,9 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`\n  \x1b[1mSol · ממשק RTL ל-Claude Code\x1b[0m`);
   const proto = server instanceof https.Server ? 'https' : 'http';
   console.log(`  \x1b[36m${proto}://localhost:${PORT}\x1b[0m\n`);
+  // דוחסים את הקליפה מראש, כדי שגם הבקשה הראשונה אחרי הפעלה תקבל גרסה
+  // דחוסה. רץ על ה-threadpool ולא מעכב את ההאזנה.
+  staticCompress.warm(['/index.html', '/app.js', '/style.css', '/sw.js',
+    '/vendor/highlight/highlight.min.js', '/vendor/marked/marked.min.js',
+    '/vendor/dompurify/purify.min.js']);
 });
