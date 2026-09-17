@@ -4145,6 +4145,7 @@ function dictPaint() {
   btn.title = !secure ? 'הכתבה קולית דורשת חיבור מאובטח (https)'
     : dictOn ? 'עצור הכתבה (Esc)'
     : `הכתבה קולית · ${dictLangInfo().name} · Ctrl/⌘+Shift+M`;
+  btn.setAttribute('aria-label', btn.title);
   const strip = $('dictStrip');
   if (strip) {
     strip.classList.toggle('hidden', !dictOn);
@@ -7037,6 +7038,10 @@ let paletteReturnFocus = null;
 // שקופצת ובולעת חצי מסך על תפריט של עשר שורות היא בדיוק ההפך ממה שצריך.
 function openPalette(focus = true) {
   if (!$('modelPicker').classList.contains('hidden')) closeModelPicker();
+  if (!$('settings').classList.contains('hidden')) closeSettings();
+  if (isUsageModalOpen()) setUsageModalOpen(false);
+  if (!$('modal').classList.contains('hidden')) closeModal();
+  if (!$('findBar').classList.contains('hidden')) closeFind();
   paletteReturnFocus = document.activeElement;
   $('palette').classList.remove('hidden');
   const more = $('moreBtn');

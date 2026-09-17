@@ -466,3 +466,9 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F155 themeToggle aria stale on init → FIXED (Round 34)
 [ACCESSIBILITY] syncThemeChrome after load · Source: residual dig
+
+### F156 Palette stacks over modal/usage → FIXED (Round 35)
+[CONFUSION] openPalette closes modal/usage/settings/find · Source: Worker Round 35
+
+### F157 micBtn aria-label stale → FIXED (Round 35)
+[ACCESSIBILITY] dictPaint syncs aria-label from title · Source: residual dig
