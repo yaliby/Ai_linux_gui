@@ -451,3 +451,6 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F150 Settings stays open under modal/usage → FIXED (Round 30)
 [CONFUSION] mutual close settings↔modal/usage · Source: Worker Round 30
+
+### F151 Modal/find open under usage overlay → FIXED (Round 31)
+[CONFUSION] openModal/openFind close usage · Source: Worker Round 31

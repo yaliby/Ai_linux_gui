@@ -6158,6 +6158,7 @@ function onModalKeydown(e) {
 }
 function openModal(title, node) {
   if (!$('settings').classList.contains('hidden')) closeSettings();
+  if (isUsageModalOpen()) setUsageModalOpen(false);
   modalReturnFocus = document.activeElement;
   $('modalTitle').textContent = title;
   const b = $('modalBody'); b.innerHTML = ''; b.appendChild(node);
@@ -7497,6 +7498,7 @@ function updateFindCount() {
 }
 function openFind() {
   if (!$('settings').classList.contains('hidden')) closeSettings();
+  if (isUsageModalOpen()) setUsageModalOpen(false);
   $('findBar').classList.remove('hidden');
   const i = $('findInput'); i.focus(); i.select();
 }
