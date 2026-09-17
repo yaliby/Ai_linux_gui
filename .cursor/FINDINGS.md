@@ -445,3 +445,6 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F148 wideToggle aria-label stale after applyWide → FIXED (Round 28)
 [ACCESSIBILITY] sync title/aria-label/aria-pressed · Source: residual dig
+
+### F149 Find opens under settings popover → FIXED (Round 29)
+[CONFUSION] openFind closes settings; openSettings closes find · Source: Worker Round 29

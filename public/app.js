@@ -4252,6 +4252,7 @@ $('anonTools').onclick = () => {
 let settingsOpenedAt = 0;
 let settingsReturnFocus = null;
 function openSettings() {
+  if (!$('findBar').classList.contains('hidden')) closeFind();
   settingsReturnFocus = document.activeElement;
   $('settings').classList.remove('hidden');
   const tog = $('settingsToggle');
@@ -7491,6 +7492,7 @@ function updateFindCount() {
   if (c) c.textContent = findState.marks.length ? `${findState.idx + 1}/${findState.marks.length}` : (findState.q.length >= 2 ? 'אין תוצאות' : '');
 }
 function openFind() {
+  if (!$('settings').classList.contains('hidden')) closeSettings();
   $('findBar').classList.remove('hidden');
   const i = $('findInput'); i.focus(); i.select();
 }

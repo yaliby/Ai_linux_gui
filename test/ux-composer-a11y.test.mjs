@@ -552,4 +552,10 @@ t.section('סבב 27 — חיפוש מול מגירה');
   t.ok('Ctrl+Shift+F פותח מגירה בטלפון', /drawerMode\(\)\) document\.querySelector\('\.app'\)\.classList\.add\('side-open'\)/.test(app));
 }
 
+t.section('סבב 29 — חיפוש מול הגדרות');
+{
+  t.ok('openFind סוגר הגדרות', /function openFind\([\s\S]{0,120}closeSettings/.test(app));
+  t.ok('openSettings סוגר חיפוש', /function openSettings\([\s\S]{0,80}closeFind/.test(app));
+}
+
 t.done();
