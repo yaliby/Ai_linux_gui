@@ -2297,11 +2297,14 @@ async function rewindToMessage(msg, getText) {
   conv.ctx = null;
   // משחררים את התהליך הנוכחי — השליחה הבאה תפעיל --resume על הסשן החתוך
   if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'end' }));
+  const queued = msgQueue.length;
   clearQueue();
   conv.draft = text;
   save(); renderConversation(); renderConvList();
   const i = $('input'); i.value = text; autoGrow(); i.focus(); i.setSelectionRange(i.value.length, i.value.length);
-  toast('חזרת לנקודה זו — ערוך ושלח מחדש');
+  toast(queued
+    ? `חזרת לנקודה זו — ${queued} פרומפטים בתור בוטלו · ערוך ושלח מחדש`
+    : 'חזרת לנקודה זו — ערוך ושלח מחדש');
 }
 
 // ---------- הודעות משתמש / הערות ----------
@@ -3367,6 +3370,23 @@ function onLimitResumed(m) {
 }
 
 function isUsageModalOpen() { return $('usageModal') && !$('usageModal').classList.contains('hidden'); }
+function usageFocusables() {
+  const root = $('usageModal');
+  if (!root || root.classList.contains('hidden')) return [];
+  return [...root.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => !el.disabled && el.offsetParent !== null);
+}
+function onUsageModalKeydown(e) {
+  if (!isUsageModalOpen()) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setUsageModalOpen(false); return; }
+  if (e.key !== 'Tab') return;
+  const list = usageFocusables();
+  if (!list.length) { e.preventDefault(); return; }
+  const first = list[0], last = list[list.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  else if (!list.includes(document.activeElement)) { e.preventDefault(); first.focus(); }
+}
 function setUsageModalOpen(open) {
   const modal = $('usageModal');
   const strip = $('composerUsage');
@@ -3378,13 +3398,17 @@ function setUsageModalOpen(open) {
   if (strip) strip.classList.toggle('open', open);
   document.body.style.overflow = open ? 'hidden' : '';
   if (open) {
+    document.addEventListener('keydown', onUsageModalKeydown, true);
     refreshUsage();
     const close = $('usageModalClose');
     if (close) close.focus();
-  } else if (modal._returnFocus && typeof modal._returnFocus.focus === 'function') {
-    try { modal._returnFocus.focus(); } catch {}
-    modal._returnFocus = null;
-  } else if (btn) btn.focus();
+  } else {
+    document.removeEventListener('keydown', onUsageModalKeydown, true);
+    if (modal._returnFocus && typeof modal._returnFocus.focus === 'function') {
+      try { modal._returnFocus.focus(); } catch {}
+      modal._returnFocus = null;
+    } else if (btn) btn.focus();
+  }
 }
 function toggleUsageModal() { setUsageModalOpen(!isUsageModalOpen()); }
 
@@ -4624,15 +4648,19 @@ function openDirPicker(start) {
   const list = el('div', 'dp-list');
   const actions = el('div', 'dp-actions');
   const pick = el('button', 'rm-btn primary', 'בחר תיקייה זו');
-  pick.onclick = () => { setCwd(dirPickAt); closeModal(); toast('תיקיית העבודה: ' + dirPickAt); };
+  pick.onclick = () => {
+    if (pick.disabled || !dirPickAt) { toast('אין תיקייה זמינה לבחירה', true); return; }
+    setCwd(dirPickAt); closeModal(); toast('תיקיית העבודה: ' + dirPickAt);
+  };
   actions.appendChild(pick);
   wrap.appendChild(cur); wrap.appendChild(list); wrap.appendChild(actions);
   openModal('בחירת תיקיית עבודה', wrap);
-  loadDirs(start, cur, list);
+  loadDirs(start, cur, list, pick);
 }
-async function loadDirs(p, cur, list) {
+async function loadDirs(p, cur, list, pick) {
   list.innerHTML = '';
   list.appendChild(el('div', 'modal-empty', 'טוען…'));
+  if (pick) pick.disabled = true;
   let d;
   try {
     const r = await fetch('/api/list-dirs?path=' + encodeURIComponent(p || ''));
@@ -4641,20 +4669,22 @@ async function loadDirs(p, cur, list) {
   } catch (e) {
     list.innerHTML = '';
     list.appendChild(el('div', 'modal-empty', 'לא ניתן לקרוא את התיקייה (' + (e.message || e) + ')'));
+    if (pick) pick.disabled = true;
     return;
   }
   dirPickAt = d.path;
   cur.textContent = d.path;
+  if (pick) pick.disabled = false;
   list.innerHTML = '';
   if (d.parent) {
     const up = el('button', 'dp-row up', '‹‹  ' + d.parent);
-    up.onclick = () => loadDirs(d.parent, cur, list);
+    up.onclick = () => loadDirs(d.parent, cur, list, pick);
     list.appendChild(up);
   }
   if (!d.dirs.length) list.appendChild(el('div', 'modal-empty', 'אין תת־תיקיות'));
   for (const name of d.dirs) {
     const row = el('button', 'dp-row', name + '/');
-    row.onclick = () => loadDirs(d.path.replace(/\/$/, '') + '/' + name, cur, list);
+    row.onclick = () => loadDirs(d.path.replace(/\/$/, '') + '/' + name, cur, list, pick);
     list.appendChild(row);
   }
 }
@@ -6317,11 +6347,17 @@ function renderRemote(wrap) {
     img.alt = 'קוד קישור';
     qr.appendChild(img);
     const expMeta = el('div', 'remote-meta', '');
+    let codeBtn = null, copyBtn = null;
     const paintExp = () => {
       const left = (s.pairExpiresAt || 0) - Date.now();
-      expMeta.textContent = left <= 0
+      const dead = left <= 0;
+      expMeta.textContent = dead
         ? 'פג תוקף — בטלו והנפיקו קוד חדש'
         : `סרוק מהטלפון · תקף עוד ${fmtLeft(left)}`;
+      qr.classList.toggle('expired', dead);
+      img.style.opacity = dead ? '0.35' : '';
+      if (codeBtn) { codeBtn.disabled = dead; codeBtn.setAttribute('aria-disabled', dead ? 'true' : 'false'); }
+      if (copyBtn) { copyBtn.disabled = dead; }
     };
     paintExp();
     qr.appendChild(expMeta);
@@ -6332,7 +6368,7 @@ function renderRemote(wrap) {
           clearInterval(wrap._pairTick); wrap._pairTick = null; return;
         }
         paintExp();
-      }, 15000);
+      }, 1000);
     }
 
     // מי שלא יכול לסרוק — מחשב מול מחשב, או קוד שנשלח בהודעה — מקליד את הקוד
@@ -6344,18 +6380,27 @@ function renderRemote(wrap) {
       code.type = 'button';
       code.title = 'לחיצה מעתיקה';
       code.setAttribute('aria-label', 'העתק קוד קישור ' + s.pairCode);
-      code.onclick = async () => { (await copyText(s.pairCode)) ? toast('הקוד הועתק') : toast('ההעתקה נכשלה', true); };
+      code.onclick = async () => {
+        if (code.disabled) { toast('הקוד פג תוקף — הנפיקו קוד חדש', true); return; }
+        (await copyText(s.pairCode)) ? toast('הקוד הועתק') : toast('ההעתקה נכשלה', true);
+      };
+      codeBtn = code;
       man.appendChild(code);
       box.appendChild(man);
     }
 
     const row = el('div', 'remote-actions');
     const copy = el('button', 'rm-btn', 'העתק קישור');
-    copy.onclick = async () => { (await copyText(s.pairUrl)) ? toast('הקישור הועתק') : toast('ההעתקה נכשלה', true); };
+    copy.onclick = async () => {
+      if (copy.disabled) { toast('הקישור פג תוקף — הנפיקו קוד חדש', true); return; }
+      (await copyText(s.pairUrl)) ? toast('הקישור הועתק') : toast('ההעתקה נכשלה', true);
+    };
+    copyBtn = copy;
     const cancel = el('button', 'rm-btn', 'בטל');
     cancel.onclick = async () => { try { await remoteCall('cancel-pair'); renderRemote(wrap); } catch (e) { toast(e.message, true); } };
     row.appendChild(copy); row.appendChild(cancel);
     box.appendChild(row);
+    paintExp();
   } else {
     const row = el('div', 'remote-actions');
     const on = el('button', 'rm-btn primary', 'קשר מכשיר חדש');
@@ -6583,7 +6628,7 @@ function rcStartForm(wrap) {
     dp.appendChild(cur); dp.appendChild(list);
     const acts = el('div', 'dp-actions'); acts.appendChild(pick); dp.appendChild(acts);
     box.appendChild(dp);
-    loadDirs(dirPickAt || rcForm.cwd || '', cur, list);
+    loadDirs(dirPickAt || rcForm.cwd || '', cur, list, pick);
   }
 
   // או שהבדיקה המקדימה גילתה זאת, או שהתהליך כבר נפל על זה בפועל

@@ -376,3 +376,15 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F125 Escape closes wrong visual layer → FIXED (Round 18)
 [CONFUSION] z-order Escape stack · Source: Worker Round 18 Escape
+
+### F126 Usage modal Tab escapes → FIXED (Round 19)
+[ACCESSIBILITY] onUsageModalKeydown trap · Source: Worker Round 19
+
+### F127 Rewind clears queue silently → FIXED (Round 19)
+[CONFUSION] toast with queued count · Source: Worker Round 19
+
+### F128 Cwd picker pick after failed nav → FIXED (Round 19)
+[FEEDBACK] disable pick on loadDirs error · Source: Worker Round 19
+
+### F129 Pair actions live after expiry → FIXED (Round 19)
+[FEEDBACK] disable code/copy + fade QR · Source: Worker Round 19

@@ -486,10 +486,18 @@ t.section('סבב 18 — מודאל / שליחה / Escape / שיתוף');
   t.ok('ספירת מכסה מתעדכנת כל שנייה', /setInterval\(renderLimitBar,\s*1000\)/.test(app));
   t.ok('Ctrl+F סוגר לוח לפני חיפוש', /closePalette\(\)[\s\S]{0,40}openFind\(\)/.test(app));
   t.ok('שיתוף לא-תמונה מדווח', /ניתן לצרף תמונות בלבד/.test(app));
-  const escBlock = slice("document.addEventListener('keydown'", 'trackComposerHeight');
+  const escBlock = slice("mod && (e.key === 'f'", 'trackComposerHeight');
   const iPal = escBlock.indexOf('closePalette');
   const iSet = escBlock.indexOf('closeSettings');
   t.ok('Escape סוגר palette לפני settings', iPal >= 0 && iSet > iPal);
+}
+
+t.section('סבב 19 — מכסה / rewind / תיקייה / pair');
+{
+  t.ok('usage modal מלכודת Tab', /onUsageModalKeydown/.test(app) && /usageFocusables/.test(app));
+  t.ok('rewind מדווח על ביטול תור', /פרומפטים בתור בוטלו/.test(app));
+  t.ok('loadDirs משבית בחירה בכשל', /pick\.disabled\s*=\s*true/.test(slice('async function loadDirs(', 'function checkCwd(')));
+  t.ok('קוד pair מושבת אחרי פקיעה', /codeBtn\.disabled\s*=\s*dead|code\.disabled/.test(app) && /פג תוקף/.test(app));
 }
 
 t.done();

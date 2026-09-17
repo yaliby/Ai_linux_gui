@@ -43,7 +43,8 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 11:55 | HEARTBEAT | Round 16 discover | F01–F106 · re-sim pending |
 | 11:58 | COMMIT | Round 16 F107–F110 | delete/palette/find · CACHE v39 |
 | 12:03 | COMMIT | Round 17 F111–F115,F117–F119 | perms/ac/anon/busy · CACHE v40 · F116 OPEN |
-| 12:03 | HEARTBEAT | continue to 16:08 | F01–F119 · 16/16 |
+| 12:09 | COMMIT | Round 18 F116,F120–F125 | modal trap, Escape, share, limit · CACHE v41 |
+| 12:09 | HEARTBEAT | Round 19 hunt | F01–F125 · 16/16 · window→16:08 |
 ## Decisions
 
 - Parallel workers; serialize writers on same files.
@@ -54,7 +55,7 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 
 ## Commits (local only)
 
-`b5335a6` … `ad1b0f4` (Rounds 1–16) · Round 17 pending
+Rounds 1–18 on `ux-optimization-run` through `565f36b`+
 
 ## Existing dirty (owner — do not commit)
 
