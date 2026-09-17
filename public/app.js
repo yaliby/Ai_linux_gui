@@ -732,6 +732,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 let saveState = 'idle';
 function setSaveState(s) {
   if (saveState === s) return;
+  const prev = saveState;
   saveState = s;
   const dot = $('saveDot');
   if (!dot) return;
@@ -739,7 +740,10 @@ function setSaveState(s) {
   dot.className = 'save-dot ' + s;
   dot.textContent = s === 'error' ? 'לא נשמר' : s === 'saving' || s === 'pending' ? 'שומר…' : s === 'saved' ? 'נשמר' : '';
   dot.title = storeDir ? label + ' · ' + storeDir : label;
+  dot.setAttribute('aria-label', label || 'מצב שמירה');
   dot.classList.toggle('hidden', s === 'idle');
+  // כשל שמירה שקט היה משאיר רק נקודה אדומה — בטלפון היא נראית, אבל בלי הסבר
+  if (s === 'error' && prev !== 'error') toast('השמירה נכשלה — מנסה שוב', true);
 }
 
 // ---------- טעינה מהשרת ----------
@@ -4035,7 +4039,9 @@ $('sideBackdrop').onclick = () => document.querySelector('.app').classList.remov
 // כפתור "עוד" בסרגל העליון פותח את לוח הפקודות כתפריט פעולות
 $('moreBtn').onclick = () => {
   const p = $('palette');
-  p.classList.contains('hidden') ? openPalette(false) : closePalette();
+  const open = p.classList.contains('hidden');
+  open ? openPalette(false) : closePalette();
+  $('moreBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
 };
 
 // ---------- רוחב סרגל צד — גרירה קלאסית ----------
@@ -4559,6 +4565,9 @@ function attachModelSearch(sel) {
   if (sel._mpSync) { sel._mpSync(); return sel._mpBtn; }
   const btn = el('button', 'pill mp-btn');
   btn.type = 'button';
+  btn.setAttribute('aria-haspopup', 'dialog');
+  btn.setAttribute('aria-controls', 'modelPicker');
+  btn.setAttribute('aria-expanded', 'false');
   btn.onclick = () => openModelPicker(sel);
   sel.classList.add('mp-native');
   sel._mpBtn = btn;
@@ -4567,6 +4576,7 @@ function attachModelSearch(sel) {
     const label = o ? o.textContent : 'מודל ברירת מחדל';
     btn.innerHTML = brandMarkHtml(sel.value, 16) + `<span class="mp-btn-name">${escHtml(label)}</span>`;
     btn.title = brandTitle(sel.value) + ' — לחץ לחיפוש מודל';
+    btn.setAttribute('aria-label', btn.title);
   };
   sel._mpSync();
   if (sel.parentElement) sel.parentElement.insertBefore(btn, sel);
@@ -4576,6 +4586,7 @@ function attachModelSearch(sel) {
 function openModelPicker(sel) {
   mpState = { sel, cur: sel.value, items: [], idx: 0 };
   $('modelPicker').classList.remove('hidden');
+  if (sel && sel._mpBtn) sel._mpBtn.setAttribute('aria-expanded', 'true');
   const inp = $('modelPickerInput');
   inp.value = '';
   buildModelPicker('');
@@ -4583,7 +4594,12 @@ function openModelPicker(sel) {
   // זמינה בנגיעה אחת בשדה.
   if (!isTouch()) inp.focus();
 }
-function closeModelPicker() { $('modelPicker').classList.add('hidden'); mpState = null; }
+function closeModelPicker() {
+  const sel = mpState && mpState.sel;
+  $('modelPicker').classList.add('hidden');
+  if (sel && sel._mpBtn) sel._mpBtn.setAttribute('aria-expanded', 'false');
+  mpState = null;
+}
 
 /** תוצאות החיפוש: כל מילה חייבת להימצא בשם, במזהה או בקטגוריה.
  *  מועדפים עולים לקבוצה «מועדפים» בראש הרשימה (לפי סדר הסימון), בלי כפילות
@@ -6450,11 +6466,18 @@ let pal = null;
 // שקופצת ובולעת חצי מסך על תפריט של עשר שורות היא בדיוק ההפך ממה שצריך.
 function openPalette(focus = true) {
   $('palette').classList.remove('hidden');
+  const more = $('moreBtn');
+  if (more) more.setAttribute('aria-expanded', 'true');
   const inp = $('paletteInput');
   inp.value = ''; buildPalette('');
   if (focus) inp.focus();
 }
-function closePalette() { $('palette').classList.add('hidden'); pal = null; }
+function closePalette() {
+  $('palette').classList.add('hidden');
+  pal = null;
+  const more = $('moreBtn');
+  if (more) more.setAttribute('aria-expanded', 'false');
+}
 function buildPalette(q) {
   q = q.trim().toLowerCase();
   const actions = paletteActions().filter(a => !q || a.name.toLowerCase().includes(q));

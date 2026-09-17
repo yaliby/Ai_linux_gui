@@ -220,4 +220,28 @@ t.section('ניגודיות text-faint על panel-2 (בהיר)');
   }
 }
 
+t.section('מגירת שיחות — backdrop לחיץ');
+{
+  t.ok('sideBackdrop בלי hidden שמנטרל display', !/id="sideBackdrop"[^>]*\bhidden\b/.test(html));
+}
+
+t.section('בורר מודל — aria');
+{
+  const snip = slice('function attachModelSearch(', 'function modelPickerItems(');
+  t.ok('mp-btn עם aria-haspopup', /aria-haspopup/.test(snip));
+  t.ok('open/close מעדכנים aria-expanded', /aria-expanded/.test(snip));
+}
+
+t.section('moreBtn — גילוי');
+{
+  t.ok('moreBtn מזכיר חיפוש/הגדרות', /id="moreBtn"[^>]*(חיפוש|הגדרות)/.test(html));
+  t.ok('moreBtn עם aria-expanded', /id="moreBtn"[^>]*aria-expanded=/.test(html));
+}
+
+t.section('שמירה נכשלה — toast');
+{
+  const snip = slice('function setSaveState(', '// ---------- טעינה מהשרת');
+  t.ok('שגיאת שמירה מציגה toast', /error[\s\S]{0,200}toast\(/.test(snip));
+}
+
 t.done();
