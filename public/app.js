@@ -3642,8 +3642,20 @@ $('input').addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && dictOn) { e.preventDefault(); e.stopPropagation(); dictStop(); return; }
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); return; }
   const i = $('input');
-  if (e.key === 'ArrowUp' && i.selectionStart === 0 && store.history && store.history.length) { e.preventDefault(); histIdx = Math.min(histIdx + 1, store.history.length - 1); i.value = store.history[histIdx]; autoGrow(); }
-  else if (e.key === 'ArrowDown' && histIdx >= 0) { e.preventDefault(); histIdx--; i.value = histIdx < 0 ? '' : store.history[histIdx]; autoGrow(); }
+  // קיצור «↑/↓ בתיבה ריקה» — לא לדרוס טיוטה כשהסמן רק בתחילת שורה
+  if (e.key === 'ArrowUp' && i.selectionStart === 0 && i.selectionEnd === 0
+      && store.history && store.history.length
+      && (histIdx >= 0 || !i.value)) {
+    e.preventDefault();
+    histIdx = Math.min(histIdx + 1, store.history.length - 1);
+    i.value = store.history[histIdx];
+    autoGrow(); stashDraftSoon();
+  } else if (e.key === 'ArrowDown' && histIdx >= 0) {
+    e.preventDefault();
+    histIdx--;
+    i.value = histIdx < 0 ? '' : store.history[histIdx];
+    autoGrow(); stashDraftSoon();
+  }
 });
 $('sendBtn').onclick = () => sendMessage();
 
@@ -4006,7 +4018,25 @@ $('anonTools').onclick = () => {
 
 // ---------- הגדרות + עיצוב ----------
 let settingsOpenedAt = 0;
-function openSettings() { $('settings').classList.remove('hidden'); settingsOpenedAt = Date.now(); renderNotifyRow(); renderInstallRow(); }
+let settingsReturnFocus = null;
+function openSettings() {
+  settingsReturnFocus = document.activeElement;
+  $('settings').classList.remove('hidden');
+  settingsOpenedAt = Date.now();
+  renderNotifyRow();
+  renderInstallRow();
+}
+function closeSettings() {
+  $('settings').classList.add('hidden');
+  const back = settingsReturnFocus;
+  settingsReturnFocus = null;
+  if (back && typeof back.focus === 'function') {
+    try { back.focus(); } catch {}
+  } else {
+    const t = $('settingsToggle');
+    if (t) t.focus();
+  }
+}
 
 // ---------- מתג ההתרעות ----------
 $('notifyOn').onchange = (e) => { store.settings.notify = e.target.checked; save(); renderNotifyRow(); };
@@ -4021,7 +4051,7 @@ $('notifyTest').onclick = () => {
 $('settingsToggle').onclick = (e) => {
   e.stopPropagation();
   if ($('settings').classList.contains('hidden')) openSettings();
-  else $('settings').classList.add('hidden');
+  else closeSettings();
 };
 document.addEventListener('click', (e) => {
   const s = $('settings');
@@ -4029,7 +4059,7 @@ document.addEventListener('click', (e) => {
   // הקליק *שפתח* את החלונית ממשיך לבעבע לכאן ומיד סגר אותה — כך "הגדרות"
   // בלוח הפקודות (הדרך היחידה אליהן בטלפון) פשוט לא עשה כלום.
   if (Date.now() - settingsOpenedAt < 300) return;
-  if (!s.contains(e.target) && e.target !== $('settingsToggle')) s.classList.add('hidden');
+  if (!s.contains(e.target) && e.target !== $('settingsToggle')) closeSettings();
 });
 // matchMedia ולא innerWidth: זו בדיוק אותה נקודת שבירה שבה ה-CSS הופך את
 // הסרגל למגירה צפה. שתי הגדרות נפרדות של "760" נוטות להיפרד זו מזו — ולכן
@@ -5179,17 +5209,19 @@ function showPermission(id, req) {
 }
 
 function decidePermission(id, decision, extra, ref) {
-  const pre = ref || (pendingPerms.get(id) || {}).ref;
-  if (ws && ws.readyState === ws.OPEN) {
-    // label/answers נוסעים יחד עם ההחלטה כדי שהכרטיס במכשיר השני ייסגר עם
-    // הניסוח המדויק ("נענה" / "התוכנית אושרה") ועם התשובה שנבחרה בפועל.
-    ws.send(JSON.stringify({
-      type: 'permission', requestId: id, decision, ...extra,
-      label: (pre && pre.decision) || decision,
-      answers: (pre && pre.answers) || null,
-      response: (pre && pre.response) || null,
-    }));
+  if (!ws || ws.readyState !== ws.OPEN) {
+    toast('אין חיבור לשרת — לא ניתן לאשר או לדחות כרגע', true);
+    return;
   }
+  const pre = ref || (pendingPerms.get(id) || {}).ref;
+  // label/answers נוסעים יחד עם ההחלטה כדי שהכרטיס במכשיר השני ייסגר עם
+  // הניסוח המדויק ("נענה" / "התוכנית אושרה") ועם התשובה שנבחרה בפועל.
+  ws.send(JSON.stringify({
+    type: 'permission', requestId: id, decision, ...extra,
+    label: (pre && pre.decision) || decision,
+    answers: (pre && pre.answers) || null,
+    response: (pre && pre.response) || null,
+  }));
   closeAskNotification(id);
   const p = pendingPerms.get(id);
   const r = ref || (p && p.ref);
@@ -5567,7 +5599,11 @@ function renderDialogCard(ref, isLive) {
   return card;
 }
 function sendDialog(id, response, error) {
-  if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'dialog', requestId: id, response, error }));
+  if (!ws || ws.readyState !== ws.OPEN) {
+    toast('אין חיבור לשרת — לא ניתן להשיב כרגע', true);
+    return;
+  }
+  ws.send(JSON.stringify({ type: 'dialog', requestId: id, response, error }));
   const p = pendingPerms.get(id);
   pendingPerms.delete(id);
   if (p && p.ref) { refreshAskCard(p.ref); persist(); }
@@ -7120,7 +7156,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !$('findBar').classList.contains('hidden')) { closeFind(); return; }
   // לוח "עוד" בטלפון נפתח בלי פוקוס בשדה — Escape על הקלט לא קיים שם.
   if (e.key === 'Escape' && !$('palette').classList.contains('hidden')) { e.preventDefault(); closePalette(); return; }
-  if (e.key === 'Escape' && !$('settings').classList.contains('hidden')) { e.preventDefault(); $('settings').classList.add('hidden'); return; }
+  if (e.key === 'Escape' && !$('settings').classList.contains('hidden')) { e.preventDefault(); closeSettings(); return; }
   if (e.key === 'Escape' && !$('usageModal').classList.contains('hidden')) { e.preventDefault(); setUsageModalOpen(false); return; }
   if (e.key === 'Escape' && !$('modal').classList.contains('hidden')) { e.preventDefault(); closeModal(); return; }
   if (e.key === 'Escape' && !$('modelPicker').classList.contains('hidden')) { e.preventDefault(); closeModelPicker(); return; }

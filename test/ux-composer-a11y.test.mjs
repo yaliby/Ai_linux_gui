@@ -370,4 +370,19 @@ t.section('סבב 3 — שיתוף / cwd / rewind / ייצוא');
   t.ok('ייצוא שיחה ריקה → toast', /אין מה לייצא/.test(ex));
 }
 
+t.section('סבב 4 — היסטוריית ↑ ופוקוס הגדרות');
+{
+  const snip = app.slice(app.indexOf("$('input').addEventListener('keydown'"), app.indexOf("$('sendBtn').onclick"));
+  t.ok('ArrowUp רק בתיבה ריקה או באמצע דפדוף', /histIdx\s*>=\s*0\s*\|\|\s*!i\.value/.test(snip));
+  t.ok('closeSettings מחזיר focus', /function closeSettings\(/.test(app) && /settingsReturnFocus/.test(app));
+  t.ok('Escape קורא closeSettings', /Escape[\s\S]{0,80}closeSettings\(/.test(app));
+}
+
+t.section('סבב 4 — אישור הרשאה בלי חיבור');
+{
+  const snip = slice('function decidePermission(', 'function closeAskNotification(');
+  t.ok('decidePermission בלי WS לא סוגר כרטיס', /אין חיבור לשרת/.test(snip) && /return;/.test(snip));
+  t.ok('שולח permission רק אחרי בדיקת WS', /readyState\s*!==\s*ws\.OPEN[\s\S]{0,200}return/.test(snip));
+}
+
 t.done();

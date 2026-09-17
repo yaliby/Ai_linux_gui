@@ -202,3 +202,12 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F67 empty export silent success → FIXED (Round 3)
 [FEEDBACK] toast when empty / no duet body · Source: [חקירה עצמאית]
+
+### F68 ArrowUp overwrites draft → FIXED (Round 4)
+[FRICTION] hist only when empty or mid-browse · Source: [חקירה עצמאית]
+
+### F69 Settings Escape drops focus → FIXED (Round 4)
+[ACCESSIBILITY] closeSettings + returnFocus · Source: [חקירה עצמאית]
+
+### F70 Offline permission closes card locally → FIXED (Round 4)
+[RECOVERY] decidePermission/sendDialog require WS · Source: [חקירה עצמאית]
