@@ -1680,7 +1680,8 @@ option.opt-god { color: var(--god); font-weight: 700; }
   flex: 1; min-width: 0; font-family: var(--ui); font-size: 13.5px; color: var(--text);
   background: transparent; border: none; padding: 4px 6px; unicode-bidi: plaintext;
 }
-.find-bar input:focus { outline: none; }
+.find-bar input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--accent); border-radius: 6px; }
+.find-bar input:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
 .find-count { font-size: 11.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; flex: none; white-space: nowrap; }
 .find-nav {
   flex: none; width: 28px; height: 28px; border-radius: 8px; border: none;
@@ -2087,12 +2088,12 @@ body.compose-compact.compose-tall #sendBtn { order: 5; }
   .lb-body { flex: 1 1 60%; }
   .lb-body small { white-space: normal; }
   .lb-acts { flex: 1 1 100%; justify-content: flex-end; }
-  .lb-go { flex: 1; min-height: 40px; font-size: 13.5px; }
+  .lb-go { flex: 1; min-height: 44px; font-size: 13.5px; }
   .lb-x { width: 40px; height: 40px; }
 
-  /* צ'יפ בתור: 22px זה יעד מגע שמפספסים. גם הרוחב נפתח למסך הצר. */
+  /* צ'יפ בתור: רוחב מלא במסך צר; גודל ה-× נשאר מיעד המגע (לא לרדת מתחת ל-36) */
   .q-chip { max-width: 100%; padding: 6px 9px; }
-  .q-chip .q-rm { width: 30px; height: 30px; font-size: 18px; }
+  .q-chip .q-rm { width: 36px; height: 36px; font-size: 18px; }
   .q-clear { padding: 6px 10px; font-size: 12.5px; }
   /* גלישה אופקית עדיפה על שבירת הפריסה */
   .perm-body pre, .tool pre, .md pre, .md .table-wrap { max-width: 100%; overflow-x: auto; }

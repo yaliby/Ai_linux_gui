@@ -406,3 +406,12 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F135 workingText no aria-live → FIXED (Round 21)
 [ACCESSIBILITY] #working role=status aria-live · Source: Worker Round 21
+
+### F136 q-rm shrinks to 30px on mobile → FIXED (Round 22)
+[RESPONSIVENESS] keep 36px; was coarse regression · Source: Worker Round 22 CSS
+
+### F137 lb-go shrinks to 40px on mobile → FIXED (Round 22)
+[RESPONSIVENESS] keep min-height 44px · Source: Worker Round 22 CSS
+
+### F138 findInput outline:none no substitute → FIXED (Round 22)
+[ACCESSIBILITY] inset accent box-shadow on focus · Source: Worker Round 22 CSS

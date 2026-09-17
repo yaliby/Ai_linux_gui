@@ -515,4 +515,11 @@ t.section('סבב 21 — שליחה כפולה / working live');
   t.ok('working עם aria-live', /id="working"[^>]*aria-live="polite"/.test(html));
 }
 
+t.section('סבב 22 — רגרסיות מגע / פוקוס חיפוש');
+{
+  t.ok('q-rm לא יורד ל-30 במובייל', /\.q-chip \.q-rm \{ width: 36px; height: 36px/.test(css) && !/\.q-chip \.q-rm \{ width: 30px/.test(css));
+  t.ok('lb-go נשאר 44 במובייל', /\.lb-go \{ flex: 1; min-height: 44px/.test(css) && !/\.lb-go \{ flex: 1; min-height: 40px/.test(css));
+  t.ok('findInput עם טבעת פוקוס', /\.find-bar input:focus[^{]*\{[^}]*box-shadow/.test(css));
+}
+
 t.done();
