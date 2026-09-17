@@ -1997,6 +1997,8 @@ body.compose-compact.compose-tall #sendBtn { order: 5; }
   .statusbar { margin-top: 7px; flex-wrap: nowrap; gap: 6px; }
   /* המודל כבר מופיע כבורר בשורה שמעל, ומשך התור הוא נתון לניפוי באגים */
   #sbModel, #sbTurn { display: none; }
+  #sbContext { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #sbCost { flex: none; }
 
   /* ======================================================================
      7. שכבות: מודאלים ולוח הפקודות כגיליון תחתון

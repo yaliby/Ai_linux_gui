@@ -244,4 +244,27 @@ t.section('שמירה נכשלה — toast');
   t.ok('שגיאת שמירה מציגה toast', /error[\s\S]{0,200}toast\(/.test(snip));
 }
 
+t.section('dropzone — ביטול');
+{
+  t.ok('hideDropzone קיים', /function hideDropzone|const hideDropzone/.test(app));
+  t.ok('Escape סוגר dropzone', /dropzone[\s\S]{0,80}hideDropzone/.test(app));
+}
+
+t.section('stale מול חושב');
+{
+  const snip = slice('function renderStale()', 'function pingSocket(');
+  t.ok('stale משנה workingText', /נראה תקוע/.test(snip));
+}
+
+t.section('statusbar mobile ellipsis');
+{
+  t.ok('#sbContext עם ellipsis במובייל', /#sbContext\s*\{[^}]*text-overflow:\s*ellipsis/.test(css));
+}
+
+t.section('AC scrollIntoView');
+{
+  const snip = slice('function renderAc()', 'function acceptAc(');
+  t.ok('פריט נבחר נגלל לטווח', /scrollIntoView/.test(snip));
+}
+
 t.done();

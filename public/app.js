@@ -548,6 +548,11 @@ function renderWorking() {
     permWaiting();
     return;
   }
+  if (document.body.classList.contains('stale')) {
+    t.classList.remove('retrying');
+    t.textContent = 'נראה תקוע — סנכרן מול השרת';
+    return;
+  }
   const parts = [];
   const out = turnTok.out + turnTok.curOut;
   if (out) parts.push(`פלט ${fmtTok(out)} טוקנים`);
@@ -1195,11 +1200,17 @@ function renderStale() {
   const ms = staleFor();
   const stale = ms > STALE_MS;
   document.body.classList.toggle('stale', stale);
-  const note = $('staleNote'), btn = $('resyncBtn');
+  const note = $('staleNote'), btn = $('resyncBtn'), wt = $('workingText');
   if (btn) btn.classList.toggle('hidden', !stale);
   if (note) {
     note.classList.toggle('hidden', !stale);
-    if (stale) note.textContent = `אין עדכון כבר ${Math.round(ms / 1000)} שנ׳`;
+    if (stale) note.textContent = `אין עדכון כבר ${Math.round(ms / 1000)} שנ׳ · נסה סנכרן`;
+  }
+  // לא משאירים «חושב…» ליד אזהרת stale — זה נשמע כמו המתנה רגילה.
+  if (stale && wt && !wt.classList.contains('retrying') && !(pendingPerms && pendingPerms.size)) {
+    wt.textContent = 'נראה תקוע — סנכרן מול השרת';
+  } else if (!stale && busy) {
+    renderWorking();
   }
 }
 
@@ -4240,10 +4251,12 @@ $('input').addEventListener('paste', (e) => {
 // גרירה ושחרור מכל מקום בחלון
 let dragN = 0;
 const hasFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+const hideDropzone = () => { dragN = 0; const dz = $('dropzone'); if (dz) dz.classList.add('hidden'); };
 window.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragN++; $('dropzone').classList.remove('hidden'); });
 window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
-window.addEventListener('dragleave', () => { dragN--; if (dragN <= 0) { dragN = 0; $('dropzone').classList.add('hidden'); } });
-window.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragN = 0; $('dropzone').classList.add('hidden'); [...e.dataTransfer.files].forEach(f => addAttachment(f)); });
+window.addEventListener('dragleave', () => { dragN--; if (dragN <= 0) hideDropzone(); });
+window.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); hideDropzone(); [...e.dataTransfer.files].forEach(f => addAttachment(f)); });
+window.addEventListener('dragend', hideDropzone);
 ['cwd', 'model', 'effort', 'perm'].forEach(id => $(id).addEventListener('change', () => {
   store.settings[id] = $(id).value;
   // בחירת ההרשאות נזכרת תחת הסוכן שאליו היא שייכת — ראו populatePerms
@@ -5642,6 +5655,8 @@ function renderAc() {
     m.appendChild(row);
   });
   m.classList.remove('hidden');
+  const selRow = m.querySelector('.ac-item.sel');
+  if (selRow && selRow.scrollIntoView) selRow.scrollIntoView({ block: 'nearest' });
 }
 
 function acceptAc(idx) {
@@ -6996,6 +7011,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !$('usageModal').classList.contains('hidden')) { e.preventDefault(); setUsageModalOpen(false); return; }
   if (e.key === 'Escape' && !$('modal').classList.contains('hidden')) { e.preventDefault(); closeModal(); return; }
   if (e.key === 'Escape' && !$('modelPicker').classList.contains('hidden')) { e.preventDefault(); closeModelPicker(); return; }
+  if (e.key === 'Escape' && !$('dropzone').classList.contains('hidden')) { e.preventDefault(); hideDropzone(); return; }
 });
 
 /* ==========================================================================
