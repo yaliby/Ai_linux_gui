@@ -1,13 +1,12 @@
+<!-- סימן Sol: שתי לולאות של 270° סביב מרכז משותף, מוטות ב-30°.
+     270 הוא הגבול העליון ולא עניין של טעם — בקשתות ארוכות יותר הקצוות
+     נכנסים פנימה והצורה נקראת כספרה 8. ההטיה היא מה שמוציא אותה מאות S
+     טיפוגרפית לתנועה סולארית, בלי לאבד קריאוּת ב-16 פיקסלים.
+     נבדק מול BRANDS ב-public/app.js: אין שם אף וולוטה. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
-  <rect width="128" height="128" rx="28" fill="#1a1915"/>
-  <g fill="none" stroke="#d97757" stroke-width="9" stroke-linecap="round" transform="translate(64,64)">
-    <line x1="0" y1="-14" x2="0" y2="-42"/>
-    <line x1="9.9" y1="-9.9" x2="29.7" y2="-29.7"/>
-    <line x1="14" y1="0" x2="42" y2="0"/>
-    <line x1="9.9" y1="9.9" x2="29.7" y2="29.7"/>
-    <line x1="0" y1="14" x2="0" y2="42"/>
-    <line x1="-9.9" y1="9.9" x2="-29.7" y2="29.7"/>
-    <line x1="-14" y1="0" x2="-42" y2="0"/>
-    <line x1="-9.9" y1="-9.9" x2="-29.7" y2="-29.7"/>
+  <rect width="128" height="128" rx="28" fill="#1a1d20"/>
+  <g transform="translate(28 28) scale(3) rotate(30 12 12)"
+     fill="none" stroke="#6fb6ae" stroke-width="2.6" stroke-linecap="round">
+    <path d="M16.6 7.4A4.6 4.6 0 1 0 12 12 4.6 4.6 0 1 1 7.4 16.6"/>
   </g>
 </svg>
