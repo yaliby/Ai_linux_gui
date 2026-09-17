@@ -415,3 +415,12 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F138 findInput outline:none no substitute → FIXED (Round 22)
 [ACCESSIBILITY] inset accent box-shadow on focus · Source: Worker Round 22 CSS
+
+### F139 Secondary presence looks like primary on narrow → FIXED (Round 23)
+[CONFUSION] data-mode=view → 👁N · Source: Worker Round 23
+
+### F140 Notification allow/deny fail silent offline → FIXED (Round 23)
+[RECOVERY] showNotification on answerAsk catch · Source: Worker Round 23
+
+### F141 Dict lang switch keeps stale interim → FIXED (Round 23)
+[CONFUSION] clear interim + dictRender · Source: Worker Round 23

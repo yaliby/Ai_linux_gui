@@ -522,4 +522,10 @@ t.section('סבב 22 — רגרסיות מגע / פוקוס חיפוש');
   t.ok('findInput עם טבעת פוקוס', /\.find-bar input:focus[^{]*\{[^}]*box-shadow/.test(css));
 }
 
+t.section('סבב 23 — נוכחות / הכתבה / התראת אישור');
+{
+  t.ok('נוכחות משנית data-mode=view', /dataset\.mode = 'view'/.test(app) && /data-mode="view"/.test(css));
+  t.ok('החלפת שפת הכתבה מנקה interim', /a\.interim = ''/.test(app) && /dictSetLang/.test(app));
+}
+
 t.done();

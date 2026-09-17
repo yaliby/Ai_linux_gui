@@ -224,6 +224,7 @@ body {
 .topbar.tight #moreBtn { display: grid; }
 .topbar.tight .presence { font-size: 0; padding: 3px 7px; }
 .topbar.tight .presence::before { content: "⛓" attr(data-n); font-size: 11px; }
+.topbar.tight .presence[data-mode="view"]::before { content: "👁" attr(data-n); font-size: 11px; }
 .topbar.tight .save-dot:not(.error) { display: none; }
 .title-wrap { flex: 1; display: flex; align-items: center; gap: 9px; min-width: 0; }
 /* ‎flex: 1 1 auto‎ ולא ברירת המחדל: הצ׳יפ של תיקיית העבודה היה ‎flex:none‎,
@@ -2135,6 +2136,7 @@ body.compose-compact.compose-tall #sendBtn { order: 5; }
 @media (max-width: 560px) {
   .presence { font-size: 0; padding: 3px 7px; }
   .presence::before { content: "⛓" attr(data-n); font-size: 11px; }
+  .presence[data-mode="view"]::before { content: "👁" attr(data-n); font-size: 11px; }
   .suggests { grid-template-columns: 1fr; max-width: 100%; }
 }
 

@@ -4,7 +4,7 @@
    לכן: רשת קודם תמיד, והמטמון הוא רק רשת ביטחון לקליפה (HTML/CSS/JS) כדי
    שמסך ריק לא יקפוץ בשנייה שבה ה-Wi-Fi מתחלף לסלולר.
    קריאות API ו-WebSocket לא נכנסות למטמון לעולם. */
-const CACHE = 'rtl-claude-shell-v45';
+const CACHE = 'rtl-claude-shell-v46';
 const SHELL = ['/', '/index.html', '/app.js', '/style.css', '/icon.svg'];
 
 self.addEventListener('install', (e) => {
@@ -97,12 +97,23 @@ function answerAsk(data, decision) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ convId: data.convId, requestId: data.requestId, decision }),
-  }).then(() => {
+  }).then((r) => {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     // הדפים הפתוחים (אם יש כאלה) מעדכנים את הכרטיס דרך permission_resolved
     // שמגיע מהשרת — כאן רק מנקים את הסימון בכותרת.
     return self.clients.matchAll({ type: 'window', includeUncontrolled: true });
   }).then((wins) => { for (const w of wins) w.postMessage({ type: 'notification-click' }); })
-    .catch(() => {});
+    .catch(() => {
+      if (!self.registration || typeof self.registration.showNotification !== 'function') return;
+      return self.registration.showNotification('לא הצלחנו לשלוח את התשובה', {
+        body: 'פתחו את האפליקציה וענו שוב מהכרטיס',
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-128.png',
+        tag: 'ask-fail-' + (data.requestId || ''),
+        dir: 'rtl', lang: 'he',
+        data: { url: '/', convId: data.convId, requestId: data.requestId },
+      });
+    });
 }
 
 self.addEventListener('notificationclick', (e) => {

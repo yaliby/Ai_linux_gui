@@ -1585,11 +1585,13 @@ function renderPresence(m) {
   if (!isPrimary) {
     el2.textContent = '👁 תצוגה בלבד';
     el2.dataset.n = others;
+    el2.dataset.mode = 'view';
     el2.title = 'מכשיר זה מציג בלבד — השמירה לדיסק נעשית במכשיר הראשי. מחוברים: ' + names;
     return;
   }
   el2.textContent = others === 1 ? '⛓ מכשיר נוסף' : `⛓ ${others} מכשירים`;
-  el2.dataset.n = others;   // במסך צר ה-CSS מציג רק "⛓N" במקום המשפט המלא
+  el2.dataset.n = others;   // במסך צר ה-CSS מציג רק "⛓N" / "👁N"
+  el2.dataset.mode = 'sync';
   el2.title = 'מחוברים לשיחה הזו: ' + names;
 }
 
@@ -4102,7 +4104,15 @@ function dictSetLang(id) {
   if (!DICT_LANGS.some(l => l.id === id)) return;
   store.settings.dictLang = id;
   save();
-  if (dictOn) { const a = dictAnchor; dictKillEngine(); dictAnchor = a; dictLoops = 0; dictSpin(); }
+  if (dictOn) {
+    const a = dictAnchor;
+    if (a) a.interim = '';
+    dictKillEngine();
+    dictAnchor = a;
+    dictLoops = 0;
+    dictSpin();
+    dictRender();
+  }
   dictPaint();
 }
 const dictNextLang = () => DICT_LANGS[(DICT_LANGS.findIndex(l => l.id === dictLang()) + 1) % DICT_LANGS.length];

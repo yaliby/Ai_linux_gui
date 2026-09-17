@@ -48,6 +48,7 @@ function boot(opts = {}) {
   const focused = [];
   const opened = [];
   const fetches = [];
+  const shown = [];
   const wins = (opts.windows || []).map((url) => ({
     url, postMessage: (m) => posted.push({ url, m }), focus: async () => { focused.push(url); },
   }));
@@ -60,6 +61,9 @@ function boot(opts = {}) {
       claim: async () => {},
       matchAll: async () => wins,
       openWindow: async (u) => { opened.push(u); },
+    },
+    registration: {
+      showNotification: async (title, o) => { shown.push({ title, ...(o || {}) }); },
     },
   };
 
@@ -84,7 +88,7 @@ function boot(opts = {}) {
     return { responded: responded ? await responded : undefined, handled: responded !== undefined };
   };
 
-  return { fire, caches: caches_, posted, focused, opened, fetches, listeners };
+  return { fire, caches: caches_, posted, focused, opened, fetches, shown, listeners };
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +201,15 @@ t.section('מענה מתוך ההתראה (האפליקציה סגורה)');
   await partial.fire('notificationclick', { action: 'allow', notification: { data: {}, close() {} } });
   t.eq('בלי מזהים אין בקשה', partial.fetches.length, 0);
   t.eq('ובמקום זה נפתח חלון', partial.opened.length, 1);
+
+  // כשל רשת — התראה חוזרת במקום שתיקה
+  const offline = boot({ offline: true });
+  await offline.fire('notificationclick', {
+    action: 'deny',
+    notification: { data: { convId: 'c1', requestId: 'r9' }, close() {} },
+  });
+  t.eq('גם באופליין נשלחה בקשה (שנכשלה)', offline.fetches.length, 1);
+  t.ok('התראת כשל מוצגת', offline.shown.some((n) => /לא הצלחנו/.test(n.title)));
 }
 
 t.section('לחיצה על גוף ההתראה');
