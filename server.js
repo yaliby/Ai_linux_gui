@@ -63,6 +63,12 @@ for (const m of STATIC_MOUNTS) {
   else app.use(m.prefix, express.static(m.dir));
 }
 
+// תשובות ה-API נבנות בזמן ריצה, ולכן שכבת הקבצים לא יכולה לגעת בהן — ושם
+// נמצאים המספרים הגדולים: השיחה הגדולה כאן היא גוף של 887KB שיורד ל-73KB.
+app.use('/api', require('./lib/api-compress')({
+  onError: (e) => dbg('api-compress', { err: String(e && e.message || e) }),
+}));
+
 // בדיקת קיום תיקייה (לוולידציה של שדה "תיקיית עבודה")
 app.get('/api/check-dir', (req, res) => {
   const d = (req.query.path || '').toString();

@@ -25,7 +25,7 @@ import { runner } from './harness.mjs';
 const require = createRequire(import.meta.url);
 const express = require('express');
 const createStaticCompress = require('../lib/static-compress.js');
-const { pickEncoding, brotliQuality } = createStaticCompress;
+const { pickEncoding, acceptedEncodings, brotliQuality } = createStaticCompress;
 
 const t = runner('דחיסת נכסים סטטיים');
 
@@ -101,6 +101,59 @@ t.section('בחירת הקידוד מ-Accept-Encoding');
   t.eq('קטן → איכות 11', brotliQuality(100 * 1024), 11);
   t.eq('בינוני → 9', brotliQuality(1024 * 1024), 9);
   t.eq('ענק → 5', brotliQuality(9 * 1024 * 1024), 5);
+
+  // הרשימה המסודרת היא מה שמאפשר להגיש gzip כשה-brotli עוד נדחס
+  t.eq('סדר מלא', acceptedEncodings('gzip, deflate, br'), ['br', 'gzip']);
+  t.eq('העדפה מפורשת הופכת את הסדר', acceptedEncodings('br;q=0.5, gzip'), ['gzip', 'br']);
+  t.eq('רק אחד', acceptedEncodings('gzip'), ['gzip']);
+  t.eq('כלום', acceptedEncodings('deflate'), []);
+}
+
+// ---------------------------------------------------------------------------
+/* brotli באיכות 11 על ‎app.js‎ לוקח 650ms, ו-gzip 13ms. בלי נפילה לקידוד
+   הפחות-מועדף, טעינה ראשונה אחרי הפעלת השרת הייתה מקבלת את הקובץ לא דחוס
+   בכלל — וזה בדיוק הרגע שאחרי עדכון, כשהקליפה נטענת מחדש ממילא. */
+t.section('מגישים את הטוב ביותר שכבר קיים');
+{
+  fs.writeFileSync(path.join(DIR, 'both.js'), BIG);
+  const only = createStaticCompress({ mounts: [{ prefix: '/', dir: DIR }] });
+  const meta = only._internal.resolveFile('/both.js');
+
+  // מזינים ידנית *רק* את ה-gzip, כמו בחלון שבו brotli עדיין רץ
+  const gzBody = zlib.gzipSync(fs.readFileSync(meta.file), { level: 9 });
+  only._internal.cache.set(meta.file + '\0gzip', {
+    body: gzBody, enc: 'gzip', type: 'application/javascript; charset=UTF-8',
+    size: meta.size, mtimeMs: meta.mtimeMs,
+    etag: `W/"${meta.size.toString(16)}-${Math.floor(meta.mtimeMs).toString(16)}-gzip"`,
+    atime: Date.now(),
+  });
+
+  const app2 = express();
+  app2.use(only);
+  app2.use(express.static(DIR));
+  const s2 = await new Promise((r) => { const s = app2.listen(0, '127.0.0.1', () => r(s)); });
+  const p2 = s2.address().port;
+  const get = (hdrs) => new Promise((res) => {
+    http.get({ host: '127.0.0.1', port: p2, path: '/both.js', headers: hdrs }, (r) => {
+      const c = []; r.on('data', (x) => c.push(x)); r.on('end', () => res({ headers: r.headers, body: Buffer.concat(c) }));
+    });
+  });
+
+  const r = await get({ 'Accept-Encoding': 'br, gzip' });
+  t.eq('ביקש brotli וקיבל gzip', r.headers['content-encoding'], 'gzip');
+  t.ok('והגוף תקין', zlib.gunzipSync(r.body).equals(fs.readFileSync(meta.file)));
+  t.ok('וה-ETag מסמן gzip', r.headers['etag'].endsWith('-gzip"'), r.headers['etag']);
+
+  // ובינתיים brotli נדחס ברקע, ולכן הבקשה הבאה כבר מקבלת אותו
+  for (let i = 0; i < 80 && !only._internal.cache.has(meta.file + '\0br'); i++) {
+    await new Promise((r2) => setTimeout(r2, 25));
+  }
+  const r2 = await get({ 'Accept-Encoding': 'br, gzip' });
+  t.eq('ומיד אחר כך brotli', r2.headers['content-encoding'], 'br');
+  t.ok('קטן יותר מה-gzip', r2.body.length < gzBody.length, [r2.body.length, gzBody.length]);
+  t.ok('והגוף עדיין תקין', zlib.brotliDecompressSync(r2.body).equals(fs.readFileSync(meta.file)));
+
+  s2.close();
 }
 
 // ---------------------------------------------------------------------------
