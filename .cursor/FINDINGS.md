@@ -457,3 +457,6 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F152 Find steals focus behind modal → FIXED (Round 32)
 [ACCESSIBILITY] openFind closes modal+modelPicker; openModal closes find · Source: Worker Round 32
+
+### F153 Palette stacks behind model picker → FIXED (Round 33)
+[CONFUSION] openPalette↔closeModelPicker mutual · Source: Worker Round 33

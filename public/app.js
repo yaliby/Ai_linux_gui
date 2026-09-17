@@ -4953,6 +4953,7 @@ function attachModelSearch(sel) {
 }
 
 function openModelPicker(sel) {
+  if (!$('palette').classList.contains('hidden')) closePalette();
   mpState = { sel, cur: sel.value, items: [], idx: 0 };
   $('modelPicker').classList.remove('hidden');
   if (sel && sel._mpBtn) sel._mpBtn.setAttribute('aria-expanded', 'true');
@@ -7025,6 +7026,7 @@ let paletteReturnFocus = null;
 // focus=false כשהלוח נפתח ככפתור "עוד" בטלפון: שם הוא תפריט פעולות, ומקלדת
 // שקופצת ובולעת חצי מסך על תפריט של עשר שורות היא בדיוק ההפך ממה שצריך.
 function openPalette(focus = true) {
+  if (!$('modelPicker').classList.contains('hidden')) closeModelPicker();
   paletteReturnFocus = document.activeElement;
   $('palette').classList.remove('hidden');
   const more = $('moreBtn');
