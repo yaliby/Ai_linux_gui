@@ -18,6 +18,8 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 08:45 | RESUME | User: continue full ~8h until ~16:08 | Round 2 implement |
 | 08:50 | COMMIT | Round 2 F45,F49–F60 | npm test 16/16 · 71 ux asserts · CACHE v25 |
 | 08:52 | COMMIT | Round 3 F61–F67 | queue/offline, toast a11y, rewind confirm · CACHE v26 |
+| 08:54 | COMMIT | Round 4 F68–F70 | hist↑, settings focus, offline perm · CACHE v27 |
+| 08:55 | COMMIT | Round 5 F71–F72 | duet note/save/version feedback · CACHE v28 |
 
 ## Decisions
 

@@ -7493,8 +7493,8 @@ function renderDuetRun(log) {
   const noteBtn = el('button', 'dt-mini', 'שלח הערה');
   const sendNote = () => {
     const t = noteIn.value.trim();
-    if (!t) return;
-    duetSend('duet_note', { text: t });
+    if (!t) { toast('כתוב הערה לפני השליחה'); return; }
+    if (!duetSend('duet_note', { text: t })) return;
     noteIn.value = '';
   };
   noteBtn.onclick = sendNote;
@@ -7528,7 +7528,7 @@ function duetShownText() {
 
 function duetSaveFile() {
   const text = duetShownText();
-  if (!text) return;
+  if (!text) { toast('אין תוצר לשמירה עדיין', true); return; }
   const name = 'duet-v' + (duetViewV || (duetRun && duetRun.version) || 0) + '.md';
   const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
   const a = document.createElement('a');
@@ -7546,7 +7546,8 @@ async function duetShowVersion(v) {
   try {
     const r = await fetch('/api/duet/' + encodeURIComponent(activeId) + '/version/' + duetViewV);
     if (r.ok) { const d = await r.json(); duetVerCache.set(duetViewV, d.text || ''); }
-  } catch {}
+    else toast('טעינת הגרסה נכשלה', true);
+  } catch { toast('טעינת הגרסה נכשלה', true); }
   duetPaintArtifact();
 }
 

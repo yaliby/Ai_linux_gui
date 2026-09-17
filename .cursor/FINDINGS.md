@@ -211,3 +211,9 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F70 Offline permission closes card locally → FIXED (Round 4)
 [RECOVERY] decidePermission/sendDialog require WS · Source: [חקירה עצמאית]
+
+### F71 Duet empty note/save silent → FIXED (Round 5)
+[FEEDBACK] toasts · Source: [חקירה עצמאית]
+
+### F72 Duet version fetch fail silent → FIXED (Round 5)
+[FEEDBACK] toast · Source: [חקירה עצמאית]

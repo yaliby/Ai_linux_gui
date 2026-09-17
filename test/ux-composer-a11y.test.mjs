@@ -385,4 +385,11 @@ t.section('סבב 4 — אישור הרשאה בלי חיבור');
   t.ok('שולח permission רק אחרי בדיקת WS', /readyState\s*!==\s*ws\.OPEN[\s\S]{0,200}return/.test(snip));
 }
 
+t.section('סבב 5 — דואט משוב');
+{
+  t.ok('הערת דואט ריקה → toast', /כתוב הערה לפני השליחה/.test(app));
+  t.ok('שמירת דואט ריק → toast', /אין תוצר לשמירה עדיין/.test(app));
+  t.ok('כשל טעינת גרסה → toast', /טעינת הגרסה נכשלה/.test(app));
+}
+
 t.done();
