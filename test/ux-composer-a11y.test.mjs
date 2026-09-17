@@ -558,4 +558,10 @@ t.section('סבב 29 — חיפוש מול הגדרות');
   t.ok('openSettings סוגר חיפוש', /function openSettings\([\s\S]{0,80}closeFind/.test(app));
 }
 
+t.section('סבב 30 — הגדרות מול מודאל');
+{
+  t.ok('openModal סוגר הגדרות', /function openModal\([\s\S]{0,80}closeSettings/.test(app));
+  t.ok('usage open סוגר הגדרות', /setUsageModalOpen[\s\S]{0,200}closeSettings/.test(app) || /if \(open\) \{[\s\S]{0,80}closeSettings/.test(app));
+}
+
 t.done();

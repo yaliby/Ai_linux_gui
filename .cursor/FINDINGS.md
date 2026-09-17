@@ -448,3 +448,6 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F149 Find opens under settings popover → FIXED (Round 29)
 [CONFUSION] openFind closes settings; openSettings closes find · Source: Worker Round 29
+
+### F150 Settings stays open under modal/usage → FIXED (Round 30)
+[CONFUSION] mutual close settings↔modal/usage · Source: Worker Round 30

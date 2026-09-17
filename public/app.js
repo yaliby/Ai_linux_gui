@@ -3461,6 +3461,7 @@ function setUsageModalOpen(open) {
   if (strip) strip.classList.toggle('open', open);
   document.body.style.overflow = open ? 'hidden' : '';
   if (open) {
+    if (!$('settings').classList.contains('hidden')) closeSettings();
     document.removeEventListener('keydown', onUsageModalKeydown, true);
     document.addEventListener('keydown', onUsageModalKeydown, true);
     refreshUsage();
@@ -4253,6 +4254,8 @@ let settingsOpenedAt = 0;
 let settingsReturnFocus = null;
 function openSettings() {
   if (!$('findBar').classList.contains('hidden')) closeFind();
+  if (!$('modal').classList.contains('hidden')) closeModal();
+  if (isUsageModalOpen()) setUsageModalOpen(false);
   settingsReturnFocus = document.activeElement;
   $('settings').classList.remove('hidden');
   const tog = $('settingsToggle');
@@ -6154,6 +6157,7 @@ function onModalKeydown(e) {
   else if (!list.includes(document.activeElement)) { e.preventDefault(); first.focus(); }
 }
 function openModal(title, node) {
+  if (!$('settings').classList.contains('hidden')) closeSettings();
   modalReturnFocus = document.activeElement;
   $('modalTitle').textContent = title;
   const b = $('modalBody'); b.innerHTML = ''; b.appendChild(node);

@@ -55,7 +55,8 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 13:07 | COMMIT | Round 26 F146 | rename Escape vs drawer · CACHE v49 |
 | 13:33 | COMMIT | Round 27 F147 | Ctrl+F drawer · CACHE v50 |
 | 13:49 | COMMIT | Round 28 F148 | wideToggle a11y · CACHE v51 |
-| 13:49 | HEARTBEAT | continue →16:08 | F01–F148 · diminishing |
+| 14:05 | COMMIT | Round 29 F149 | find vs settings · CACHE v52 |
+| 14:05 | HEARTBEAT | continue →16:08 | F01–F149 · diminishing |
 ## Decisions
 
 - Parallel workers; serialize writers on same files.
@@ -66,7 +67,7 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 
 ## Commits (local only)
 
-Rounds 1–28 on `ux-optimization-run` through `abef3c2`
+Rounds 1–29 on `ux-optimization-run` through `749fbe4`
 
 ## Existing dirty (owner — do not commit)
 
