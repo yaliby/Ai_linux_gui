@@ -5803,6 +5803,14 @@ function renderQuestionCard(ref, isLive) {
     card.appendChild(actions);
     syncValid = () => { send.disabled = !collect(); };
     syncValid();
+    // Enter בשדה «אחר…» שולח כמו הכפתור — בלי זה צריך לחפש את «שלח תשובה» מתחת
+    card.querySelectorAll('.ask-other-input').forEach((inp) => {
+      inp.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' || e.isComposing) return;
+        e.preventDefault();
+        if (!send.disabled) send.click();
+      });
+    });
   } else {
     if (ref.answers && Object.keys(ref.answers).length) {
       const sum = el('div', 'ask-answered');

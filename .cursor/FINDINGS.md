@@ -475,3 +475,6 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F158 remoteBtn aria-label stale → FIXED (Round 36)
 [ACCESSIBILITY] paintRemote syncs aria-label · Source: Worker Round 36
+
+### F159 Ask «אחר…» Enter does not submit → FIXED (follow-up)
+[FRICTION] Enter clicks send on otherInput · Source: Round 12 worker (late)
