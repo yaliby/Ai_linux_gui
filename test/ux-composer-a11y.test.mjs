@@ -392,4 +392,13 @@ t.section('סבב 5 — דואט משוב');
   t.ok('כשל טעינת גרסה → toast', /טעינת הגרסה נכשלה/.test(app));
 }
 
+t.section('סבב 6 — מגע וחיפוש');
+{
+  const start = css.indexOf('@media (hover: none), (pointer: coarse)');
+  const chunk = css.slice(start, start + 3200);
+  t.ok('.icon-btn ≥ 44px במגע', /\.icon-btn\s*\{\s*width:\s*44px/.test(chunk));
+  t.ok('.cwd-chip ≥ 44px במגע', /\.cwd-chip\s*\{\s*min-height:\s*44px/.test(chunk));
+  t.ok('חיפוש שיחות נכשל → toast', /חיפוש בגוף השיחות נכשל/.test(app));
+}
+
 t.done();

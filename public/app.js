@@ -2676,7 +2676,10 @@ const runServerSearch = debounce(async (q) => {
     const d = await r.json();
     if (convQuery.trim().toLowerCase() !== q) return;   // התוצאה כבר לא רלוונטית
     searchHits = new Map((d.results || []).map((x) => [x.id, x.snippet || '']));
-  } catch { searchHits = null; }
+  } catch {
+    searchHits = null;
+    toast('חיפוש בגוף השיחות נכשל', true);
+  }
   renderConvList();
 }, 220);
 function onConvSearch() {

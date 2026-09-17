@@ -217,3 +217,9 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F72 Duet version fetch fail silent → FIXED (Round 5)
 [FEEDBACK] toast · Source: [חקירה עצמאית]
+
+### F73 Conv body search fail silent → FIXED (Round 6)
+[FEEDBACK] toast · Source: [חקירה עצמאית]
+
+### F74 icon-btn / cwd-chip undersized on coarse → FIXED (Round 6)
+[RESPONSIVENESS] 44px · Source: [חקירה עצמאית]

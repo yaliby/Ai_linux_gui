@@ -1735,7 +1735,7 @@ body.awaiting .working { opacity: .55; }
    של 29px גובה, כולם באצבע. ‎pointer: coarse‎ שואל בדיוק את השאלה הנכונה.
    ====================================================================== */
 @media (hover: none), (pointer: coarse) {
-  .icon-btn { width: 42px; height: 42px; }
+  .icon-btn { width: 44px; height: 44px; }
   .attach, .send { width: 46px; height: 46px; }
   .jump { width: 44px; height: 44px; }
   .pbtn, .rm-btn, .sess-resume { min-height: 44px; padding: 11px 16px; font-size: 14px; }
@@ -1758,7 +1758,7 @@ body.awaiting .working { opacity: .55; }
   .q-chip .q-rm { width: 36px; height: 36px; }
   .dk-lang, .dk-stop { min-height: 40px; padding: 8px 12px; font-size: 13px; }
   #convSearch { min-height: 44px; }
-  .cwd-chip { min-height: 34px; padding: 7px 10px; }
+  .cwd-chip { min-height: 44px; padding: 10px 12px; }
   /* שני פסי הקריאה שמופיעים כשמשהו ממתין לך — הכפתור בהם הוא הפעולה,
      ו-29px גובה היה יעד שמפספסים בדיוק כשהכי חשוב לא לפספס. */
   .ab-go, .lb-go { min-height: 44px; padding: 10px 16px; }
