@@ -31,8 +31,13 @@ const t = runner('דחיסת נכסים סטטיים');
 
 const DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'rtl-sc-'));
 const VENDOR = fs.mkdtempSync(path.join(os.tmpdir(), 'rtl-sc-v-'));
+/* הקובץ ש-‎..‎ מנסה להגיע אליו חייב לשבת *מחוץ* לשורש, ולכן הוא לבדו אינו
+   בתוך תיקייה זמנית. הוא חייב גם להיות קיים באמת — אחרת ‎resolveFile‎ היה
+   מחזיר null כי אין קובץ, ולא כי החסימה עבדה. */
+const OUTSIDE = path.join(os.tmpdir(), 'rtl-sc-outside.js');
 process.on('exit', () => {
   for (const d of [DIR, VENDOR]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
+  try { fs.rmSync(OUTSIDE, { force: true }); } catch {}
 });
 
 // טקסט שנדחס היטב, גדול בהרבה מ-MIN_SIZE
@@ -46,7 +51,7 @@ fs.writeFileSync(path.join(DIR, 'photo.png'), Buffer.alloc(4000, 7));
 fs.mkdirSync(path.join(DIR, 'sub'));
 fs.writeFileSync(path.join(DIR, 'sub', 'deep.js'), BIG);
 fs.writeFileSync(path.join(VENDOR, 'lib.js'), BIG);
-fs.writeFileSync(path.join(os.tmpdir(), 'rtl-sc-outside.js'), 'סוד');
+fs.writeFileSync(OUTSIDE, 'סוד');
 
 const mounts = [
   { prefix: '/', dir: DIR },
