@@ -534,4 +534,10 @@ t.section('סבב 24 — ערכת מערכת / סנכרון הרשאות');
   t.ok('סנכרון מחייה כרטיסים בשקט', /showPermission\([^)]+\{ silent: true \}/.test(app));
 }
 
+t.section('סבב 25 — מודאל / אנונימי מושבת');
+{
+  t.ok('openModal מסיר מאזין לפני הוספה', /removeEventListener\('keydown', onModalKeydown/.test(app));
+  t.ok('newAnon.disabled לחיץ להסבר', /\.nav-row\.disabled[^}]*cursor: not-allowed/.test(css) && !/\.nav-row\.disabled[^}]*pointer-events:\s*none/.test(css));
+}
+
 t.done();

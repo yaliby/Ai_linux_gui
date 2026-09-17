@@ -2438,7 +2438,7 @@ body.anon-mode .composer-card {
 
 /* CLI שלא מכיר --no-session-persistence: הכפתור נשאר גלוי כדי שאפשר יהיה
    לקרוא למה הוא כבוי (title), אבל אינו לחיץ. */
-.nav-row.disabled { opacity: .45; pointer-events: none; }
+.nav-row.disabled { opacity: .45; cursor: not-allowed; }
 
 /* פס הצ'אט האנונימי בטלפון — ההפך המכוון מפס המכסה. שם הפעולות יורדות לשורה
    משלהן; כאן זו בדיוק הייתה התקלה: הכיתוב הארוך נדחס לעמודה של כ-100px, גלש

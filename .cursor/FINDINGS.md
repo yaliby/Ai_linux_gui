@@ -430,3 +430,9 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F143 Sync revive spams N toasts → FIXED (Round 24)
 [FEEDBACK] silent showPermission + one toast · Source: regression dig
+
+### F144 Modal re-open stacks keydown listeners → FIXED (Round 25)
+[RECOVERY] removeEventListener before add · Source: Worker Round 25
+
+### F145 newAnon.disabled blocks toast (pointer-events) → FIXED (Round 25)
+[FEEDBACK] cursor:not-allowed; click still toasts · Source: Worker Round 25

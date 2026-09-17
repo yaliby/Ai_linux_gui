@@ -3454,6 +3454,7 @@ function setUsageModalOpen(open) {
   if (strip) strip.classList.toggle('open', open);
   document.body.style.overflow = open ? 'hidden' : '';
   if (open) {
+    document.removeEventListener('keydown', onUsageModalKeydown, true);
     document.addEventListener('keydown', onUsageModalKeydown, true);
     refreshUsage();
     const close = $('usageModalClose');
@@ -5118,6 +5119,7 @@ async function loadConfig() {
   const nav = $('newAnon');
   if (nav) {
     nav.classList.toggle('disabled', !anonAvailable);
+    nav.setAttribute('aria-disabled', anonAvailable ? 'false' : 'true');
     nav.title = anonAvailable
       ? 'שיחה שלא נשמרת בשום מקום — נמחקת ביציאה'
       : 'לא זמין: ה-CLI המותקן לא מכיר --no-session-persistence';
@@ -6148,6 +6150,7 @@ function openModal(title, node) {
   $('modalTitle').textContent = title;
   const b = $('modalBody'); b.innerHTML = ''; b.appendChild(node);
   $('modal').classList.remove('hidden');
+  document.removeEventListener('keydown', onModalKeydown, true);
   document.addEventListener('keydown', onModalKeydown, true);
   const close = $('modalClose');
   if (close) try { close.focus(); } catch {}
