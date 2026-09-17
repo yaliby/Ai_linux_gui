@@ -280,6 +280,35 @@ t.section('שורה שחוזרת מתקפלת ולא מציפה את היומן'
 }
 
 // ---------------------------------------------------------------------------
+/* מחזור קוד הקישור דרך HTTP אמיתי. הלוגיקה עצמה נבדקת לעומק ב-
+   device-auth.test.mjs; מה שנבדק כאן הוא דווקא החיווט — שהמסלולים בשרת
+   באמת מדברים עם המודול שחולץ, ולא נשארו מחוברים למשתנה שכבר אינו קיים. */
+t.section('קוד קישור דרך המסלולים בשרת');
+{
+  let r = await j('GET', '/api/remote/status');
+  t.eq('מצב נענה', r.status, 200);
+  t.eq('מתחילים בלי קוד פתוח', r.data.pairCode, null);
+
+  r = await j('POST', '/api/remote/pair', {});
+  // מחשב בלי כתובת LAN מחזיר 503 — זה מצב לגיטימי ולא כשל של החיווט
+  if (r.status === 503) {
+    t.ok('אין LAN על המכונה הזו — מדלגים', true, r.data);
+  } else {
+    t.eq('הונפק קוד', r.status, 200);
+    t.ok('בצורת XXXX-XXXX', /^[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(r.data.pairCode || ''), r.data.pairCode);
+    t.ok('בלי תווים שמתבלבלים בקריאה', !/[01OILU]/.test(r.data.pairCode || ''), r.data.pairCode);
+    t.ok('עם שעת תפוגה בעתיד', r.data.pairExpiresAt > Date.now(), r.data.pairExpiresAt);
+
+    const shown = (await j('GET', '/api/remote/status')).data;
+    t.eq('והוא נראה גם בבקשת מצב', shown.pairCode, r.data.pairCode);
+
+    r = await j('POST', '/api/remote/cancel-pair', {});
+    t.eq('ביטול נענה', r.status, 200);
+    t.eq('והקוד נעלם', r.data.pairCode, null);
+  }
+}
+
+// ---------------------------------------------------------------------------
 t.section('הקליפה מוגשת');
 {
   for (const [url, re] of [['/', /<html/i], ['/app.js', /function/], ['/style.css', /composer/], ['/sw.js', /CACHE/]]) {

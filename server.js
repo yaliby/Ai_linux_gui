@@ -1890,38 +1890,14 @@ wss.on('connection', handleConnection);
 const REMOTE_PORT = Number(process.env.REMOTE_PORT) || (Number(PORT) + 1);
 const DEVICE_COOKIE = 'rtl_device';
 const DEVICES_FILE = path.join(STORE_DIR, 'devices.json');
-const PAIR_TTL_MS = 10 * 60 * 1000;      // תוקף קוד הקישור עצמו
-const PAIR_MAX_TRIES = 10;               // ניחושים כושלים עד שהקוד נשרף
-const DEVICE_TTL_MS = 365 * 24 * 3600 * 1000;
-
-/* הקוד נועד גם להיאמר בקול או להיות מוקלד ביד, ולא רק להיסרק מ-QR: שמונה
-   תווים מא״ב בן 30 (בלי 0/O/1/I/L/U שמתבלבלים בקריאה) ≈ 39 ביט. קצר מספיק
-   להכתבה בטלפון, ורחוק מלהיות בר-ניחוש — ובלאו הכי תקרת הניסיונות שורפת
-   את הקוד הרבה לפני שניחוש אקראי מתקרב. */
-const PAIR_ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ';
-const PAIR_LEN = 8;
+/* קישור המכשירים ואימותם יושבים ב-lib/device-auth.js — שם גם ההסבר למה
+   דווקא הם חולצו מכאן: זו יחידה אבטחתית (חד-פעמיות הקוד, תקרת הניחושים,
+   השוואה בזמן קבוע) שלא הייתה לה אף בדיקה כל עוד היא פוזרה בתוך הקובץ הזה. */
+const deviceAuth = require('./lib/device-auth');
+const { prettyPair } = deviceAuth;
+const auth = deviceAuth({ file: DEVICES_FILE });
 
 let remoteSrv = null;   // המאזין על כתובת ה-LAN
-let pairCode = null;    // { code, expiresAt, tries, by } — חי בזיכרון בלבד
-
-function newPairCode() {
-  let out = '';
-  // דגימה עם דחייה: bytes שמעל הכפולה השלמה האחרונה של גודל הא״ב היו מטים
-  // את ההגרלה לטובת תחילתו.
-  const limit = 256 - (256 % PAIR_ALPHABET.length);
-  while (out.length < PAIR_LEN) {
-    for (const b of crypto.randomBytes(PAIR_LEN * 2)) {
-      if (out.length === PAIR_LEN) break;
-      if (b >= limit) continue;
-      out += PAIR_ALPHABET[b % PAIR_ALPHABET.length];
-    }
-  }
-  return out;
-}
-/** מה שהוקלד → הצורה הקנונית: בלי מקפים ורווחים, אותיות גדולות. */
-const normPair = (s) => String(s == null ? '' : s).toUpperCase().replace(/[^0-9A-Z]/g, '');
-/** הצורה שמוצגת לעין ולהכתבה: XXXX-XXXX. */
-const prettyPair = (c) => c.slice(0, 4) + '-' + c.slice(4);
 
 /* ממשקים וירטואליים שאסור להאזין עליהם: הם לא הדרך שבה מכשיר ברשת מגיע,
    ו-docker0 בפרט היה חושף את הממשק לכל קונטיינר שרץ על המחשב. */
@@ -1966,78 +1942,17 @@ function readCookie(header, name) {
   return '';
 }
 
-/* ---------- אחסון המכשירים ----------
-   שומרים רק את ה-hash של הטוקן: הקובץ בדיסק אינו מפתח כניסה בפני עצמו. */
-const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
+/* קריאת/כתיבת המכשירים, איתור לפי טוקן, וצריכת קוד הקישור — כולם ב-‎auth‎.
+   כאן נשארים רק העטיפות שקושרות אותם לבקשת HTTP: מאיפה בא השם של המכשיר
+   ומה שם העוגייה. */
+const { readDevices, writeDevices, findDevice, touchDevice } = auth;
 
-function readDevices() {
-  try {
-    const j = JSON.parse(fs.readFileSync(DEVICES_FILE, 'utf8'));
-    return Array.isArray(j.devices) ? j.devices : [];
-  } catch { return []; }
-}
-function writeDevices(devices) {
-  const tmp = DEVICES_FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify({ devices }, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, DEVICES_FILE);
-}
-function findDevice(token) {
-  if (!token) return null;
-  const h = hashToken(token);
-  const now = Date.now();
-  for (const d of readDevices()) {
-    if (d.hash && d.hash.length === h.length && crypto.timingSafeEqual(Buffer.from(d.hash), Buffer.from(h))) {
-      if (d.expiresAt && d.expiresAt < now) return null;
-      return d;
-    }
-  }
-  return null;
-}
-/** נגיעה עצלה: מעדכנים "נראה לאחרונה" לכל היותר פעם בשעה, לא בכל בקשה. */
-function touchDevice(id) {
-  const devices = readDevices();
-  const d = devices.find((x) => x.id === id);
-  if (!d) return;
-  const now = Date.now();
-  if (d.lastSeen && now - d.lastSeen < 3600 * 1000) return;
-  d.lastSeen = now;
-  try { writeDevices(devices); } catch {}
-}
+const consumePairCode = (code, req) => auth.consumePairCode(code, {
+  name: deviceLabel(req),
+  ua: (req.headers['user-agent'] || ''),
+});
 
-/**
- * ממש קוד קישור: מנפיק טוקן קבוע ורושם את המכשיר, או מחזיר null אם הקוד
- * שגוי או פג. הקוד חד-פעמי, ותקרת ניסיונות שורפת אותו — בלעדיה קוד קצר
- * מספיק כדי להכתיב בטלפון היה גם מספיק קצר כדי לתקוף אותו בלולאה.
- */
-function consumePairCode(code, req) {
-  const given = normPair(code);
-  if (!given || !pairCode) return null;
-  if (pairCode.expiresAt <= Date.now()) { pairCode = null; return null; }
-  const want = Buffer.from(pairCode.code);
-  const got = Buffer.from(given);
-  if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) {
-    if (++pairCode.tries >= PAIR_MAX_TRIES) pairCode = null;
-    return null;
-  }
-  const by = pairCode.by;
-  pairCode = null;   // חד-פעמי
-  const token = crypto.randomBytes(32).toString('base64url');
-  const devices = readDevices();
-  devices.push({
-    id: crypto.randomBytes(6).toString('hex'),
-    name: deviceLabel(req),
-    ua: String((req.headers['user-agent'] || '')).slice(0, 200),
-    hash: hashToken(token),
-    pairedBy: by || null,
-    createdAt: Date.now(), lastSeen: Date.now(),
-    expiresAt: Date.now() + DEVICE_TTL_MS,
-  });
-  writeDevices(devices);   // זורק — הקורא מדווח למשתמש
-  return token;
-}
-
-const deviceCookie = (token) =>
-  `${DEVICE_COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=${Math.floor(DEVICE_TTL_MS / 1000)}; HttpOnly; SameSite=Lax`;
+const deviceCookie = (token) => auth.cookieFor(DEVICE_COOKIE, token);
 
 const escHtmlMin = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -2067,7 +1982,7 @@ remoteApp.post('/__pair', express.urlencoded({ limit: '4kb', extended: false }),
   try { token = consumePairCode((req.body || {}).code, req); }
   catch (e) { return res.status(500).type('html').send(deniedHtml('שמירת המכשיר נכשלה: ' + e.message)); }
   if (!token) {
-    return res.status(401).type('html').send(deniedHtml(pairCode
+    return res.status(401).type('html').send(deniedHtml(auth.currentPairCode()
       ? 'הקוד שגוי. בדוק שהעתקת אותו במלואו ונסה שוב.'
       : 'הקוד שגוי, פג תוקפו או כבר נוצל. בקש קוד חדש.'));
   }
@@ -2098,13 +2013,16 @@ function remoteStatus() {
   const host = lanAddress();
   const proto = remoteSrv instanceof https.Server ? 'https' : 'http';
   const base = host ? `${proto}://${host}:${REMOTE_PORT}` : null;
+  // תצלום אחד: currentPairCode גם מפוגג קוד שפג תוקפו, ולכן ארבע קריאות
+  // נפרדות היו עלולות לתאר שני מצבים שונים בתוך אותה תשובה.
+  const pc = auth.currentPairCode();
   return {
     listening: !!remoteSrv,
     host, port: REMOTE_PORT, url: base,
-    pairUrl: base && pairCode ? `${base}/?pair=${pairCode.code}` : null,
-    pairCode: pairCode ? prettyPair(pairCode.code) : null,
-    pairBy: pairCode ? pairCode.by : null,
-    pairExpiresAt: pairCode ? pairCode.expiresAt : null,
+    pairUrl: base && pc ? `${base}/?pair=${pc.code}` : null,
+    pairCode: pc ? prettyPair(pc.code) : null,
+    pairBy: pc ? pc.by : null,
+    pairExpiresAt: pc ? pc.expiresAt : null,
     devices: readDevices().map((d) => ({
       id: d.id, name: d.name, ua: d.ua, pairedBy: d.pairedBy || null,
       createdAt: d.createdAt, lastSeen: d.lastSeen, expiresAt: d.expiresAt,
@@ -2181,7 +2099,7 @@ app.post('/api/remote/pair', express.json({ limit: '4kb' }), async (req, res) =>
   } catch (e) {
     return res.status(500).json({ error: e.code === 'EADDRINUSE' ? `פורט ${REMOTE_PORT} תפוס` : (e.message || 'שגיאה בפתיחת המאזין') });
   }
-  pairCode = { code: newPairCode(), expiresAt: Date.now() + PAIR_TTL_MS, tries: 0, by: pairActor(req) };
+  auth.issuePairCode(pairActor(req));
   res.json(remoteStatus());
 });
 
@@ -2196,7 +2114,7 @@ app.post('/api/remote/unpair', express.json({ limit: '4kb' }), (req, res) => {
 // ביטול קוד קישור שנוצר ולא נוצל
 app.post('/api/remote/cancel-pair', (req, res) => {
   if (!canPair(req)) return res.status(403).json({ error: 'לא מורשה' });
-  pairCode = null;
+  auth.clearPairCode();
   res.json(remoteStatus());
 });
 
