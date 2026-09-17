@@ -280,4 +280,70 @@ t.section('resync מגע');
   t.ok('.resync ≥ 44px', /\.resync\s*\{\s*min-height:\s*44px/.test(chunk));
 }
 
+t.section('סבב 2 — אנונימי × עם אישור');
+{
+  const snip = slice('function deleteConv(', 'function updateStatusbar(');
+  t.ok('deleteConv קורא leaveAnon/anonLeaveOk', /leaveAnon|anonLeaveOk/.test(snip));
+}
+
+t.section('סבב 2 — שימור גלילה ב-renderConversation');
+{
+  const snip = slice('function renderConversation(', '// ---------- סרגל שיחות');
+  t.ok('preserveScroll כש־!stick', /preserveScroll\s*=\s*!stick/.test(snip));
+  t.ok('מחזיר scrollTop אחרי רינדור', /log\.scrollTop\s*=\s*savedTop/.test(snip));
+}
+
+t.section('סבב 2 — מעבר שיחה מאפס stick');
+{
+  const snip = slice('async function switchConv(', 'function deleteConv(');
+  t.ok('switchConv מעמיד stick=true', /stick\s*=\s*true/.test(snip));
+  t.ok('toast על עזיבת דואט רץ', /הדואט ממשיך ברקע/.test(snip));
+}
+
+t.section('סבב 2 — halt נסה שוב');
+{
+  const snip = slice('function renderHaltCard(', 'function onHalt(');
+  t.ok('כפתור נסה שוב ב-halt recoverable', /נסה שוב/.test(snip));
+}
+
+t.section('סבב 2 — ייצוא דואט');
+{
+  const snip = slice('async function exportActiveConv(', '// ---------- חיפוש בתוך השיחה');
+  t.ok('ייצוא דואט משתמש ב-duetShownText', /duetShownText/.test(snip));
+}
+
+t.section('סבב 2 — טיוטה ממכשיר אחר');
+{
+  t.ok('toast על קונפליקט טיוטה', /טיוטה עודכנה במכשיר אחר/.test(app));
+}
+
+t.section('סבב 2 — usage focus restore');
+{
+  const snip = slice('function setUsageModalOpen(', 'function toggleUsageModal(');
+  t.ok('שומר _returnFocus בפתיחה', /_returnFocus\s*=\s*document\.activeElement/.test(snip));
+  t.ok('מחזיר focus בסגירה', /_returnFocus\.focus/.test(snip));
+}
+
+t.section('סבב 2 — AC ריק/שגיאה');
+{
+  const snip = slice('function renderAc()', 'function acceptAc(');
+  t.ok('מציג ac-empty', /ac-empty/.test(snip));
+  t.ok('הודעת שגיאה נטען', /לא נטען/.test(snip));
+  t.ok('CSS ל-.ac-empty', /\.ac-empty\s*\{/.test(css));
+}
+
+t.section('סבב 2 — הדבקה/העלאה/GOD');
+{
+  t.ok('הדבקה בלי קובץ → toast', /לא הצלחתי לקרוא תמונה מהלוח/.test(app));
+  t.ok('העלאה נכשלה → toast', /העלאת התמונה נכשלה/.test(app));
+  t.ok('בחירת GOD → toast', /מצב GOD — כל בקשת הרשאה/.test(app));
+}
+
+t.section('סבב 2 — getCommands מחזיר ok');
+{
+  const snip = slice('async function getCommands()', 'const fileFetch');
+  t.ok('מחזיר { ok, commands }', /ok:\s*(true|false)/.test(snip));
+  t.ok('מטמון ריק תקין (cmdCache !== null)', /cmdCache\s*!==\s*null/.test(snip));
+}
+
 t.done();

@@ -139,9 +139,45 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 ### F44 .resync undersized → FIXED `4542bda`
 [RESPONSIVENESS] 44px · Source: [חקירה עצמאית]
 
-### F45 Halt no one-click continue → DEFERRED
-[RECOVERY] hints exist · Source: Worker
+### F45 Halt no one-click continue → FIXED (Round 2)
+[RECOVERY] «נסה שוב» restores last prompt · Source: [חקירה עצמאית] · was DEFERRED
 
 ### F46 #log streaming SR → DEFERRED (F15)
 ### F47 Pills in compact → DEFERRED (F12)
 ### F48 Stop in composer → DEFERRED (F11)
+
+### F49 Anon × delete without confirm → FIXED (Round 2)
+[RECOVERY] deleteConv → leaveAnon/anonLeaveOk · Source: [חקירה עצמאית]
+
+### F50 renderConversation force-scroll when reading history → FIXED (Round 2)
+[FRICTION] preserveScroll when !stick · Source: [חקירה עצמאית]
+
+### F51 Switch conv inherits prior stick=false → FIXED (Round 2)
+[FRICTION] stick=true on switchConv · Source: [חקירה עצמאית]
+
+### F52 Leaving running duet silent → FIXED (Round 2)
+[FEEDBACK] toast «הדואט ממשיך ברקע» · Source: [חקירה עצמאית]
+
+### F53 Duet export nearly empty → FIXED (Round 2)
+[FEEDBACK] exportActiveConv uses duetShownText · Source: [חקירה עצמאית]
+
+### F54 Remote draft conflict silent → FIXED (Round 2)
+[FEEDBACK] toast · Source: [חקירה עצמאית]
+
+### F55 Usage modal focus trap exit → FIXED (Round 2)
+[ACCESSIBILITY] _returnFocus · Source: [חקירה עצמאית]
+
+### F56 AC @/ empty or error silent → FIXED (Round 2)
+[FEEDBACK] ac-empty + getCommands {ok} · Source: [חקירה עצמאית]
+
+### F57 Paste image null-file silent → FIXED (Round 2)
+[FEEDBACK] toast · Source: [חקירה עצמאית]
+
+### F58 Upload fail no toast → FIXED (Round 2)
+[FEEDBACK] toast on catch · Source: [חקירה עצמאית]
+
+### F59 GOD mode selected silent → FIXED (Round 2)
+[DISCOVERABILITY] toast on perm=god · Source: [חקירה עצמאית]
+
+### F60 cmdCache=[] treated as miss → FIXED (Round 2)
+[FRICTION] cmdCache !== null · Source: [חקירה עצמאית]

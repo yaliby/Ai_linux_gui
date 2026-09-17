@@ -1064,6 +1064,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
 .composer-card { position: relative; }
 .ac-menu { position: absolute; inset-inline: 6px; bottom: calc(100% + 8px); max-height: 300px; overflow-y: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-lg); padding: 6px; z-index: 60; }
 .ac-head { font-size: 10.5px; letter-spacing: .04em; color: var(--text-faint); padding: 4px 10px 6px; text-transform: uppercase; }
+.ac-empty { padding: 10px 12px; font-size: 13px; color: var(--text-dim); }
 .ac-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; cursor: pointer; font-size: 13.5px; }
 .ac-item.sel, .ac-item:hover { background: var(--accent-soft); }
 .ac-name { font-weight: 550; color: var(--text); white-space: nowrap; }

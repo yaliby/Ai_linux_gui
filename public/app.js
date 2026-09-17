@@ -1618,6 +1618,10 @@ function applyRemoteUi(m) {
     if (conv && conv.id === activeId) {
       const box = $('input').value;
       if (!box || box === prev) { $('input').value = m.value || ''; autoGrow(); }
+      else if (m.value && m.value !== box) {
+        // המכשיר השני שלח טיוטה — לא דורסים הקלדה מקומית, אבל אומרים שקרה משהו
+        toast('טיוטה עודכנה במכשיר אחר — לא דרסנו את מה שאתה מקליד');
+      }
     }
     return;
   }
@@ -2334,6 +2338,18 @@ function renderHaltCard(ref) {
   const meta = [ref.reason, ref.model || null, ref.at ? new Date(ref.at).toLocaleTimeString('he-IL') : null]
     .filter(Boolean).join(' · ');
   foot.appendChild(el('span', 'halt-meta', meta));
+  const recoverable = /^(api_error|interrupted|cancelled|max_tokens|stalled)$/.test(ref.reason || '');
+  if (recoverable) {
+    const retry = el('button', 'halt-btn', 'נסה שוב');
+    retry.type = 'button';
+    retry.title = 'מחזיר את הפרומפט האחרון לתיבה';
+    retry.onclick = () => {
+      const last = (store.history && store.history[0]) || '';
+      if (last) { $('input').value = last; autoGrow(); }
+      $('input').focus();
+    };
+    foot.appendChild(retry);
+  }
   const logs = el('button', 'halt-btn', 'פתח יומן');
   logs.type = 'button';
   logs.title = 'היומן המלא של הרגע שבו התור נעצר';
@@ -2553,7 +2569,11 @@ function renderConversation() {
   if (keepLive) detachLiveDom();
   else live = null;
 
-  const log = $('log'); log.innerHTML = '';
+  const log = $('log');
+  // מי שגלל למעלה לקרוא היסטוריה לא צריך להיזרק לתחתית בכל sync/render.
+  const preserveScroll = !stick;
+  const savedTop = preserveScroll ? log.scrollTop : 0;
+  log.innerHTML = '';
   const conv = activeConv();
   applyAnonMode();   // הפס והסימון הגלובלי נגזרים מהשיחה שמצוירת עכשיו
   $('convTitle').textContent = conv ? conv.title : 'שיחה חדשה';
@@ -2565,6 +2585,8 @@ function renderConversation() {
   if (isDuet(conv)) {
     renderDuet(conv, log); updateStatusbar();
     if (findQ.length >= 2) runFind(findQ);
+    if (preserveScroll) requestAnimationFrame(() => { log.scrollTop = savedTop; syncJumpBtn(); });
+    else requestAnimationFrame(() => autoScroll(true));
     return;
   }
   if (conv && !conv.loaded) {
@@ -2610,7 +2632,8 @@ function renderConversation() {
   if (keepLive && activeId === streamOwnerId && live) rebindLiveDom();
   updateStatusbar();
   if (findQ.length >= 2) runFind(findQ);
-  requestAnimationFrame(() => autoScroll(true));
+  if (preserveScroll) requestAnimationFrame(() => { log.scrollTop = savedTop; syncJumpBtn(); });
+  else requestAnimationFrame(() => autoScroll(true));
 }
 
 // ---------- סרגל שיחות: חיפוש · קיבוץ לפי זמן · חותמת זמן · שינוי-שם ----------
@@ -2733,6 +2756,11 @@ async function switchConv(id) {
     const n = msgQueue.length;
     toast(n ? `עדיין רץ ב«${name}» · ${n} בתור` : `עדיין רץ ב«${name}»`);
   }
+  // דואט ממשיך בשרת גם אחרי מעבר — בלי משוב נראה כאילו נעצר, ואז חוזרים לטופס הקמה.
+  const leaving = activeConv();
+  if (isDuet(leaving) && duetRun && duetRun.convId === leaving.id && duetRun.status === 'running') {
+    toast(`הדואט ממשיך ברקע ב«${clamp(leaving.title || 'דואט', 40)}»`);
+  }
   // התור וההמתנה למכסה שייכים לשיחה שעזבנו. מנקים מיד ולא מחכים ל-sync,
   // אחרת הצ'יפים של השיחה הקודמת נראים לרגע כאילו הם של החדשה.
   if (limitState) {
@@ -2744,6 +2772,7 @@ async function switchConv(id) {
   setLimitState(null);
   duetRun = null; duetLive = null; duetDom = null; duetViewV = 0; duetVerCache.clear();
   activeId = id;
+  stick = true;                       // שיחה חדשה — לתחתית, לא לשימור גלילה של הקודמת
   subscribeActive();                  // מנוי על זרם השיחה החדשה בשרת
   markSettings();
   renderConvList();
@@ -2756,7 +2785,16 @@ async function switchConv(id) {
 function deleteConv(id) {
   // אנונימית: אין קובץ למחוק, ויש מסלול ניקוי משלה (תהליך + זיכרון בשני הצדדים)
   const anon = convById(id);
-  if (anon && anon.anon) { endAnon(); return; }
+  if (anon && anon.anon) {
+    // אותו אישור כמו יציאה/מעבר — × ברשימה לא אמור למחוק בטעות בלי שאלה
+    if (activeId === anon.id) {
+      if (!leaveAnon(null)) return;
+      return;
+    }
+    if (!anonLeaveOk(anon)) return;
+    endAnon();
+    return;
+  }
   if (busy && id === streamOwnerId) {
     interruptTurn();
     abandonTurn();
@@ -3210,6 +3248,7 @@ function setUsageModalOpen(open) {
   const strip = $('composerUsage');
   const btn = $('usageOpen');
   if (!modal) return;
+  if (open) modal._returnFocus = document.activeElement;
   modal.classList.toggle('hidden', !open);
   if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
   if (strip) strip.classList.toggle('open', open);
@@ -3218,7 +3257,10 @@ function setUsageModalOpen(open) {
     refreshUsage();
     const close = $('usageModalClose');
     if (close) close.focus();
-  }
+  } else if (modal._returnFocus && typeof modal._returnFocus.focus === 'function') {
+    try { modal._returnFocus.focus(); } catch {}
+    modal._returnFocus = null;
+  } else if (btn) btn.focus();
 }
 function toggleUsageModal() { setUsageModalOpen(!isUsageModalOpen()); }
 
@@ -4212,7 +4254,7 @@ async function uploadAttachment(att) {
       } catch { att.path = '(בזיכרון · זמני)'; }
       att.kind = 'temp';
     }
-  } catch { att.status = 'err'; }
+  } catch { att.status = 'err'; toast('העלאת התמונה נכשלה — לחץ על הצ׳יפ לניסיון חוזר', true); }
   renderAttStrip();
 }
 
@@ -4251,7 +4293,11 @@ $('fileInput').onchange = (e) => { [...e.target.files].forEach(f => addAttachmen
 $('input').addEventListener('paste', (e) => {
   const items = [...((e.clipboardData && e.clipboardData.items) || [])];
   const imgs = items.filter(it => it.type.startsWith('image/'));
-  if (imgs.length) { e.preventDefault(); imgs.forEach(it => { const f = it.getAsFile(); if (f) addAttachment(f, true); }); }
+  if (!imgs.length) return;
+  e.preventDefault();
+  let added = 0;
+  imgs.forEach(it => { const f = it.getAsFile(); if (f) { addAttachment(f, true); added++; } });
+  if (!added) toast('לא הצלחתי לקרוא תמונה מהלוח', true);
 });
 
 // גרירה ושחרור מכל מקום בחלון
@@ -4277,7 +4323,10 @@ window.addEventListener('dragend', hideDropzone);
   // תיקיית העבודה נזכרת גם ברמת השיחה (וברמת ההגדרות כברירת מחדל לשיחה הבאה)
   if (id === 'cwd') { const c = activeConv(); if (c) c.cwd = $('cwd').value; updateCwdChip(); }
   // החלפת מצב הרשאות תוך כדי שיחה — נשלחת חיה ל-CLI (set_permission_mode)
-  if (id === 'perm') markGodPill();
+  if (id === 'perm') {
+    markGodPill();
+    if ($('perm').value === 'god') toast('מצב GOD — כל בקשת הרשאה תאושר אוטומטית');
+  }
   if (id === 'perm' && ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'set_permission_mode', mode: $('perm').value }));
   // החלפת מודל/מאמץ תוך כדי שיחה — השרת מחיל אותה על השיחה הרצה (set_model,
   // ואם צריך גם הפעלה מחדש עם resume) ומשדר את הבוררים למסכים האחרים.
@@ -5599,21 +5648,33 @@ const CLIENT_CMDS = {
 let cmdCacheKey = '';
 async function getCommands() {
   const key = activeAgent() + '|' + ($('cwd').value || '');
-  if (cmdCache && cmdCacheKey === key) return cmdCache;
+  // cmdCache=[] הוא תוצאה תקינה (אין פקודות) — אסור לטפל ב־[] כ־miss
+  if (cmdCache !== null && cmdCacheKey === key) return { ok: true, commands: cmdCache };
   cmdCacheKey = key;
   try {
     const r = await fetch('/api/commands?cwd=' + encodeURIComponent($('cwd').value || '') + '&agent=' + activeAgent());
     cmdCache = (await r.json()).commands || [];
+    return { ok: true, commands: cmdCache };
+  } catch {
+    cmdCache = null;
+    cmdCacheKey = '';
+    return { ok: false, commands: [] };
   }
-  catch { cmdCache = []; }
-  return cmdCache;
 }
 const fileFetch = debounce(async (q) => {
   try {
     const r = await fetch('/api/files?cwd=' + encodeURIComponent($('cwd').value || '') + '&q=' + encodeURIComponent(q));
     const files = (await r.json()).files || [];
-    if (ac && ac.mode === 'file') { ac.items = files.map(f => ({ name: f })); ac.sel = 0; renderAc(); }
-  } catch {}
+    if (ac && ac.mode === 'file') {
+      ac.items = files.map(f => ({ name: f }));
+      ac.sel = 0;
+      ac.error = false;
+      ac.empty = !files.length;
+      renderAc();
+    }
+  } catch {
+    if (ac && ac.mode === 'file') { ac.items = []; ac.error = true; ac.empty = false; renderAc(); }
+  }
 }, 160);
 
 function tokenAtCaret() {
@@ -5632,12 +5693,17 @@ async function updateAc() {
   const tk = tokenAtCaret();
   if (!tk) return closeAc();
   if (tk.mode === 'slash') {
-    const cmds = await getCommands();
+    const res = await getCommands();
     const q = tk.q.toLowerCase();
-    ac = { mode: 'slash', token: tk, items: cmds.filter(c => c.name.slice(1).toLowerCase().includes(q)), sel: 0 };
+    const items = res.commands.filter(c => c.name.slice(1).toLowerCase().includes(q));
+    ac = {
+      mode: 'slash', token: tk, items, sel: 0,
+      error: !res.ok,
+      empty: res.ok && !items.length,
+    };
     renderAc();
   } else {
-    ac = { mode: 'file', token: tk, items: [], sel: 0 };
+    ac = { mode: 'file', token: tk, items: [], sel: 0, error: false, empty: false };
     renderAc();
     fileFetch(tk.q);
   }
@@ -5645,7 +5711,20 @@ async function updateAc() {
 
 function renderAc() {
   const m = acMenu();
-  if (!ac || !ac.items.length) { m.classList.add('hidden'); m.innerHTML = ''; return; }
+  if (!ac) { m.classList.add('hidden'); m.innerHTML = ''; return; }
+  // מצב טעינה / ריק / שגיאה — לא מסתירים בשקט; אחרת @ ו-/ נראים שבורים
+  if (!ac.items.length) {
+    m.innerHTML = '';
+    const head = el('div', 'ac-head', ac.mode === 'slash' ? 'פקודות' : 'קבצים בתיקיית העבודה');
+    m.appendChild(head);
+    let msg = 'טוען…';
+    if (ac.error) msg = 'לא נטען — נסה שוב';
+    else if (ac.empty) msg = ac.mode === 'file' ? 'לא נמצאו קבצים' : 'אין התאמות';
+    else if (ac.mode === 'slash') msg = 'אין התאמות';
+    m.appendChild(el('div', 'ac-empty', msg));
+    m.classList.remove('hidden');
+    return;
+  }
   m.innerHTML = '';
   const head = el('div', 'ac-head', ac.mode === 'slash' ? 'פקודות' : 'קבצים בתיקיית העבודה');
   m.appendChild(head);
@@ -5671,7 +5750,7 @@ function acceptAc(idx) {
   if (!it) return;
   const i = $('input'); const val = i.value; const tk = ac.token;
   if (ac.mode === 'slash') {
-    const cmd = cmdCache.find(c => c.name === it.name) || it;
+    const cmd = (cmdCache || []).find(c => c.name === it.name) || it;
     if (cmd.client && CLIENT_CMDS[cmd.name]) { closeAc(); i.value = ''; autoGrow(); CLIENT_CMDS[cmd.name](''); return; }
     const rest = val.slice(tk.end);
     i.value = it.name + ' ' + rest.replace(/^\s+/, '');
@@ -6871,7 +6950,15 @@ async function exportActiveConv() {
   const c = activeConv();
   if (!c) return;
   if (!c.loaded) await ensureLoaded(c.id);
-  const blob = new Blob([convToMarkdown(c)], { type: 'text/markdown;charset=utf-8' });
+  // דואט: התוצר חי ב-duetRun, לא ב-messages — אחרת הייצוא יוצא כמעט ריק
+  let md;
+  if (isDuet(c) && duetRun && duetRun.convId === c.id) {
+    const body = duetShownText() || '';
+    md = `# ${c.title || 'דואט'}\n\n${body}\n`;
+  } else {
+    md = convToMarkdown(c);
+  }
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

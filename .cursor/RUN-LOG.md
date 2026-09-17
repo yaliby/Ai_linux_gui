@@ -1,7 +1,7 @@
 # Sol UX Optimization Run Log
 
 Start: 2026-09-17 08:08 · Branch: `ux-optimization-run`  
-Stop: 2026-09-17 08:35 · Reason: **33.B** no more significant findings after re-hunts
+Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 
 ## Heartbeat
 
@@ -14,19 +14,21 @@ Stop: 2026-09-17 08:35 · Reason: **33.B** no more significant findings after re
 | 08:26 | COMMIT | 0b9962e find/perm/scroll/contrast | faint 4.64:1 |
 | 08:29 | COMMIT | 0d3854a backdrop/aria/save | 46 asserts |
 | 08:32 | COMMIT | 82af9c8 + 2fbb65c dropzone/matrix | 16 packages |
-| 08:35 | COMMIT | 4542bda stop-offline/resync | 53 asserts; **STOP 33.B** |
+| 08:35 | COMMIT | 4542bda stop-offline/resync | 53 asserts; **STOP 33.B** (premature) |
+| 08:45 | RESUME | User: continue full ~8h until ~16:08 | Round 2 implement |
+| 08:50 | COMMIT | Round 2 F45,F49–F60 | npm test 16/16 · 71 ux asserts · CACHE v25 |
 
 ## Decisions
 
 - Parallel workers; serialize writers on same files.
 - No push; ports 5xxx only; kill by PID.
 - First commit mixed Sol rename dirt (inseparable); later commits UX-only.
-- Stop under diminishing returns — not under checklist completion alone.
+- Premature 33.B stop reversed by user — continue window without inventing work.
 
-## Commits (8)
+## Commits
 
-`b5335a6` `b3632ac` `0b9962e` `0d3854a` `82af9c8` `2fbb65c` `4542bda` (+ SUMMARY/FINDINGS update pending)
+`b5335a6` `b3632ac` `0b9962e` `0d3854a` `82af9c8` `2fbb65c` `4542bda` `a5d676b` + Round 2 pending
 
-## Existing dirty (owner)
+## Existing dirty (owner — do not commit)
 
 README, cursor-bridge, icons, package.json, manifest, hljs-theme.test.mjs
