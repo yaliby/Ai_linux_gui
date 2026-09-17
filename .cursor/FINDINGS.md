@@ -460,3 +460,9 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F153 Palette stacks behind model picker → FIXED (Round 33)
 [CONFUSION] openPalette↔closeModelPicker mutual · Source: Worker Round 33
+
+### F154 Modal under palette/modelPicker → FIXED (Round 34)
+[CONFUSION] openModal closes palette+modelPicker · Source: residual dig
+
+### F155 themeToggle aria stale on init → FIXED (Round 34)
+[ACCESSIBILITY] syncThemeChrome after load · Source: residual dig

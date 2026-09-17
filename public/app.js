@@ -4790,6 +4790,15 @@ function syncHljsTheme() {
   if (night) night.media = dark ? 'all' : 'not all';
 }
 
+function syncThemeChrome() {
+  const btn = $('themeToggle');
+  if (!btn) return;
+  const dark = isDark();
+  const label = dark ? 'מצב כהה · לחץ לבהיר' : 'מצב בהיר · לחץ לכהה';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.setAttribute('aria-pressed', dark ? 'true' : 'false');
+}
 $('themeToggle').onclick = () => {
   const next = isDark() ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
@@ -4797,9 +4806,7 @@ $('themeToggle').onclick = () => {
   syncHljsTheme();
   rethemeMermaid();
   save();
-  const btn = $('themeToggle');
-  const label = next === 'dark' ? 'מצב כהה · לחץ לבהיר' : 'מצב בהיר · לחץ לכהה';
-  if (btn) { btn.title = label; btn.setAttribute('aria-label', label); }
+  syncThemeChrome();
   toast(next === 'dark' ? 'מצב כהה' : 'מצב בהיר');
 };
 
@@ -5345,6 +5352,7 @@ async function init() {
   // כל מה שתלוי בהגדרות חייב לרוץ רק אחרי שהן הגיעו מהשרת
   if (store.settings.theme) document.documentElement.setAttribute('data-theme', store.settings.theme);
   syncHljsTheme();   // אחרי החלת הערכה השמורה, ולא לפניה
+  syncThemeChrome();
   initSideResize();
   applyWide();
   dictPaint();        // חושף את המיקרופון ומציג את השפה שנשמרה בהגדרות
@@ -6161,6 +6169,8 @@ function openModal(title, node) {
   if (!$('settings').classList.contains('hidden')) closeSettings();
   if (isUsageModalOpen()) setUsageModalOpen(false);
   if (!$('findBar').classList.contains('hidden')) closeFind();
+  if (!$('palette').classList.contains('hidden')) closePalette();
+  if (!$('modelPicker').classList.contains('hidden')) closeModelPicker();
   modalReturnFocus = document.activeElement;
   $('modalTitle').textContent = title;
   const b = $('modalBody'); b.innerHTML = ''; b.appendChild(node);
