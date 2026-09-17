@@ -51,6 +51,8 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 12:31 | COMMIT | Round 23 F139–F141 | presence/SW/dict · CACHE v46 |
 | 12:36 | COMMIT | Round 24 F142–F143 | OS mermaid + sync toast · CACHE v47 |
 | 12:37 | HEARTBEAT | residual hunt | F01–F143 · diminishing · →16:08 |
+| 12:52 | COMMIT | Round 25 F144–F145 | modal listeners, anon disabled · CACHE v48 |
+| 12:52 | HEARTBEAT | continue →16:08 | F01–F145 · 16/16 · diminishing |
 ## Decisions
 
 - Parallel workers; serialize writers on same files.
@@ -61,7 +63,7 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 
 ## Commits (local only)
 
-Rounds 1–24 on `ux-optimization-run` through `76d65f1`
+Rounds 1–25 on `ux-optimization-run` through `e66f4a1`
 
 ## Existing dirty (owner — do not commit)
 

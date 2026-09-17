@@ -4,7 +4,7 @@
    לכן: רשת קודם תמיד, והמטמון הוא רק רשת ביטחון לקליפה (HTML/CSS/JS) כדי
    שמסך ריק לא יקפוץ בשנייה שבה ה-Wi-Fi מתחלף לסלולר.
    קריאות API ו-WebSocket לא נכנסות למטמון לעולם. */
-const CACHE = 'rtl-claude-shell-v48';
+const CACHE = 'rtl-claude-shell-v49';
 const SHELL = ['/', '/index.html', '/app.js', '/style.css', '/icon.svg'];
 
 self.addEventListener('install', (e) => {

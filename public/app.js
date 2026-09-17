@@ -2807,7 +2807,14 @@ function startRename(c, item, titleEl) {
     markDirty(c); renderConvList();
     if (c.id === activeId) $('convTitle').textContent = c.title;
   };
-  inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } else if (e.key === 'Escape') { done = true; renderConvList(); } };
+  inp.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') {
+      // בלי stopPropagation Escape היה סוגר גם את המגירה בטלפון
+      e.preventDefault(); e.stopPropagation();
+      done = true; renderConvList();
+    }
+  };
   inp.onblur = commit;
   inp.onclick = (e) => e.stopPropagation();
 }

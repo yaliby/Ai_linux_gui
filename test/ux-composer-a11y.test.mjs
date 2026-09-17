@@ -540,4 +540,10 @@ t.section('סבב 25 — מודאל / אנונימי מושבת');
   t.ok('newAnon.disabled לחיץ להסבר', /\.nav-row\.disabled[^}]*cursor: not-allowed/.test(css) && !/\.nav-row\.disabled[^}]*pointer-events:\s*none/.test(css));
 }
 
+t.section('סבב 26 — שינוי שם Escape');
+{
+  const ren = slice('function startRename(', 'function deleteConv(');
+  t.ok('Escape בשינוי שם לא סוגר מגירה', /Escape[\s\S]{0,120}stopPropagation/.test(ren));
+}
+
 t.done();

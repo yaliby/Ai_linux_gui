@@ -436,3 +436,6 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F145 newAnon.disabled blocks toast (pointer-events) → FIXED (Round 25)
 [FEEDBACK] cursor:not-allowed; click still toasts · Source: Worker Round 25
+
+### F146 Rename Escape closes drawer on mobile → FIXED (Round 26)
+[CONFUSION] stopPropagation on Escape in startRename · Source: Worker Round 26
