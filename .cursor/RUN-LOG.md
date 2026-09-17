@@ -1,34 +1,32 @@
 # Sol UX Optimization Run Log
 
-Start: 2026-09-17 08:08 (Asia/Jerusalem)
-Branch: `ux-optimization-run`
-Planned duration: ~8 hours
-Worker mode: **parallel** (probe `@media` count = 25)
+Start: 2026-09-17 08:08 · Branch: `ux-optimization-run`  
+Stop: 2026-09-17 08:35 · Reason: **33.B** no more significant findings after re-hunts
 
 ## Heartbeat
 
 | Time | Track | Done | Evidence |
 |------|-------|------|----------|
-| 08:08 | SETUP | Branch + baseline npm test + worker probe | 14/14 green; parallel mode |
-| 08:12 | DISCOVER | Product map; Worker A/B audits | 11+10 candidates |
-| 08:15 | FIX | Batch 1 F01–F10 | contrast 2.07→8.23; tests red→green |
-| 08:20 | COMMIT | `b5335a6` Batch 1+2 (incl. inseparable Sol dirt note) | npm test 15/15 |
-| 08:24 | COMMIT | `b3632ac` Escape/presence/retry/theme | npm test 15/15 |
-| 08:26 | COMMIT | Batch 4 find/perm/scroll/contrast | text-faint 4.37→4.64; 40 UX assertions |
+| 08:08 | SETUP | Branch, baseline tests, worker probe | 14→16 packages; parallel (25 @media) |
+| 08:12 | DISCOVER | Product map + Workers A/B | 21 candidates |
+| 08:20 | COMMIT | b5335a6 Batch 1–2 | 15/15 then growing |
+| 08:24 | COMMIT | b3632ac Escape/presence/retry | 15/15 |
+| 08:26 | COMMIT | 0b9962e find/perm/scroll/contrast | faint 4.64:1 |
+| 08:29 | COMMIT | 0d3854a backdrop/aria/save | 46 asserts |
+| 08:32 | COMMIT | 82af9c8 + 2fbb65c dropzone/matrix | 16 packages |
+| 08:35 | COMMIT | 4542bda stop-offline/resync | 53 asserts; **STOP 33.B** |
 
 ## Decisions
 
-- Parallel workers when conflict-free; serialize writers on same files.
-- No push. Ports 5xxx only for test servers; kill by PID.
-- Commit 1 included pre-existing Sol rename dirt in public/* (inseparable); later commits are UX-only deltas.
-- Deferred: stop-in-composer, pills-in-compact, transcript virtualization, markdown throttle, #log aria-live redesign, halt one-click continue.
+- Parallel workers; serialize writers on same files.
+- No push; ports 5xxx only; kill by PID.
+- First commit mixed Sol rename dirt (inseparable); later commits UX-only.
+- Stop under diminishing returns — not under checklist completion alone.
 
-## Commits
+## Commits (8)
 
-1. `b5335a6` — משוב ובהירות: שליחה, חיבור, תור ומגע
-2. `b3632ac` — Escape, תצוגה בלבד, וניסיון חוזר לצירוף
-3. (pending hash) — חיפוש יציב, המתנת הרשאה, וגלילה במקלדת
+`b5335a6` `b3632ac` `0b9962e` `0d3854a` `82af9c8` `2fbb65c` `4542bda` (+ SUMMARY/FINDINGS update pending)
 
-## Existing dirty (owner, not committed by this run)
+## Existing dirty (owner)
 
-README.md, cursor-bridge.js, icon.svg, package.json, public/favicon+icons, manifest, test/hljs-theme.test.mjs
+README, cursor-bridge, icons, package.json, manifest, hljs-theme.test.mjs

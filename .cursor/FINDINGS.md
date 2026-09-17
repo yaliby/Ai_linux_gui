@@ -1,165 +1,147 @@
-# Findings
+# Findings — Sol UX Optimization Run
 
-Run start: 2026-09-17 08:08
+Start: 2026-09-17 08:08 · Branch: `ux-optimization-run`  
+Worker mode: parallel · Final tests: `npm test` → 16/16
 
----
-
-### F01 — שליחה ריקה בלי משוב
-
-קטגוריה: [FEEDBACK]
-מסך: composer
-viewport: all
-ערכה: all
-מערכת: —
-
-מטרת המשתמש: להבין למה שלח לא עושה כלום
-
-תרחיש: תיבה ריקה → לחיצה על שלח / Enter
-
-התנהגות נוכחית (לפני): `sendMessage` חוזר בשקט
-
-Evidence: `if (!text && !atts.length) return;` ב-app.js; בדיקה אדומה ב-`ux-composer-a11y.test.mjs`
-
-לפני: 0 אותות למשתמש
-
-השפעה: כפתור ראשי נראה שבור
-
-Root cause: early return בלי toast
-
-Supervisor decision: FIX
-
-תיקון: toast «כתוב הודעה או צרף תמונה»
-
-אחרי: toast בנתיב; test ירוק
-
-Test: `ux-composer-a11y.test.mjs` / שליחה ריקה
-
-Commit: (pending)
-
-מקור: [checklist + Worker A]
+Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקירה עצמאית]
 
 ---
 
-### F02 — מצב תור: aria-label נשאר «שלח»
+### F01 Empty send silent → FIXED `b5335a6`
+[FEEDBACK] toast «כתוב הודעה או צרף תמונה» · Test: ux-composer-a11y · Source: Worker A
 
-קטגוריה: [ACCESSIBILITY]
-מסך: composer
-viewport: mobile (אין hover)
-Evidence: `syncSendAffordance` עדכן רק `title`
-Supervisor decision: FIX — `setAttribute('aria-label', btn.title)`
-אחרי: aria-label = title במצב תור/מכסה
-Test: ux-composer-a11y
-מקור: [Worker A]
+### F02 Queue send aria-label → FIXED `b5335a6`
+[ACCESSIBILITY] syncSendAffordance sets aria-label · Source: Worker A
 
----
+### F03 Stop 40→44px → FIXED `b5335a6`
+[RESPONSIVENESS] coarse .stop · Source: Worker A
 
-### F03 — עצור 40px במגע
+### F04 Dict strip touch → FIXED `b5335a6`
+[RESPONSIVENESS] .dk-lang/.dk-stop 40px · Source: Worker A
 
-קטגוריה: [RESPONSIVENESS]
-Evidence: `.stop { min-height: 40px }` ב-coarse
-Supervisor decision: FIX → 44px (פעולת interrupt ראשית תחת לחץ)
-לפני: 40px | אחרי: 44px
-מקור: [Worker A]
+### F05 Queue remove 22→36 → FIXED `b5335a6`
+[RESPONSIVENESS] .q-rm · Source: Worker A
 
----
+### F06 Mic http disabled silent → FIXED `b5335a6`
+[FEEDBACK] aria-disabled + toast · Source: Worker A
 
-### F04 — סיום הכתבה / שפת הכתבה ~22px
+### F07 Dark «תמיד» 2.07:1 → FIXED `b5335a6`
+[ACCESSIBILITY] MEASURED after **8.23:1** via --on-accent · Source: Worker B [חקירה עצמאית]
 
-קטגוריה: [RESPONSIVENESS]
-Evidence: `.dk-lang, .dk-stop { padding: 2px 9px }`
-Supervisor decision: FIX → min-height 40px ב-coarse
-מקור: [Worker A]
+### F08 --surface undefined → FIXED `b5335a6`
+[VISUAL] → --panel · Source: Worker B [חקירה עצמאית]
 
----
+### F09 Copy code keyboard → FIXED `b5335a6`
+[ACCESSIBILITY] :focus-within · Source: Worker B
 
-### F05 — הסרת פריט מתור 22×22
+### F10 askBar aria-live → FIXED `b5335a6`
+[ACCESSIBILITY] · Source: Worker B
 
-קטגוריה: [RESPONSIVENESS]
-Evidence: `.q-chip .q-rm { width: 22px; height: 22px }`
-Supervisor decision: FIX → 36×36 ב-coarse
-מקור: [Worker A]
+### F11 Stop far from composer → DEFERRED
+[DISCOVERABILITY] Structural · Source: Worker A
 
----
+### F12 Pills hidden in compose-compact → DEFERRED
+[FRICTION] Intentional keyboard layout · Source: Worker A
 
-### F06 — מיקרופון http: disabled בולע לחיצה
+### F13 Transcript full rebuild → DEFERRED
+[PERFORMANCE] High risk · Source: Worker B
 
-קטגוריה: [FEEDBACK]
-Evidence: `btn.disabled = !dictSecure()`; disabled לא מפעיל onclick
-Supervisor decision: FIX — aria-disabled + toast ב-dictStart
-מקור: [Worker A]
+### F14 Markdown every delta → DEFERRED
+[PERFORMANCE] · Source: Worker B
 
----
+### F15 #log aria-live flood → DEFERRED
+[ACCESSIBILITY] Needs SR redesign · Source: Worker B
 
-### F07 — «תמיד» במצב כהה 2.07:1
+### F16 statusPill «מוכן» when disconnected → FIXED `b5335a6`
+[FEEDBACK] setStatus drives pill · Source: [חקירה עצמאית]
 
-קטגוריה: [ACCESSIBILITY]
-Evidence: `#fff` על `--good:#74c775` → 2.07:1; אחרי `--on-accent:#08201e` → **8.23:1**
-Supervisor decision: FIX
-מקור: [Worker B] [חקירה עצמאית]
+### F17 Mid-busy conv switch ghost → FIXED `b5335a6`
+[CONFUSION] toast with owner title + queue count · Source: [חקירה עצמאית]
 
----
+### F18 Jump 38px / no aria-label → FIXED `b5335a6`
+[RESPONSIVENESS] 44px + aria-label · Source: [חקירה עצמאית]
 
-### F08 — `--surface` לא מוגדר ב-tool-rej-btn
+### F19 GOD hint hover-only → FIXED `b5335a6`
+[DISCOVERABILITY] select.title = GOD_HINT · Source: [חקירה עצמאית]
 
-קטגוריה: [VISUAL]
-Evidence: `var(--surface)` פעם אחת ב-repo, לא ב-`:root`
-Supervisor decision: FIX → `var(--panel)`
-מקור: [Worker B] [חקירה עצמאית]
+### F20 Notify chip icon-only → FIXED `b5335a6`
+[ACCESSIBILITY] aria-label · Source: [חקירה עצמאית]
 
----
+### F21 Long title unbounded → FIXED `b5335a6`
+[RESPONSIVENESS] rename clamp 80 · Source: checklist-adjacent [חקירה עצמאית]
 
-### F09 — העתקת קוד רק ב-hover
+### F22 Limit bar cleared on switch → FIXED `b5335a6`
+[FEEDBACK] toast when clearing · Source: [חקירה עצמאית]
 
-קטגוריה: [ACCESSIBILITY]
-Evidence: אין `:focus-within` ל-`.copy-btn`
-Supervisor decision: FIX
-מקור: [Worker B]
+### F23 Escape palette/settings → FIXED `b3632ac`
+[RECOVERY] global Escape · Source: [חקירה עצמאית]
 
----
+### F24 Secondary device silent → FIXED `b3632ac`
+[CONFUSION] «תצוגה בלבד» · Source: [חקירה עצמאית]
 
-### F10 — askBar בלי aria-live
+### F25 Attachment err no retry → FIXED `b3632ac`
+[RECOVERY] uploadAttachment + click retry · Source: [חקירה עצמאית]
 
-קטגוריה: [ACCESSIBILITY]
-Evidence: `#askBar` עם role=status בלי aria-live; שאר הפסים עם polite
-Supervisor decision: FIX
-מקור: [Worker B]
+### F26 Theme no feedback → FIXED `b3632ac`
+[FEEDBACK] toast + aria-label · Source: [חקירה עצמאית]
 
----
+### F27 ab-go/lb-go 38px → FIXED `b3632ac`
+[RESPONSIVENESS] 44px · Source: checklist
 
-### F11 — Stop רחוק מה-composer (DEFER)
+### F28 Find cleared on render → FIXED `0b9962e`
+[RECOVERY] restore findQ · Source: Worker B [חקירה עצמאית]
 
-קטגוריה: [DISCOVERABILITY]
-Supervisor decision: DEFER — שינוי מבני גדול יותר; לא בסבב הראשון
-מקור: [Worker A]
+### F29 Working overwrites permWaiting → FIXED `0b9962e`
+[CONFUSION] pendingPerms first · Source: [חקירה עצמאית]
 
----
+### F30 Queue strip no live → FIXED `0b9962e`
+[ACCESSIBILITY] aria-live · Source: [חקירה עצמאית]
 
-### F12 — פילים מוסתרים ב-compose-compact (DEFER)
+### F31 Keyboard force stick → FIXED `0b9962e`
+[FRICTION] autoScroll() without force · Source: [חקירה עצמאית]
 
-קטגוריה: [FRICTION]
-Supervisor decision: DEFER — התנהגות מכוונת לחיסכון במקלדת; לבחון sheet מאוחר יותר
-מקור: [Worker A]
+### F32 text-faint on panel-2 4.37 → FIXED `0b9962e`
+[ACCESSIBILITY] MEASURED after **4.64:1** · Source: [חקירה עצמאית]
 
----
+### F33 Drawer backdrop hidden attr → FIXED `0d3854a`
+[RECOVERY] remove HTML hidden · Source: [חקירה עצמאית]
 
-### F13 — rebuild מלא של התמליל (DEFER)
+### F34 Model picker aria → FIXED `0d3854a`
+[ACCESSIBILITY] haspopup/expanded · Source: [חקירה עצמאית]
 
-קטגוריה: [PERFORMANCE]
-Supervisor decision: DEFER — סיכון גבוה, מחוץ לסcope מינימלי
-מקור: [Worker B]
+### F35 moreBtn discoverability → FIXED `0d3854a`
+[DISCOVERABILITY] richer label + expanded · Source: [חקירה עצמאית]
 
----
+### F36 Save error silent → FIXED `0d3854a`
+[FEEDBACK] toast on error · Source: [חקירה עצמאית]
 
-### F14 — markdown מלא בכל delta (DEFER)
+### F37 Dropzone no Escape → FIXED `82af9c8`
+[RECOVERY] hideDropzone · Source: [חקירה עצמאית]
 
-קטגוריה: [PERFORMANCE]
-Supervisor decision: DEFER
-מקור: [Worker B]
+### F38 Stale + «חושב…» → FIXED `82af9c8`
+[CONFUSION] «נראה תקוע» · Source: [חקירה עצמאית]
 
----
+### F39 Statusbar overflow mobile → FIXED `82af9c8`
+[RESPONSIVENESS] #sbContext ellipsis · Source: [חקירה עצמאית]
 
-### F15 — aria-live על #log בזמן סטרימינג (DEFER)
+### F40 AC no scrollIntoView → FIXED `82af9c8`
+[FRICTION] · Source: [חקירה עצמאית]
 
-קטגוריה: [ACCESSIBILITY]
-Supervisor decision: DEFER — דורש עיצוב SR זהיר
-מקור: [Worker B]
+### F41 Viewport matrix untested → FIXED `2fbb65c`
+[RESPONSIVENESS] ux-viewport-matrix.test.mjs · Source: simulation
+
+### F42 Palette Ctrl+K on phone → FIXED `2fbb65c`
+[DISCOVERABILITY] isTouch placeholder · Source: [חקירה עצמאית]
+
+### F43 Stop when disconnected silent → FIXED `4542bda`
+[FEEDBACK] toast + manualCheck · Source: [חקירה עצמאית]
+
+### F44 .resync undersized → FIXED `4542bda`
+[RESPONSIVENESS] 44px · Source: [חקירה עצמאית]
+
+### F45 Halt no one-click continue → DEFERRED
+[RECOVERY] hints exist · Source: Worker
+
+### F46 #log streaming SR → DEFERRED (F15)
+### F47 Pills in compact → DEFERRED (F12)
+### F48 Stop in composer → DEFERRED (F11)

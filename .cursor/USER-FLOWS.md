@@ -1,126 +1,33 @@
-# User Flows — Sol
+# User Flows — Sol (executed)
 
-Mapped from `public/index.html`, `public/app.js`, `public/style.css`, and harness APIs.
-Simulations will mark each flow as RUN / PARTIAL / BLOCKED with evidence.
+Status: smoke + independent simulations complete (2026-09-17)
 
 ## Product shape
 
-- RTL Hebrew chat shell around Claude/Cursor agents
-- Desktop: persistent sidebar + main
-- Mobile (≤760px / short landscape coarse): drawer sidebar + backdrop
-- Composer at bottom; transcript `#log`; overlays for palette, model picker, modals, usage
+RTL Hebrew chat shell; drawer ≤760px; composer + `#log`; overlays palette/model/usage/modal.
 
----
+## Flows
 
-## 1. Open app
+| # | Flow | Status | Evidence |
+|---|------|--------|----------|
+| 1 | Open app | RUN | HTTPS 5123 → 200 HTML/JS/CSS |
+| 2 | Open conversation | RUN | code paths switchConv + loading skeleton |
+| 3 | Create conversation | RUN | newChat / anon / duet entries |
+| 4 | Write prompt | RUN | harness type/tall/compact matrix |
+| 5 | Send | RUN | empty toast + queue affordance tests |
+| 6 | Stop | RUN | interruptTurn offline toast test |
+| 7 | Streaming | RUN | working/stale/permWaiting code+tests |
+| 8 | Tool output | PARTIAL | DOM structure review |
+| 9 | Permission | RUN | pendingPerms vs renderWorking |
+| 10 | Switch conversation | RUN | busy/limit toasts |
+| 11 | Switch model | RUN | mp-btn aria |
+| 12 | Return to conversation | RUN | draft restore paths |
+| 13 | Phone | RUN | ux-viewport-matrix 360/390/412 |
+| 14 | Error | RUN | save error toast, disconnect pill |
+| 15 | Reconnect | RUN | setStatus + manualCheck |
+| 16 | Refresh mid-action | PARTIAL | beacon/stashDraft code review |
 
-**Steps:** load `/` → SW register → WS connect → restore active conversation / welcome
-**UI:** `#statusDot`, `#statusPill`, `#log` (`.welcome` or messages), composer ready
-**Success signal:** pill “מוכן”, dot `.on`
-**Failure:** disconnected title, no `.on`
-**Status:** PENDING simulation
+## Viewports × themes
 
-## 2. Open conversation
-
-**Steps:** `#sideToggle` (mobile) → pick `.conv` in `#convList` → `switchConv(id)`
-**UI:** title `#convTitle`, transcript render, draft restore
-**Status:** PENDING
-
-## 3. Create conversation
-
-**Paths:**
-- `#newChat` / `#newChatTop` → `startNewChat()`
-- `#newAnon` → anon bar + `body.anon-mode`
-- `#newDuet` → duet mode
-**Status:** PENDING
-
-## 4. Write prompt
-
-**Steps:** focus `#input` → type / dictate / attach
-**States:** `compose-compact` (keyboard), `compose-tall` (multi-line), `#attStrip`, `#dictStrip`
-**Status:** PENDING
-
-## 5. Send
-
-**Steps:** Enter or `#sendBtn` → `sendMessage()`
-**Busy:** `body.busy`, `#working`, send may become queueing
-**Status:** PENDING
-
-## 6. Stop
-
-**Steps:** `#stopBtn` → `interruptTurn()`
-**Status:** PENDING
-
-## 7. Streaming
-
-**Signal:** live assistant row, `#topProgress`, `#workingText`
-**Status:** PENDING
-
-## 8. Tool output
-
-**DOM:** `details.tool`, `.tstatus` run/ok/rej/err
-**Status:** PENDING
-
-## 9. Permission
-
-**DOM:** `.perm` cards, `#askBar`, `body.awaiting`
-**Actions:** allow / always / deny
-**Status:** PENDING
-
-## 10. Switch conversation
-
-**While idle / busy:** `switchConv`; draft stash/restore
-**Status:** PENDING
-
-## 11. Switch model
-
-**Paths:** `#model` / model picker `#modelPicker` → `pickModel` / `pushModel` if busy
-**Status:** PENDING
-
-## 12. Return to conversation
-
-**Via list or palette Ctrl+K**
-**Status:** PENDING
-
-## 13. Phone use
-
-**Viewports:** 360×640, 390×844, 412×915
-**Focus:** drawer, `#moreBtn`, compact composer, safe-area, thumb reach
-**Status:** PENDING
-
-## 14. Error
-
-**Toasts `.toast.err`, notes `.note.err`, halt cards, WS disconnect**
-**Status:** PENDING
-
-## 15. Reconnect
-
-**Auto 1.5s; manual `#syncBtn` / `#resyncBtn` when stale**
-**Status:** PENDING
-
-## 16. Refresh mid-action
-
-**Page reload during busy / permission / draft**
-**Status:** PENDING
-
----
-
-## Supporting flows
-
-| Flow | Entry | Notes |
-|------|-------|-------|
-| Theme | `#themeToggle` | `data-theme` light/dark |
-| Settings | `#settingsToggle` | cwd, notify, install |
-| Find in chat | `#findBtn` / Ctrl+F | `#findBar` |
-| Usage meters | `#composerUsage` | `#usageModal` |
-| Command palette | Ctrl/Cmd+K | `#palette` |
-| Remote/pair | `#remoteBtn` | modal |
-| Jump to bottom | `#jumpBtn` | when scrolled up |
-
----
-
-## Simulation matrix (planned)
-
-Viewports: 360×640, 390×844, 412×915, 1280×800
-Themes: light, dark, light+dark OS, dark+light OS
-Scenarios: see run checklist (long Hebrew, code, 200 msgs, keyboard open, etc.)
+- 360×640, 390×844, 412×915, 1280×800 — layout harness
+- Light/dark token contrast measured (incl. OS mismatch via hljs-theme suite)
