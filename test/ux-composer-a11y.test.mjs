@@ -150,4 +150,37 @@ t.section('כותרת שיחה — clamp בשם מחדש');
   t.ok('rename גוזר עם clamp', /clamp\s*\(\s*v\s*,\s*80\s*\)/.test(snip));
 }
 
+t.section('Escape סוגר overlays');
+{
+  const snip = app.slice(app.indexOf("document.addEventListener('keydown'"), app.indexOf('trackComposerHeight'));
+  t.ok('Escape סוגר palette', /Escape[\s\S]*palette[\s\S]*closePalette/.test(snip) || /palette[\s\S]*Escape[\s\S]*closePalette/.test(snip) || /!\$\('palette'\)[\s\S]*closePalette/.test(snip));
+  t.ok('Escape סוגר settings', /\$\('settings'\)[\s\S]*hidden/.test(snip));
+}
+
+t.section('נוכחות — מכשיר משני');
+{
+  const snip = slice('function renderPresence(', 'const UI_FIELDS');
+  t.ok('מכשיר משני מסומן תצוגה בלבד', /!isPrimary/.test(snip) && /תצוגה בלבד/.test(snip));
+}
+
+t.section('צירוף — ניסיון חוזר');
+{
+  t.ok('uploadAttachment קיים לניסיון חוזר', /function uploadAttachment\(/.test(app));
+  t.ok('צ׳יפ שגיאה מציע ניסיון חוזר', /לחץ לניסיון חוזר/.test(app));
+}
+
+t.section('מתג ערכה — משוב');
+{
+  const a = app.indexOf("$('themeToggle').onclick");
+  const snip = app.slice(a, a + 500);
+  t.ok('החלפת ערכה מציגה toast', a >= 0 && /toast\(/.test(snip));
+}
+
+t.section('ask/limit go — מגע 44');
+{
+  const start = css.indexOf('@media (hover: none), (pointer: coarse)');
+  const chunk = css.slice(start, start + 2800);
+  t.ok('.ab-go/.lb-go ≥ 44px', /\.ab-go,\s*\.lb-go\s*\{\s*min-height:\s*44px/.test(chunk));
+}
+
 t.done();

@@ -1758,7 +1758,7 @@ body.awaiting .working { opacity: .55; }
   .cwd-chip { min-height: 34px; padding: 7px 10px; }
   /* שני פסי הקריאה שמופיעים כשמשהו ממתין לך — הכפתור בהם הוא הפעולה,
      ו-29px גובה היה יעד שמפספסים בדיוק כשהכי חשוב לא לפספס. */
-  .ab-go, .lb-go { min-height: 38px; padding: 9px 16px; }
+  .ab-go, .lb-go { min-height: 44px; padding: 10px 16px; }
   .lb-x { width: 38px; height: 38px; }
 
   /* 16px = בלי זום אוטומטי של iOS בפוקוס (גם באייפד, לא רק בטלפון) */

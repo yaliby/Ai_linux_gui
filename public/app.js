@@ -1530,6 +1530,14 @@ function renderPresence(m) {
   el2.classList.toggle('hidden', others < 1);
   if (others < 1) return;
   const names = (m.devices || []).slice(0, 3).join(' · ');
+  // מכשיר משני כותב לזיכרון אבל מדלג על flush לדיסק — בלי סימן זה נראה כמו
+  // סנכרון מלא, ואז "למה השיחה לא נשמרה מכאן" מגיע רק אחרי רענון.
+  if (!isPrimary) {
+    el2.textContent = '👁 תצוגה בלבד';
+    el2.dataset.n = others;
+    el2.title = 'מכשיר זה מציג בלבד — השמירה לדיסק נעשית במכשיר הראשי. מחוברים: ' + names;
+    return;
+  }
   el2.textContent = others === 1 ? '⛓ מכשיר נוסף' : `⛓ ${others} מכשירים`;
   el2.dataset.n = others;   // במסך צר ה-CSS מציג רק "⛓N" במקום המשפט המלא
   el2.title = 'מחוברים לשיחה הזו: ' + names;
@@ -2684,7 +2692,8 @@ async function switchConv(id) {
   if (busy && streamOwnerId && streamOwnerId !== id) {
     const owner = convById(streamOwnerId);
     const name = owner && owner.title ? clamp(owner.title, 40) : 'שיחה אחרת';
-    toast(`עדיין רץ ב«${name}»`);
+    const n = msgQueue.length;
+    toast(n ? `עדיין רץ ב«${name}» · ${n} בתור` : `עדיין רץ ב«${name}»`);
   }
   // התור וההמתנה למכסה שייכים לשיחה שעזבנו. מנקים מיד ולא מחכים ל-sync,
   // אחרת הצ'יפים של השיחה הקודמת נראים לרגע כאילו הם של החדשה.
@@ -4105,25 +4114,6 @@ function clearPendingAtts() {
   renderAttStrip();
 }
 
-function renderAttStrip() {
-  const strip = $('attStrip');
-  strip.innerHTML = '';
-  strip.classList.toggle('hidden', pendingAtts.length === 0);
-  for (const a of pendingAtts) {
-    const chip = el('div', 'att-chip');
-    const thumb = el('div', 'thumb');
-    if (a.url) { const im = el('img'); im.src = a.url; im.alt = ''; thumb.appendChild(im); }
-    else thumb.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5.5" width="16" height="13" rx="2"/><circle cx="9" cy="10.5" r="1.6"/><path d="M5.5 16.5l4-4 2.5 2.5 2.2-2.2 4.3 3.7"/></svg>';
-    const info = el('div', 'ac-info');
-    info.appendChild(el('div', 'ac-name', a.name));
-    const cls = a.status === 'up' ? 'up' : a.status === 'err' ? 'err' : a.kind;
-    info.appendChild(el('div', 'ac-path ' + cls, a.status === 'up' ? 'מעלה…' : a.status === 'err' ? 'העלאה נכשלה' : a.path));
-    const rm = el('button', 'ac-rm', '×'); rm.title = 'הסר';
-    rm.onclick = () => { pendingAtts = pendingAtts.filter(x => x !== a); revokeAtt(a); renderAttStrip(); };
-    chip.appendChild(thumb); chip.appendChild(info); chip.appendChild(rm);
-    strip.appendChild(chip);
-  }
-}
 function renderMsgAtts(atts) {
   const box = el('div', 'msg-atts');
   for (const a of atts) {
@@ -4149,35 +4139,69 @@ async function addAttachment(file, forceTemp) {
     return;
   }
   const url = URL.createObjectURL(file);
-  const att = { name: file.name || 'הדבקה.png', url, kind: 'temp', path: '', status: 'up', data: '', media: file.type || 'image/png' };
+  const att = { name: file.name || 'הדבקה.png', url, kind: 'temp', path: '', status: 'up', data: '', media: file.type || 'image/png', file, forceTemp: !!forceTemp };
   pendingAtts.push(att); renderAttStrip();
-  att.ready = (async () => {
-    try {
-      // התמונה נשלחת ל-Claude ישירות כ-base64 (בלוק image) — עובד תמיד, בלי הרשאות קבצים
-      const dataUrl = await readAsDataURL(file);
-      att.data = dataUrl.slice(dataUrl.indexOf(',') + 1);
-      const mm = /^data:([^;]+)/.exec(dataUrl); if (mm) att.media = mm[1];
-      att.status = 'ready';
-      // נתיב לתצוגה (best-effort): נתיב-דיסק אמיתי אם קיים, אחרת עותק זמני שיימחק אוטומטית
-      if (!forceTemp && file.path) { att.kind = 'disk'; att.path = file.path; }
-      else if (isAnon(activeConv())) {
-        // בצ'אט אנונימי לא נכתב עותק: התמונה מגיעה למודל כ-base64 ישירות,
-        // והעותק הזמני היה נשאר בדיסק שש שעות אחרי שהשיחה כבר "נמחקה".
-        att.kind = 'temp';
-        att.path = '(בזיכרון בלבד · לא נכתב לדיסק)';
-      }
-      else {
-        try {
-          const r = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: att.name, dataUrl }) });
-          const j = await r.json();
-          if (j && j.ok) { att.path = j.path; att.name = j.name || att.name; }
-          else att.path = '(בזיכרון · זמני)';
-        } catch { att.path = '(בזיכרון · זמני)'; }
-        att.kind = 'temp';
-      }
-    } catch { att.status = 'err'; }
-    renderAttStrip();
-  })();
+  att.ready = uploadAttachment(att);
+}
+/** העלאה / קריאת base64 לצירוף קיים — משמש גם לניסיון חוזר אחרי כשל. */
+async function uploadAttachment(att) {
+  const file = att.file;
+  if (!file) { att.status = 'err'; renderAttStrip(); return; }
+  att.status = 'up';
+  renderAttStrip();
+  try {
+    // התמונה נשלחת ל-Claude ישירות כ-base64 (בלוק image) — עובד תמיד, בלי הרשאות קבצים
+    const dataUrl = await readAsDataURL(file);
+    att.data = dataUrl.slice(dataUrl.indexOf(',') + 1);
+    const mm = /^data:([^;]+)/.exec(dataUrl); if (mm) att.media = mm[1];
+    att.status = 'ready';
+    // נתיב לתצוגה (best-effort): נתיב-דיסק אמיתי אם קיים, אחרת עותק זמני שיימחק אוטומטית
+    if (!att.forceTemp && file.path) { att.kind = 'disk'; att.path = file.path; }
+    else if (isAnon(activeConv())) {
+      // בצ'אט אנונימי לא נכתב עותק: התמונה מגיעה למודל כ-base64 ישירות,
+      // והעותק הזמני היה נשאר בדיסק שש שעות אחרי שהשיחה כבר "נמחקה".
+      att.kind = 'temp';
+      att.path = '(בזיכרון בלבד · לא נכתב לדיסק)';
+    }
+    else {
+      try {
+        const r = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: att.name, dataUrl }) });
+        const j = await r.json();
+        if (j && j.ok) { att.path = j.path; att.name = j.name || att.name; }
+        else att.path = '(בזיכרון · זמני)';
+      } catch { att.path = '(בזיכרון · זמני)'; }
+      att.kind = 'temp';
+    }
+  } catch { att.status = 'err'; }
+  renderAttStrip();
+}
+
+function renderAttStrip() {
+  const strip = $('attStrip');
+  strip.innerHTML = '';
+  strip.classList.toggle('hidden', pendingAtts.length === 0);
+  for (const a of pendingAtts) {
+    const chip = el('div', 'att-chip' + (a.status === 'err' ? ' err' : ''));
+    const thumb = el('div', 'thumb');
+    if (a.url) { const im = el('img'); im.src = a.url; im.alt = ''; thumb.appendChild(im); }
+    else thumb.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5.5" width="16" height="13" rx="2"/><circle cx="9" cy="10.5" r="1.6"/><path d="M5.5 16.5l4-4 2.5 2.5 2.2-2.2 4.3 3.7"/></svg>';
+    const info = el('div', 'ac-info');
+    info.appendChild(el('div', 'ac-name', a.name));
+    const cls = a.status === 'up' ? 'up' : a.status === 'err' ? 'err' : a.kind;
+    info.appendChild(el('div', 'ac-path ' + cls,
+      a.status === 'up' ? 'מעלה…'
+        : a.status === 'err' ? 'העלאה נכשלה · לחץ לניסיון חוזר'
+        : a.path));
+    const rm = el('button', 'ac-rm', '×'); rm.title = 'הסר';
+    rm.onclick = (e) => { e.stopPropagation(); pendingAtts = pendingAtts.filter(x => x !== a); revokeAtt(a); renderAttStrip(); };
+    chip.appendChild(thumb); chip.appendChild(info); chip.appendChild(rm);
+    if (a.status === 'err' && a.file) {
+      chip.title = 'לחץ לניסיון חוזר';
+      chip.style.cursor = 'pointer';
+      chip.onclick = () => { a.ready = uploadAttachment(a); };
+    }
+    strip.appendChild(chip);
+  }
 }
 
 $('attachBtn').onclick = () => $('fileInput').click();
@@ -4385,6 +4409,10 @@ $('themeToggle').onclick = () => {
   store.settings.theme = next;
   syncHljsTheme();
   save();
+  const btn = $('themeToggle');
+  const label = next === 'dark' ? 'מצב כהה · לחץ לבהיר' : 'מצב בהיר · לחץ לכהה';
+  if (btn) { btn.title = label; btn.setAttribute('aria-label', label); }
+  toast(next === 'dark' ? 'מצב כהה' : 'מצב בהיר');
 };
 
 // בלי העדפה מפורשת הערכה עדיין הולכת אחרי מערכת ההפעלה, ולכן שינוי שם
@@ -6921,7 +6949,13 @@ document.addEventListener('keydown', (e) => {
   if (mod && e.shiftKey && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); dictToggle(); return; }
   if (e.key === '?' && !typing && !mod) { e.preventDefault(); openShortcuts(); return; }
   if (e.key === 'Escape' && dictOn) { e.preventDefault(); dictStop(); return; }
-  if (e.key === 'Escape' && !$('findBar').classList.contains('hidden')) { closeFind(); }
+  if (e.key === 'Escape' && !$('findBar').classList.contains('hidden')) { closeFind(); return; }
+  // לוח "עוד" בטלפון נפתח בלי פוקוס בשדה — Escape על הקלט לא קיים שם.
+  if (e.key === 'Escape' && !$('palette').classList.contains('hidden')) { e.preventDefault(); closePalette(); return; }
+  if (e.key === 'Escape' && !$('settings').classList.contains('hidden')) { e.preventDefault(); $('settings').classList.add('hidden'); return; }
+  if (e.key === 'Escape' && !$('usageModal').classList.contains('hidden')) { e.preventDefault(); setUsageModalOpen(false); return; }
+  if (e.key === 'Escape' && !$('modal').classList.contains('hidden')) { e.preventDefault(); closeModal(); return; }
+  if (e.key === 'Escape' && !$('modelPicker').classList.contains('hidden')) { e.preventDefault(); closeModelPicker(); return; }
 });
 
 /* ==========================================================================
