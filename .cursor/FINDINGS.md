@@ -472,3 +472,6 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F157 micBtn aria-label stale → FIXED (Round 35)
 [ACCESSIBILITY] dictPaint syncs aria-label from title · Source: residual dig
+
+### F158 remoteBtn aria-label stale → FIXED (Round 36)
+[ACCESSIBILITY] paintRemote syncs aria-label · Source: Worker Round 36

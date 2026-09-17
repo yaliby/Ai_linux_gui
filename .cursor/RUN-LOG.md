@@ -61,7 +61,9 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 14:52 | COMMIT | Round 32 F152 | find vs modal focus · CACHE v55 |
 | 15:08 | COMMIT | Round 33 F153 | palette↔modelPicker · CACHE v56 |
 | 15:24 | COMMIT | Round 34 F154–F155 | modal vs palette, theme chrome · CACHE v57 |
-| 15:25 | HEARTBEAT | continue →16:08 | F01–F155 · diminishing |
+| 15:40 | COMMIT | Round 35 F156–F157 | palette overlays, mic aria · CACHE v58 |
+| 16:10 | COMMIT | Round 36 F158 | remoteBtn aria · CACHE v59 |
+| 16:10 | END | window closed | F01–F158 · SUMMARY updated · no push |
 ## Decisions
 
 - Parallel workers; serialize writers on same files.
@@ -69,10 +71,11 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 - First commit mixed Sol rename dirt (inseparable); later commits UX-only.
 - Premature 33.B stop reversed by user — continue window without inventing work.
 - F111: no local offline queue (needs WS); clearer toast only.
+- Window end ~16:08; final residual F158 landed at 16:10.
 
 ## Commits (local only)
 
-Rounds 1–34 on `ux-optimization-run` through `f7bf0ae`
+Rounds 1–36 on `ux-optimization-run` through CACHE v59
 
 ## Existing dirty (owner — do not commit)
 

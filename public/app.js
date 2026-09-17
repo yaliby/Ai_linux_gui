@@ -6403,6 +6403,7 @@ function paintRemote() {
   b.classList.toggle('on', !!remoteState.listening && n > 0);
   b.title = !remoteState.listening ? 'חיבור מכשירים (המאזין לא פעיל)'
     : n ? `${n} מכשירים מקושרים` : 'קשר מכשיר';
+  b.setAttribute('aria-label', b.title);
 }
 
 async function fetchRemote() {
