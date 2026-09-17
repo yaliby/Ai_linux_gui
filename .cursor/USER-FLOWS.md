@@ -10,25 +10,30 @@ RTL Hebrew chat shell; drawer ≤760px; composer + `#log`; overlays palette/mode
 
 | # | Flow | Status | Evidence |
 |---|------|--------|----------|
-| 1 | Open app | RUN | HTTPS 5123 → 200 HTML/JS/CSS |
-| 2 | Open conversation | RUN | code paths switchConv + loading skeleton |
-| 3 | Create conversation | RUN | newChat / anon / duet entries |
+| 1 | Open app | RUN | HTTPS → 200 HTML/JS/CSS |
+| 2 | Open conversation | RUN | switchConv + loading skeleton |
+| 3 | Create conversation | RUN | newChat / anon / duet · startNewChat / go=new |
 | 4 | Write prompt | RUN | harness type/tall/compact matrix |
-| 5 | Send | RUN | empty toast + queue affordance tests |
-| 6 | Stop | RUN | interruptTurn offline toast test |
-| 7 | Streaming | RUN | working/stale/permWaiting code+tests |
-| 8 | Tool output | PARTIAL | DOM structure review |
-| 9 | Permission | RUN | offline decidePermission + Enter→ask |
-| 10 | Switch conversation | RUN | busy/limit/duet toasts |
-| 11 | Switch model | RUN | mp-btn aria + focus restore |
+| 5 | Send | RUN | empty toast + queue affordance + sendGate |
+| 6 | Stop | RUN | interruptTurn offline toast |
+| 7 | Streaming | RUN | working aria-live / stale / permWaiting |
+| 8 | Tool output | PARTIAL | DOM + GOD card review |
+| 9 | Permission | RUN | decidePermission + Enter/send gate + notify jump |
+| 10 | Switch conversation | RUN | busy/limit/duet toasts · no false abandonTurn |
+| 11 | Switch model | RUN | mp-btn + F favorite + focus restore |
 | 12 | Return to conversation | RUN | draft restore + preserveScroll |
-| 13 | Phone | RUN | ux-viewport-matrix + landscape 844×390 |
-| 14 | Error | RUN | save/share/search/upload toasts |
-| 15 | Reconnect | RUN | setStatus + manualCheck |
+| 13 | Phone | RUN | ux-viewport-matrix + landscape + touch 44/36 |
+| 14 | Error | RUN | save/share/search/upload/offline toasts |
+| 15 | Reconnect | RUN | setStatus + stale perm prune + manualCheck |
 | 16 | Refresh mid-action | PARTIAL | beacon/stashDraft code review |
 | 17 | Rename | RUN | long-press + convTitle + palette |
-| 18 | Duet | RUN | note/save/version/copy feedback |
-| 19 | Pair remote | RUN | pair-code button + expiry tick |
+| 18 | Duet | RUN | note/save/version/copy + closeFind focus |
+| 19 | Pair remote | RUN | pair-code + expiry disable + QR fade |
+| 20 | Delete conv | RUN | confirm + restoreDraft local/remote + anon × |
+| 21 | Find / Escape stack | RUN | z-order Escape + Ctrl+F closes palette |
+| 22 | Mermaid / theme | RUN | copy btn + rethemeMermaid |
+| 23 | Presence secondary | RUN | data-mode=view → 👁N on narrow |
+| 24 | Notification answer offline | RUN | SW showNotification on fail |
 
 ## Viewports × themes
 
