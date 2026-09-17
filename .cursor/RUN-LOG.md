@@ -33,6 +33,10 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 
 | 09:35 | HEARTBEAT | discovery + re-sim | F01–F95 · waiting for diminishing returns |
 | 09:50 | HEARTBEAT | Round 13 hunt | still evidence-gated · no invent |
+| 09:51 | COMMIT | Round 13 F96 | modal focus restore · CACHE v36 |
+| 10:12 | HEARTBEAT | Round 14 discover | F01–F96 · evidence-only |
+| 10:18 | COMMIT | Round 14 F97–F101 | delete confirm, duet sync wait, share/logs · CACHE v37 |
+| 10:12 | HEARTBEAT | Round 14 discover | F01–F96 · evidence-only |
 ## Decisions
 
 - Parallel workers; serialize writers on same files.

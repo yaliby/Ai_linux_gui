@@ -289,3 +289,18 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F96 Generic modal drops focus → FIXED (Round 13)
 [ACCESSIBILITY] modalReturnFocus + role=dialog · Source: [חקירה עצמאית]
+
+### F97 Delete conv no confirm → FIXED (Round 14)
+[RECOVERY] confirm before DELETE · Source: Worker Round 14
+
+### F98 New chat aborts turn silently → FIXED (Round 14)
+[FEEDBACK] confirm when busy on active · Source: Worker Round 14
+
+### F99 Re-enter duet shows setup too soon → FIXED (Round 14)
+[CONFUSION] _awaitDuetSync loading · Source: Worker Round 14
+
+### F100 Empty share intake silent → FIXED (Round 14)
+[FEEDBACK] toast · Source: Worker Round 14
+
+### F101 Logs copy skips legacyCopy → FIXED (Round 14)
+[FEEDBACK] uses copyText() · Source: Worker Round 14

@@ -436,4 +436,14 @@ t.section('סבב 13 — מודאל עם פוקוס');
   t.ok('loadConfig toast על כשל', /טעינת הגדרות השרת נכשלה/.test(app));
 }
 
+t.section('סבב 14 — מחיקה / דואט / שיתוף / יומן');
+{
+  const del = slice('function deleteConv(', 'function updateStatusbar(');
+  t.ok('מחיקת שיחה דורשת confirm', /confirm\(/.test(del) && /למחוק את/.test(del));
+  t.ok('שיחה חדשה מאשרת עצירת תור פעיל', /לעצור אותה ולפתוח שיחה חדשה/.test(app));
+  t.ok('דואט ממתין לסנכרון במקום טופס', /_awaitDuetSync/.test(app) && /טוען את מצב הדואט/.test(app));
+  t.ok('שיתוף ריק → toast', /השיתוף לא הגיע/.test(app));
+  t.ok('העתקת יומן דרך copyText', /העתק[\s\S]{0,200}copyText\(pre\.textContent/.test(app));
+}
+
 t.done();

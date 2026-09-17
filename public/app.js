@@ -1021,7 +1021,10 @@ function startAnonChat() {
     toast('ה-CLI המותקן לא תומך בהרצה בלי שמירת סשן — צ׳אט אנונימי לא יכול לרוץ כאן', true);
     return;
   }
-  if (busy) { interruptTurn(); abandonTurn(); }
+  if (busy && streamOwnerId === activeId) {
+    if (!confirm('יש תשובה פעילה בשיחה הזו.\nלעצור אותה ולפתוח צ׳אט אנונימי?')) return;
+    interruptTurn(); abandonTurn();
+  } else if (busy) { interruptTurn(); abandonTurn(); }
   stashDraft();
   closeDrawer();
   const open = anonConv();
@@ -1477,7 +1480,14 @@ async function onSync(m) {
   // קודם כל מצב הריצה: מסך הדואט נבנה ממנו, ולכן הוא חייב להיות במקום לפני
   // הציור של השיחה — גם בנתיב reset וגם בהתחברות מחדש באמצע תור.
   if (m.duet) duetAdopt(m.duet);
-  else if (duetRun) { duetRun = null; duetLive = null; duetDom = null; duetViewV = 0; duetVerCache.clear(); }
+  else {
+    if (duetRun) { duetRun = null; duetLive = null; duetDom = null; duetViewV = 0; duetVerCache.clear(); }
+    const waiting = convById(m.convId);
+    if (waiting && waiting._awaitDuetSync) {
+      waiting._awaitDuetSync = false;
+      if (activeId === m.convId) renderConversation();
+    }
+  }
   if (m.mode === 'reset') {
     syncing = true;
     try {
@@ -2832,6 +2842,8 @@ async function switchConv(id) {
   }
   onQueueUpdate([]);
   setLimitState(null);
+  const next = convById(id);
+  if (next && isDuet(next)) next._awaitDuetSync = true;
   duetRun = null; duetLive = null; duetDom = null; duetViewV = 0; duetVerCache.clear();
   activeId = id;
   stick = true;                       // שיחה חדשה — לתחתית, לא לשימור גלילה של הקודמת
@@ -2857,6 +2869,9 @@ function deleteConv(id) {
     endAnon();
     return;
   }
+  const victim = convById(id);
+  const label = victim && victim.title ? clamp(victim.title, 40) : 'השיחה';
+  if (!confirm(`למחוק את «${label}»?\nהתמליל יימחק מהדיסק — אין דרך לשחזר.`)) return;
   if (busy && id === streamOwnerId) {
     interruptTurn();
     abandonTurn();
@@ -4034,14 +4049,20 @@ $('syncBtn').onclick = () => manualCheck($('syncBtn'));
 $('resyncBtn').onclick = () => manualCheck($('resyncBtn'));
 $('newDuet').onclick = () => {
   if (!leaveAnon(null)) return;
-  if (busy) { interruptTurn(); abandonTurn(); }
+  if (busy && streamOwnerId === activeId) {
+    if (!confirm('יש תשובה פעילה בשיחה הזו.\nלעצור אותה ולפתוח דואט?')) return;
+    interruptTurn(); abandonTurn();
+  } else if (busy) { interruptTurn(); abandonTurn(); }
   stashDraft();
   closeDrawer();
   newDuetConv();
 };
 function startNewChat() {
   if (!leaveAnon(null)) return;       // לפני כל שאר הפעולות: ביטול חייב להשאיר הכול כשהיה
-  if (busy) { interruptTurn(); abandonTurn(); }
+  if (busy && streamOwnerId === activeId) {
+    if (!confirm('יש תשובה פעילה בשיחה הזו.\nלעצור אותה ולפתוח שיחה חדשה?')) return;
+    interruptTurn(); abandonTurn();
+  } else if (busy) { interruptTurn(); abandonTurn(); }
   stashDraft();
   closeDrawer();   // אם נלחץ מתוך המגירה — היעד הוא תיבת הכתיבה, לא הרשימה
   const empty = store.convs.find(c => c.loaded && !isDuet(c) && !c.anon && c.messages.length === 0 && !(c.draft || '').trim());
@@ -5192,7 +5213,10 @@ async function takeSharedInput() {
   try {
     const cache = await caches.open('rtl-claude-share');
     const keys = await cache.keys();
-    if (!keys.length) return;
+    if (!keys.length) {
+      toast('השיתוף לא הגיע — נסו שוב מהאפליקציה האחרת', true);
+      return;
+    }
     let text = '';
     const files = [];
     for (const k of keys) {
@@ -6016,8 +6040,8 @@ function openLogs(preset) {
   const copy = el('button', 'logs-btn', '⧉ העתק');
   copy.type = 'button';
   copy.onclick = async () => {
-    try { await navigator.clipboard.writeText(pre.textContent); toast('היומן הועתק'); }
-    catch { toast('ההעתקה נכשלה', true); }
+    const ok = await copyText(pre.textContent || '');
+    toast(ok ? 'היומן הועתק' : 'ההעתקה נכשלה', !ok);
   };
   const dl = el('button', 'logs-btn', '⇩ הורד');
   dl.type = 'button';
@@ -7409,6 +7433,7 @@ function newDuetConv() {
   };
   store.convs.unshift(c);
   activeId = c.id;
+  c._awaitDuetSync = false;
   duetRun = null; duetLive = null; duetViewV = 0; duetVerCache.clear();
   subscribeActive();
   markSettings();
@@ -8134,7 +8159,7 @@ function duetAdopt(snap) {
   duetVerCache.clear();
   if (duetRun.artifact && duetRun.version) duetVerCache.set(duetRun.version, duetRun.artifact);
   const c = convById(snap.convId);
-  if (c) c.mode = 'duet';
+  if (c) { c.mode = 'duet'; c._awaitDuetSync = false; }
   if (activeId === snap.convId) renderConversation();
 }
 
@@ -8142,6 +8167,14 @@ function duetAdopt(snap) {
 function renderDuet(conv, log) {
   duetDom = null;
   log.classList.add('duet');
-  if (!duetRun || duetRun.convId !== conv.id) { renderDuetSetup(conv, log); return; }
-  renderDuetRun(log);
+  if (duetRun && duetRun.convId === conv.id) { renderDuetRun(log); return; }
+  // אחרי מעבר שיחה ה־duetRun מאופס עד הסנכרון — טופס "התחל" היה מזמין התחלה כפולה
+  if (conv._awaitDuetSync) {
+    const sk = el('div', 'conv-loading');
+    sk.appendChild(el('span', 'spinner sm'));
+    sk.appendChild(el('span', null, 'טוען את מצב הדואט…'));
+    log.appendChild(sk);
+    return;
+  }
+  renderDuetSetup(conv, log);
 }
