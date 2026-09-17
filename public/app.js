@@ -1204,6 +1204,37 @@ const STALE_MS = 15000;         // תור פעיל בלי אף פריים = חש
 const PONG_DEAD_MS = 25000;     // בלי מענה ping כזמן הזה — ה-socket מת
 const RECHECK_MS = 10000;       // מרווח מינימלי בין בדיקות אוטומטיות
 
+/* ---------- בדיקה שנכשלה מנסה שוב ----------
+   הבדיקה עצמה הייתה החוליה החלשה בדיוק ברגע שבשבילו היא נבנתה. הרגעים שבהם
+   היא נורית — ‎visibilitychange‎, ‎online‎, ‎pageshow‎ — הם הרגעים שבהם המכשיר
+   *זה עתה* התעורר והרדיו עדיין לא עלה, ולכן ה-‎fetch‎ הראשון נופל על timeout.
+   ביומן אמיתי כאן: 26 כשלי ‎resume‎ ועוד 5 של ‎online‎.
+
+   ומה שקרה אז היה החמור מכול. כישלון הדפיס «השרת לא מגיב» וסיים — הלולאה
+   האוטומטית בודקת רק כש-‎busy‎, אז כשלא היה תור רץ שום דבר לא ניסה שוב. אם
+   במקביל ה-socket היה חצי-פתוח (‎readyState === OPEN‎ בלי שאף פריים מגיע —
+   התקלה שכל המנגנון הזה קיים בשבילה), אז ‎onclose‎ לא נורה, ההתחברות-מחדש לא
+   רצה, והמסך נשאר תקוע על «השרת לא מגיב» גם אחרי שהרשת חזרה.
+
+   כישלון הוא ראיה לתקלה, לא סיבה לוותר: מנסים שוב בריווח גדל, ועוצרים אחרי
+   שלושה ניסיונות כדי שמחשב שבאמת כבוי לא יזכה לתשאול אינסופי. */
+const CHECK_RETRY_MS = [1500, 4000, 10000];
+let checkRetryTimer = null, checkRetryStep = 0;
+
+function cancelCheckRetry() {
+  if (checkRetryTimer) clearTimeout(checkRetryTimer);
+  checkRetryTimer = null;
+  checkRetryStep = 0;
+}
+
+function scheduleCheckRetry(reason) {
+  if (checkRetryTimer || checkRetryStep >= CHECK_RETRY_MS.length) return;
+  const wait = CHECK_RETRY_MS[checkRetryStep++];
+  // ‎retry:‎ ולא ה-reason המקורי: בדיקה ידנית שנכשלה כבר הראתה toast, ואין
+  // טעם להקפיץ אותו שוב על כל ניסיון.
+  checkRetryTimer = setTimeout(() => { checkRetryTimer = null; crossCheck('retry:' + reason); }, wait);
+}
+
 /** כמה זמן אין עדכון. רלוונטי רק כשאמורים לקבל עדכונים. */
 function staleFor() { return busy ? Date.now() - lastFrameAt : 0; }
 
@@ -1264,6 +1295,9 @@ function resync(full) {
 async function crossCheck(reason) {
   const manual = reason === 'manual';
   if (checking) { dlog('check.busy', { reason }); return null; }
+  // טריגר חדש (חזרה למסך, רשת שחזרה, לחיצה) פותח סולם ניסיונות חדש; רק
+  // המשך של סולם קיים ממשיך לספור.
+  if (!reason.startsWith('retry:')) cancelCheckRetry();
   // התור שייך לשיחה שהתחילה אותו, גם אם המשתמש דפדף בינתיים לשיחה אחרת
   const convId = streamOwnerId || subId || activeId;
   if (!convId) { if (manual) toast('אין שיחה לבדוק'); dlog('check.noconv', { reason }); return null; }
@@ -1355,6 +1389,11 @@ async function crossCheck(reason) {
       else if (st.running) toast('הכול מסונכרן — Claude עדיין עובד');
       else toast('הכול מסונכרן');
     }
+    // הבדיקה הצליחה — הסולם נסגר, והפסיל לא יישאר על «השרת לא מגיב» מבדיקה
+    // קודמת שנכשלה. רק כשה-socket באמת פתוח: אחרת ההתחברות-מחדש היא הבעלים
+    // של הכיתוב, ו-‎onopen‎ יעדכן אותו בעצמו.
+    cancelCheckRetry();
+    if (wsConnected()) setStatus(busy ? 'busy' : 'on', 'מחובר');
     dlog('check.done', { reason, fixed });
     renderStale();
     return fixed.length ? fixed.join(' · ') : null;
@@ -1363,6 +1402,7 @@ async function crossCheck(reason) {
     dlog('check.fail', { reason, msg: String(e && e.message || e) });
     setStatus('', 'השרת לא מגיב');
     if (manual) toast('השרת לא מגיב (' + (e.message || e) + ')', true);
+    scheduleCheckRetry(reason.replace(/^retry:/, ''));
     return null;
   } finally {
     checking = false;
