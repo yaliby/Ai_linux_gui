@@ -6485,6 +6485,10 @@ function openPalette(focus = true) {
   if (more) more.setAttribute('aria-expanded', 'true');
   const inp = $('paletteInput');
   inp.value = ''; buildPalette('');
+  // בטלפון אין Ctrl+K — הרמז הזה רק מבלבל כשנפתח מ־⋮
+  inp.placeholder = isTouch()
+    ? 'הקלד פקודה או חפש שיחה…'
+    : 'הקלד פקודה או חפש שיחה…  ·  Ctrl+K';
   if (focus) inp.focus();
 }
 function closePalette() {
