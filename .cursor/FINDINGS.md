@@ -286,3 +286,6 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F95 Rename missing from shortcuts help → FIXED (Round 12)
 [DISCOVERABILITY] SHORTCUTS row · Source: [חקירה עצמאית]
+
+### F96 Generic modal drops focus → FIXED (Round 13)
+[ACCESSIBILITY] modalReturnFocus + role=dialog · Source: [חקירה עצמאית]

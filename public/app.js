@@ -5911,15 +5911,26 @@ $('input').addEventListener('keydown', (e) => {
 $('input').addEventListener('blur', () => setTimeout(closeAc, 120));
 
 // ---------- מודאל כללי ----------
+let modalReturnFocus = null;
 function openModal(title, node) {
+  modalReturnFocus = document.activeElement;
   $('modalTitle').textContent = title;
   const b = $('modalBody'); b.innerHTML = ''; b.appendChild(node);
   $('modal').classList.remove('hidden');
+  const close = $('modalClose');
+  if (close) try { close.focus(); } catch {}
 }
-function closeModal() { $('modal').classList.add('hidden'); }
+function closeModal() {
+  $('modal').classList.add('hidden');
+  const back = modalReturnFocus;
+  modalReturnFocus = null;
+  if (back && typeof back.focus === 'function') {
+    try { back.focus(); } catch {}
+  }
+}
 $('modalClose').onclick = closeModal;
 $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('modal').classList.contains('hidden')) closeModal(); });
+// Escape מטופל במאזין הגלובלי — לא כפול כאן
 
 function fmtAgo(ms) {
   const d = Date.now() - ms;

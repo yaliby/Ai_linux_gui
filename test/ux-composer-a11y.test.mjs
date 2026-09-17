@@ -421,10 +421,19 @@ t.section('סבב 8 — מגע נוסף ונגישות');
   t.ok('settingsToggle aria-expanded', /id="settingsToggle"[^>]*aria-expanded=/.test(html));
   t.ok('closeModelPicker מחזיר focus', /function closeModelPicker\([\s\S]{0,200}btn\.focus/.test(app));
   t.ok('Escape סוגר מגירה', /side-open[\s\S]{0,80}closeDrawer/.test(app));
-  t.ok('anonTools aria-pressed', /anonTools[\s\S]{0,200}aria-pressed|tools\.setAttribute\(\s*['\"]aria-pressed['\"]/.test(app));
+  t.ok('anonTools aria-pressed', /tools\.setAttribute\(\s*['"]aria-pressed['"]/.test(app));
   t.ok('העתקת דואט ריק → toast', /אין תוצר להעתקה/.test(app));
   t.ok('pair-code הוא button', /el\('button',\s*'pair-code'/.test(app));
   t.ok('histIdx מתאפס בהקלדה', /histIdx\s*=\s*-1;\s*stashDraftSoon/.test(app));
+}
+
+t.section('סבב 13 — מודאל עם פוקוס');
+{
+  t.ok('openModal שומר modalReturnFocus', /modalReturnFocus\s*=\s*document\.activeElement/.test(app));
+  t.ok('closeModal מחזיר focus', /function closeModal\([\s\S]{0,200}modalReturnFocus/.test(app));
+  t.ok('modal role=dialog', /id="modal"[^>]*role="dialog"/.test(html));
+  t.ok('duet maxTurns נחתך', /Math\.max\(2,\s*Math\.min\(30/.test(app));
+  t.ok('loadConfig toast על כשל', /טעינת הגדרות השרת נכשלה/.test(app));
 }
 
 t.done();

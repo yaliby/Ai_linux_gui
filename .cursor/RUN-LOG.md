@@ -28,7 +28,11 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 09:05 | HEARTBEAT | hunting Round 11 | F01–F91 · 16/16 |
 | 09:20 | HEARTBEAT | continue discovery | USER-FLOWS updated · Workers Round 10 |
 | 09:21 | COMMIT | Round 11 F92–F93 | loadConfig toast, backdrop focus · CACHE v34 |
+| 09:34 | COMMIT | Round 12 F94–F95 | duet turns clamp, rename in shortcuts · CACHE v35 |
+| 09:34 | HEARTBEAT | continue to 16:08 | F01–F95 · 16/16 |
 
+| 09:35 | HEARTBEAT | discovery + re-sim | F01–F95 · waiting for diminishing returns |
+| 09:50 | HEARTBEAT | Round 13 hunt | still evidence-gated · no invent |
 ## Decisions
 
 - Parallel workers; serialize writers on same files.
