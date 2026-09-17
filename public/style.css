@@ -1,37 +1,68 @@
 /* ==========================================================================
-   ממשק עברית ל-Claude Code — בהשראת שפת העיצוב של Claude.ai
+   Sol — ממשק עברית ל-Claude Code
+   --------------------------------------------------------------------------
+   הפלטה כאן שייכת ל-Sol עצמו ולא לאף ספק שרץ דרכו. עד לאחרונה ‎--accent‎ היה
+   ‎#c2603a‎ — בדיוק הערך של ‎--claude‎ ושל ‎BRANDS.anthropic‎ ב-app.js — כלומר
+   הכרום של האפליקציה נצבע בצבע המותג של אחד מתוך עשרים הספקים, ותשובה של
+   Gemini ישבה בממשק טרקוטה. האקצנט הוא עכשיו פטרול עמוק.
+
+   הפרדה בגוון לבדה לא הייתה מספיקה כאן: רצועת הטורקיז תפוסה בערך כל 10 מעלות
+   (felo 153°, OpenAI 166°, Gemma 178°, Perplexity 187°, Cursor 196°), וכל
+   טורקיז שנבחר יושב ליד מישהו. ההפרדה היא לכן ברמת *הרגיסטר* ולא הגוון:
+   האקצנט כהה בהרבה מהם במצב הבהיר (בהירות 21% מול 31-35%) ודהוי בהרבה במצב
+   הכהה (רוויה 33% מול 51-57%). סימני המותג צווחניים ומופיעים כגליפים של
+   16‑22 פיקסלים; הכרום עמום ומופיע כמשטחים גדולים — ולכן הם לא מתחרים.
+
+   הנייטרלים הם נייר בסלייט קר, בלי נטייה לשום גוון מותג, ורחוקים מהקרם החם
+   שמזוהה עם ממשק אחר.
    ========================================================================== */
 :root {
-  /* בהיר (קרם חמים) */
-  --bg: #faf9f5;
-  --sidebar: #f2f0e9;
+  /* בהיר (נייר קריר) */
+  --bg: #fbfbfc;
+  --sidebar: #f1f2f4;
   --panel: #ffffff;
-  --panel-2: #f0eee7;
-  --border: #e7e4da;
-  --border-soft: #efece4;
-  --text: #2b2925;
-  --text-dim: #6d675c;
-  --text-faint: #9a9488;
-  --accent: #c2603a;
-  --accent-2: #d97757;
-  --accent-soft: #f6e7dd;
-  --user-bg: #f1efe8;
-  --user-border: #e5e2d8;
-  --code-bg: #f4f2ea;
-  --good: #3f8f5b; --good-soft: #e6f1e9;
-  --warn: #b5721f; --warn-soft: #fbf0dc; --danger: #c0453a; --danger-soft: #f7e4e1;
-  --add-bg: #e6f2e9; --add-fg: #1f6e3a; --del-bg: #fae5e2; --del-fg: #a53b30;
-  /* GOD — סגול, הצבע היחיד בערכה שאינו בגוונים החמים של השאר. זו הנקודה:
-     כשמצב ההרשאות מאשר הכול, אסור שהוא ייראה כמו עוד בחירה ברשימה. */
-  --god: #6d3ad4; --god-soft: #efe8fd;
+  --panel-2: #edeef1;
+  --border: #e2e4e8;
+  --border-soft: #eaecef;
+  --text: #232830;
+  --text-dim: #626a74;
+  /* הוכהה מ-‎#848c96‎: על המשטח הבהיר-הכהה ביותר (‎--user-bg‎) הוא נתן 3.03:1,
+     כלומר תוויות בכרטיסי הכלים לא עמדו בסף הקריאוּת. עכשיו 4.52:1. */
+  --text-faint: #686f79;
+  --accent: #0b5f5a;
+  --accent-2: #0f7d76;
+  --accent-soft: #e3f0ef;
+  /* הדיו שיושב *על* משטח ממולא באקצנט. הוא משתנה ולא ‎#fff‎ קשיח כי במצב
+     הכהה האקצנט עצמו בהיר — לבן עליו נותן 2.3:1, כלומר כפתור השליחה היה
+     נקרא רק למי שכבר יודע מה כתוב בו. דיו כהה שם נותן 7.3:1. */
+  --on-accent: #ffffff;
+  --user-bg: #f0f2f4;
+  --user-border: #e3e6ea;
+  --code-bg: #f3f4f7;
+  /* שלושת צבעי המצב הוכהו בערכה הבהירה. הם משמשים בשני תפקידים הפוכים —
+     דיו על הגוון הרך שלהם (תג «הצליח», «נכשל», «נדחה») ורקע מתחת ללבן
+     (כפתור «תמיד») — ובשניהם הם נפלו מתחת ל-4.5:1. הכהיה משפרת את שניהם
+     בבת אחת: התג עלה מ-3.4 ל-4.5, והלבן שעל הכפתור מ-3.97 ל-5.26. */
+  --good: #35794d; --good-soft: #e6f1e9;
+  /* ‎--good‎ נדחף לירוק-דשא במצב הכהה. שם האקצנט הוא טורקיז עמום באותה
+     בהירות בדיוק, ו«אשר» ו«תמיד» יושבים צמודים בדיאלוג ההרשאות — שני
+     פסטלים ירקרקים זה לצד זה הם בדיוק המקום שבו אסור לנחש. */
+  /* ‎--danger‎ מוחזק באדום-כתום מובהק — רחוק גם מהפטרול וגם מהטרקוטה של
+     Claude, כדי שרגע של אזהרה לא ידרוש הבחנה בין שני גוונים שכנים. */
+  --warn: #9a611a; --warn-soft: #fbf0dc; --danger: #bd3b2b; --danger-soft: #f9e5e1;
+  --add-bg: #e6f2e9; --add-fg: #1f6e3a; --del-bg: #fae7e3; --del-fg: #a8402c;
+  /* GOD — סגול, הצד הנגדי של הגלגל מול הפטרול. כשמצב ההרשאות מאשר הכול,
+     אסור שהוא ייראה כמו עוד בחירה ברשימה. */
+  --god: #5b34d6; --god-soft: #ebe6fd;
   /* בידול המכסות: המדים של שני הסוכנים יושבים זה מול זה באותו חלון, ולכן
-     הצבע הוא מה שמזהה אותם לפני שקוראים מילה. Claude בטרקוטה של הערכה,
-     Cursor בכחול-ים שאין לו שום אח בפלטה החמה. */
+     הצבע הוא מה שמזהה אותם לפני שקוראים מילה. אלה צבעי המותג של הספקים ולא
+     של Sol — Claude בטרקוטה שלו, Cursor בכחול-ים שלו — ומאז שהאקצנט יצא
+     מהטרקוטה שניהם גם נבדלים מהכרום של האפליקציה עצמה. */
   --claude: #c2603a; --claude-soft: #f6e7dd;
   --cursor: #1f6f8b; --cursor-soft: #dceef4;
-  --shadow-sm: 0 1px 2px rgba(60,50,40,.06);
-  --shadow: 0 1px 3px rgba(60,50,40,.06), 0 12px 32px rgba(60,50,40,.07);
-  --shadow-lg: 0 16px 48px rgba(40,30,20,.16);
+  --shadow-sm: 0 1px 2px rgba(30,38,44,.07);
+  --shadow: 0 1px 3px rgba(30,38,44,.07), 0 12px 32px rgba(30,38,44,.08);
+  --shadow-lg: 0 16px 48px rgba(20,28,34,.18);
   --radius: 16px;
   --serif: "Tiempos Text", "Frank Ruhl Libre", "Noto Serif Hebrew", "Noto Serif", Georgia, ui-serif, serif;
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
@@ -39,26 +70,28 @@
 }
 :root[data-theme="light"] { color-scheme: light; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #262624; --sidebar: #1f1e1c; --panel: #2f2e2b; --panel-2: #3a3936; --border: #3d3c38; --border-soft: #34332f;
-  --text: #f3f2ec; --text-dim: #b4afa4; --text-faint: #837e73;
-  --accent: #d97757; --accent-2: #e69a7f; --accent-soft: #392b23;
-  --user-bg: #35342f; --user-border: #43423d; --code-bg: #1f1e1c;
-  --good: #6cc088; --good-soft: #1e2a22; --warn: #d9a24e; --warn-soft: #2e2617; --danger: #e07064; --danger-soft: #32201d;
-  --add-bg: #17281c; --add-fg: #7fc894; --del-bg: #2f1a17; --del-fg: #e08277;
-  --god: #b98bff; --god-soft: #291f3d;
+  --bg: #212528; --sidebar: #1a1d20; --panel: #2a2e32; --panel-2: #353a3f; --border: #3a4046; --border-soft: #2f3438;
+  /* ‎--text-faint‎ הובהר מ-‎#7d848c‎: על ‎--panel-2‎ הוא נתן 3.04:1. עכשיו 4.51. */
+  --text: #f0f2f4; --text-dim: #aeb5bd; --text-faint: #9da3a9;
+  --accent: #6fb6ae; --accent-2: #97cdc6; --accent-soft: #16302d; --on-accent: #08201e;
+  --user-bg: #30353a; --user-border: #3e444a; --code-bg: #1a1d20;
+  --good: #74c775; --good-soft: #1e2a22; --warn: #d9a24e; --warn-soft: #2e2617; --danger: #ef7055; --danger-soft: #331e19;
+  --add-bg: #17281c; --add-fg: #7fc894; --del-bg: #301b15; --del-fg: #ef8069;
+  --god: #9d8cff; --god-soft: #262040;
   --claude: #d97757; --claude-soft: #392b23;
   --cursor: #6bb9d6; --cursor-soft: #172b33;
   --shadow-sm: 0 1px 2px rgba(0,0,0,.3); --shadow: 0 1px 3px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.32); --shadow-lg: 0 18px 52px rgba(0,0,0,.55);
   color-scheme: dark;
 } }
 :root[data-theme="dark"] {
-  --bg: #262624; --sidebar: #1f1e1c; --panel: #2f2e2b; --panel-2: #3a3936; --border: #3d3c38; --border-soft: #34332f;
-  --text: #f3f2ec; --text-dim: #b4afa4; --text-faint: #837e73;
-  --accent: #d97757; --accent-2: #e69a7f; --accent-soft: #392b23;
-  --user-bg: #35342f; --user-border: #43423d; --code-bg: #1f1e1c;
-  --good: #6cc088; --good-soft: #1e2a22; --warn: #d9a24e; --warn-soft: #2e2617; --danger: #e07064; --danger-soft: #32201d;
-  --add-bg: #17281c; --add-fg: #7fc894; --del-bg: #2f1a17; --del-fg: #e08277;
-  --god: #b98bff; --god-soft: #291f3d;
+  --bg: #212528; --sidebar: #1a1d20; --panel: #2a2e32; --panel-2: #353a3f; --border: #3a4046; --border-soft: #2f3438;
+  /* ‎--text-faint‎ הובהר מ-‎#7d848c‎: על ‎--panel-2‎ הוא נתן 3.04:1. עכשיו 4.51. */
+  --text: #f0f2f4; --text-dim: #aeb5bd; --text-faint: #9da3a9;
+  --accent: #6fb6ae; --accent-2: #97cdc6; --accent-soft: #16302d; --on-accent: #08201e;
+  --user-bg: #30353a; --user-border: #3e444a; --code-bg: #1a1d20;
+  --good: #74c775; --good-soft: #1e2a22; --warn: #d9a24e; --warn-soft: #2e2617; --danger: #ef7055; --danger-soft: #331e19;
+  --add-bg: #17281c; --add-fg: #7fc894; --del-bg: #301b15; --del-fg: #ef8069;
+  --god: #9d8cff; --god-soft: #262040;
   --claude: #d97757; --claude-soft: #392b23;
   --cursor: #6bb9d6; --cursor-soft: #172b33;
   --shadow-sm: 0 1px 2px rgba(0,0,0,.3); --shadow: 0 1px 3px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.32); --shadow-lg: 0 18px 52px rgba(0,0,0,.55);
@@ -81,10 +114,13 @@ body {
   /* dvh ולא vh: בטלפון סרגל הכתובת מתכווץ ומתרחב, ו-100vh גולש מתחת למסך
      ומסתיר את שדה הכתיבה בדיוק כשצריך אותו.
      --app-h מגיע מ-visualViewport ב-JS ורלוונטי רק במגע: ב-iOS המקלדת *לא*
-     מקטינה את ה-dvh, ולכן בלי זה המחבר נדחף מתחת למקלדת ברגע שמתחילים להקליד. */
+     מקטינה את ה-dvh, ולכן בלי זה המחבר נדחף מתחת למקלדת ברגע שמתחילים להקליד.
+     --app-top מצמיד את האפליקציה לחלון החזותי כש-offsetTop > 0 (אחרת נשאר
+     פער כהה בין תחתית המחבר לראש המקלדת). */
   height: 100vh;
   height: 100dvh;
   height: var(--app-h, 100dvh);
+  margin-top: var(--app-top, 0px);
   transition: grid-template-columns .2s ease;
 }
 .app.side-collapsed { grid-template-columns: 0 0 1fr; }
@@ -111,7 +147,12 @@ body {
 }
 .app.side-collapsed .side-resizer { pointer-events: none; }
 .side-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 10px; }
-.wordmark { font-family: var(--serif); font-size: 24px; letter-spacing: .2px; color: var(--text); }
+.wordmark { display: flex; align-items: center; gap: 8px; font-family: var(--serif); font-size: 24px; letter-spacing: .2px; color: var(--text); }
+/* הסימן מיושר לגובה ה-x של השם ולא לגובה השורה — אחרת הוא צף מעל הבסיס */
+.wm-mark {
+  width: 23px; height: 23px; flex: none; margin-block-start: 1px;
+  fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round;
+}
 .side-nav { padding: 6px 8px; }
 .nav-row {
   width: 100%; display: flex; align-items: center; gap: 10px; text-align: start;
@@ -211,7 +252,7 @@ body {
   transition: color .2s, background .2s, box-shadow .2s;
 }
 body.busy .status-pill {
-  color: #fff; background: var(--accent);
+  color: var(--on-accent); background: var(--accent);
   box-shadow: 0 0 0 1px var(--accent), 0 0 14px color-mix(in srgb, var(--accent) 60%, transparent);
   animation: pillPulse 1.1s ease-in-out infinite;
 }
@@ -364,7 +405,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .md pre { direction: ltr; text-align: left; background: var(--code-bg); border: 1px solid var(--border); border-radius: 13px; padding: 14px 16px; margin: 0; overflow-x: auto; }
 .md pre code { background: none; border: none; padding: 0; unicode-bidi: embed; display: block; white-space: pre; line-height: 1.55; font-family: var(--mono); font-size: 13px; }
 .copy-btn { position: absolute; inset-inline-end: 9px; inset-block-start: 9px; font-family: var(--ui); font-size: 11px; background: var(--panel); color: var(--text-dim); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; cursor: pointer; opacity: 0; transition: opacity .14s, color .12s; z-index: 2; }
-.code-wrap:hover .copy-btn { opacity: 1; }
+.code-wrap:hover .copy-btn, .code-wrap:focus-within .copy-btn { opacity: 1; }
 .copy-btn:hover { color: var(--text); border-color: var(--accent); }
 .copy-btn.done { color: var(--good); border-color: var(--good); }
 
@@ -399,7 +440,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .tool-rej-note { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
 .tool-rej-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px; }
 .tool-rej-btn { font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
-  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
   border-radius: 8px; padding: 5px 11px; }
 .tool-rej-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .tool-rej-btn:disabled { opacity: .6; cursor: default; }
@@ -418,7 +459,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
    הפקודה ולא את תחילתה. בכרטיס שכל תפקידו הוא "אשר או דחה את זה" זו בדיוק
    השורה שאסור להסתיר. בדרך הוא גם קיבל ריפוד, מסגרת, גלישת שורות ותקרת גובה. */
 .tool pre, .perm-body pre { direction: ltr; text-align: left; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; background: var(--code-bg); border: 1px solid var(--border-soft); border-radius: 9px; padding: 10px 11px; margin: 0; overflow: auto; white-space: pre-wrap; word-break: break-word; max-height: 360px; }
-.term { background: #17160f !important; color: #d8d2c4; border-color: #2a281f !important; }
+.term { background: #14181a !important; color: #d3d9db; border-color: #262c2f !important; }
 
 .diff { border: 1px solid var(--border-soft); border-radius: 9px; overflow: auto; max-height: 360px; direction: ltr; }
 .diff pre { border: none; border-radius: 0; margin: 0; max-height: none; }
@@ -446,7 +487,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
   display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
   width: max-content; max-width: calc(100% - 48px); margin: 0 auto;
   padding: 10px 16px; border-radius: 14px; font-size: 14px; font-weight: 650;
-  color: #fff; background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  color: var(--on-accent); background: linear-gradient(120deg, var(--accent), var(--accent-2));
   box-shadow: 0 6px 22px color-mix(in srgb, var(--accent) 45%, transparent);
   pointer-events: none; animation: workGlow 1.5s ease-in-out infinite;
 }
@@ -457,20 +498,26 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .working > * { pointer-events: auto; }
 .working.hidden { display: none; }
 #workingText { unicode-bidi: plaintext; }
-.spinner { width: 17px; height: 17px; border-radius: 50%; flex: none; border: 2.5px solid rgba(255,255,255,.35); border-top-color: #fff; animation: spin .7s linear infinite; }
+.spinner { width: 17px; height: 17px; border-radius: 50%; flex: none; border: 2.5px solid color-mix(in srgb, currentColor 35%, transparent); border-top-color: currentColor; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation-duration: 2.4s; }
   .app, .working, body.busy .status-pill, body.busy .top-progress > span { animation: none; }
 }
-.stop { margin-inline-start: 4px; background: rgba(255,255,255,.18); color: #fff; border: 1px solid rgba(255,255,255,.5); padding: 5px 15px; font-size: 12.5px; font-weight: 650; border-radius: 9px; cursor: pointer; font-family: var(--ui); transition: background .12s; }
-.stop:hover { background: rgba(255,255,255,.3); }
+/* כפתור-רפאים ולא מילוי שקוף-למחצה: מילוי של 18% מהדיו נתן לטקסט פחות
+   מ-2:1 מול הרקע שמאחוריו. מסגרת ב-‎currentColor‎ יורשת את הדיו של הפס —
+   לבן על הפס הפטרול, כהה כשהאקצנט בהיר, לבן שוב כשהפס עובר לענבר. */
+.stop { margin-inline-start: 4px; background: transparent; color: inherit; border: 1.5px solid currentColor; padding: 5px 15px; font-size: 12.5px; font-weight: 650; border-radius: 9px; cursor: pointer; font-family: var(--ui); transition: background .12s; }
+.stop:hover { background: color-mix(in srgb, currentColor 22%, transparent); }
 
 /* ---------- קרוס־צ'ק: כשהתור נראה תקוע ---------- */
 /* הבר מפסיק לפעום ועובר לצבע אזהרה. "עובד" ו"אין קשר" נראו עד עכשיו זהים
    לחלוטין, וזו כל הסיבה שאפשר היה לשבת מול מסך תקוע בלי לדעת שהוא תקוע. */
 body.stale .working {
   animation: none;
+  /* הרקע כאן הוא ענבר כהה ולא האקצנט, ולכן גם הדיו חוזר ללבן: ‎--on-accent‎
+     הוא כהה במצב הכהה, והוא היה נעלם על הגרדיאנט הזה. */
+  color: #fff;
   background: linear-gradient(120deg, var(--warn), color-mix(in srgb, var(--warn) 74%, #000));
   box-shadow: 0 6px 22px color-mix(in srgb, var(--warn) 45%, transparent);
 }
@@ -611,6 +658,52 @@ textarea#input::placeholder { color: var(--text-faint); }
 .composer-bar { display: flex; align-items: center; gap: 8px; padding: 2px 6px 2px 6px; }
 .attach { width: 34px; height: 34px; border-radius: 10px; border: none; background: transparent; color: var(--text-dim); font-size: 20px; cursor: pointer; flex: none; display: grid; place-items: center; transition: background .12s, color .12s; }
 .attach:hover { background: var(--panel-2); color: var(--text); }
+.attach svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.attach.hidden { display: none; }
+.attach:disabled, .attach[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+.attach:disabled:hover, .attach[aria-disabled="true"]:hover { background: transparent; color: var(--text-dim); }
+
+/* ---------- הכתבה קולית ----------
+   המיקרופון בזמן הקשבה הוא המקום היחיד במסך שזז מעצמו בלי שקורה שם משהו
+   (אין סטרימינג, אין תור) — ולכן הוא לא צריך להיות חזק, רק חי. עיגול
+   באקצנט שנושם, ומעליו הילה שמתפוגגת החוצה. */
+.mic.on { background: var(--accent); color: var(--on-accent); }
+.mic.on:hover { background: var(--accent); color: var(--on-accent); }
+.mic.on::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  border: 2px solid var(--accent); animation: micHalo 1.6s ease-out infinite;
+}
+.mic { position: relative; }
+@keyframes micHalo { 0% { transform: scale(1); opacity: .55; } 100% { transform: scale(1.75); opacity: 0; } }
+
+.dict-strip { display: flex; align-items: center; gap: 10px; padding: 8px 10px 2px; }
+.dict-strip.hidden { display: none; }
+.dk-text { font-size: 12.5px; color: var(--accent); font-weight: 600; }
+/* ארבעה פסים בגבהים שונים ובפאזות שונות. זה חיווי "המיקרופון פתוח", לא
+   מד עוצמה — קריאת עוצמת שמע אמיתית דורשת getUserMedia מקביל שיתחרה על
+   אותו התקן, ומחיר כזה על אנימציה הוא לא עסקה. */
+.dk-wave { display: inline-flex; align-items: center; gap: 2.5px; height: 14px; }
+.dk-wave i { width: 2.5px; border-radius: 2px; background: var(--accent); animation: dkWave 1s ease-in-out infinite; }
+.dk-wave i:nth-child(1) { height: 5px;  animation-delay: 0s; }
+.dk-wave i:nth-child(2) { height: 11px; animation-delay: .15s; }
+.dk-wave i:nth-child(3) { height: 8px;  animation-delay: .3s; }
+.dk-wave i:nth-child(4) { height: 13px; animation-delay: .45s; }
+@keyframes dkWave { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+
+.dk-lang, .dk-stop {
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--text-dim);
+  border-radius: 999px; padding: 2px 9px; font: inherit; font-size: 11.5px; font-weight: 600;
+  cursor: pointer; flex: none; transition: background .12s, color .12s, border-color .12s;
+}
+.dk-lang:hover, .dk-stop:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.dk-stop { margin-inline-start: auto; }
+
+/* התיבה עצמה מקבלת קו אקצנט בזמן הכתבה: מה שנאמר נכנס לכאן, וזה הרמז
+   שהמילים שצצות מעצמן אינן תקלה. */
+body.dictating .composer-card { box-shadow: 0 0 0 1.5px var(--accent), var(--shadow); }
+@media (prefers-reduced-motion: reduce) {
+  .mic.on::after, .dk-wave i { animation: none; }
+}
 .bar-spacer { flex: 1; }
 /* הבוררים הם רצועה אחת שאפשר לכווץ ולגלול, בכל רוחב.
    הסדר ב-DOM: צירוף → בוררים → spacer → שלח. ב-RTL זה שם את הבוררים
@@ -660,7 +753,7 @@ textarea#input::placeholder { color: var(--text-faint); }
 .mp-btn .mp-btn-name { overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
 .dt-pick-ctl .pill-wrap { flex: 1 1 180px; min-width: 0; }
 .dt-pick-ctl .mp-btn { flex: 1; min-width: 0; max-width: none; }
-.send { width: 38px; height: 38px; border-radius: 12px; border: none; background: var(--accent); color: #fff; cursor: pointer; flex: none; display: grid; place-items: center; transition: filter .15s, transform .05s, opacity .15s; }
+.send { width: 38px; height: 38px; border-radius: 12px; border: none; background: var(--accent); color: var(--on-accent); cursor: pointer; flex: none; display: grid; place-items: center; transition: filter .15s, transform .05s, opacity .15s; }
 .send svg { transform: scaleX(-1); }
 .send:hover { filter: brightness(1.06); }
 .send:active { transform: translateY(1px); }
@@ -939,8 +1032,8 @@ textarea#input::placeholder { color: var(--text-faint); }
 .perm-actions { display: flex; gap: 8px; padding: 8px 13px 12px; flex-wrap: wrap; }
 .pbtn { font-family: inherit; font-size: 13px; font-weight: 550; padding: 8px 16px; border-radius: 9px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; transition: filter .12s, transform .08s; }
 .pbtn:active { transform: scale(.96); }
-.pbtn.allow { background: var(--accent); border-color: var(--accent); color: #fff; }
-.pbtn.always { background: var(--good); border-color: var(--good); color: #fff; }
+.pbtn.allow { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.pbtn.always { background: var(--good); border-color: var(--good); color: var(--on-accent); }
 .pbtn.deny { background: var(--panel); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
 .pbtn:hover { filter: brightness(1.05); }
 .perm-verdict { font-size: 13px; font-weight: 600; color: var(--text-dim); }
@@ -995,7 +1088,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
    אותה לג׳יבריש ברגע שהיא נשברה לשתי שורות. plaintext נותן לאלגוריתם הדו־כיווני
    לגזור כיוון מהתחלת הטקסט ולבודד את מזהה הסשן בתוכו. */
 .sess-meta { font-size: 11px; color: var(--text-faint); font-family: var(--mono); direction: rtl; unicode-bidi: plaintext; text-align: start; margin-top: 3px; }
-.sess-resume { font-family: inherit; font-size: 12.5px; font-weight: 550; padding: 7px 15px; border-radius: 9px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; flex: none; }
+.sess-resume { font-family: inherit; font-size: 12.5px; font-weight: 550; padding: 7px 15px; border-radius: 9px; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); cursor: pointer; flex: none; }
 .sess-resume:hover { filter: brightness(1.05); }
 .sess-resume:active { transform: scale(.96); }
 
@@ -1030,7 +1123,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
 }
 .rm-btn:hover { border-color: var(--accent); }
 .rm-btn:disabled { opacity: .55; cursor: default; }
-.rm-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.rm-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .rm-btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
 .rm-btn.danger { color: var(--danger); }
 .rm-btn.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
@@ -1439,7 +1532,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
 .ask-bar {
   flex: none; z-index: 8; display: flex; align-items: center; gap: 11px;
   margin: 0 18px 8px; padding: 10px 15px; border-radius: 13px; cursor: pointer;
-  font-size: 13.5px; font-weight: 650; color: #fff;
+  font-size: 13.5px; font-weight: 650; color: var(--on-accent);
   background: linear-gradient(120deg, var(--accent), var(--accent-2));
   box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 42%, transparent);
   animation: askPulse 1.6s ease-in-out infinite;
@@ -1453,7 +1546,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
 .ask-bar #askBarText { flex: 1; min-width: 0; unicode-bidi: plaintext; }
 .ab-go {
   flex: none; font-family: var(--ui); font-size: 12.5px; font-weight: 700; cursor: pointer;
-  color: var(--accent); background: #fff; border: none; border-radius: 9px; padding: 6px 14px;
+  color: var(--accent); background: var(--on-accent); border: none; border-radius: 9px; padding: 6px 14px;
 }
 .ab-go:hover { filter: brightness(.96); }
 @keyframes askPulse {
@@ -1590,7 +1683,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
 }
 .find-nav:hover { background: var(--panel-2); color: var(--text); }
 mark.find-hit { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
-mark.find-hit.cur { background: var(--accent); color: #fff; }
+mark.find-hit.cur { background: var(--accent); color: var(--on-accent); }
 
 /* ---------- מקשי קיצור ---------- */
 .sc-list { display: flex; flex-direction: column; gap: 2px; }
@@ -1642,6 +1735,7 @@ body.awaiting .working { opacity: .55; }
 @media (hover: none), (pointer: coarse) {
   .icon-btn { width: 42px; height: 42px; }
   .attach, .send { width: 46px; height: 46px; }
+  .jump { width: 44px; height: 44px; }
   .pbtn, .rm-btn, .sess-resume { min-height: 44px; padding: 11px 16px; font-size: 14px; }
   .ma-btn { min-height: 40px; padding: 8px 11px; font-size: 12.5px; }
   .pill, select.pill { min-height: 40px; font-size: 13.5px; }
@@ -1650,7 +1744,7 @@ body.awaiting .working { opacity: .55; }
   .find-nav { width: 42px; height: 42px; font-size: 16px; }
   .find-bar input { min-height: 44px; }
   .usage-close { width: 44px; height: 44px; top: 10px; inset-inline-end: 10px; }
-  .stop { min-height: 40px; padding: 9px 16px; }
+  .stop { min-height: 44px; padding: 10px 16px; }
   .ask-opt { padding-block: 13px; }
   .ac-item { min-height: 46px; }
   .pl-item { min-height: 48px; }
@@ -1658,6 +1752,8 @@ body.awaiting .working { opacity: .55; }
      min-height רק מוסיף שטח ריק מתחת לטקסט במקום למרכז אותו. */
   .dp-row { padding-block: 13px; font-size: 14px; }
   .att-chip .ac-rm { width: 34px; height: 34px; }
+  .q-chip .q-rm { width: 36px; height: 36px; }
+  .dk-lang, .dk-stop { min-height: 40px; padding: 8px 12px; font-size: 13px; }
   #convSearch { min-height: 44px; }
   .cwd-chip { min-height: 34px; padding: 7px 10px; }
   /* שני פסי הקריאה שמופיעים כשמשהו ממתין לך — הכפתור בהם הוא הפעולה,
@@ -1673,12 +1769,19 @@ body.awaiting .working { opacity: .55; }
 /* ---------- כתיבה עם מקלדת: רק תיבת הטקסט מול האצבע ----------
    ‎body.compose-compact‎ מוגדר ב-app.js *רק* כש-visualViewport יורד (מקלדת
    פתוחה), לא בגלל פוקוס בשדה. רצועת המכסה, שורת ההקשר ובוררי מודל+הרשאות
-   נעלמים; צירוף · תיבה · שלח עוברים לשורה אופקית אחת. */
+   נעלמים; צירוף · תיבה · שלח עוברים לשורה אופקית אחת.
+   ‎body.compose-tall‎ נדלק כשהטקסט עובר שורה אחת: התיבה עולה לרוחב מלא מעל
+   הכפתורים, ובורר המודל חוזר לשורת הפקדים במקום שמתפנה. */
 body.compose-compact .usage-strip,
 body.compose-compact .statusbar,
 body.compose-compact .pill-row,
 body.compose-compact .bar-spacer { display: none !important; }
-body.compose-compact .composer { padding-block: 4px 4px; }
+/* ריפוד תחתון קטן בלבד: בלי safe-area (המקלדת כבר תופסת את התחתית),
+   אבל לא צמוד לגמרי — נשימה קלה בין התיבה למקלדת. */
+body.compose-compact .composer {
+  padding-block: 4px 24px;
+  padding-inline: 12px;
+}
 
 /* ‎display:contents‎ על שורת הפקדים מרים את צירוף/שלח לכרטיס עצמו, כדי
    שאפשר לסדר: צירוף | תיבת טקסט | שלח באותו מישור (ב-RTL מימין לשמאל). */
@@ -1687,14 +1790,57 @@ body.compose-compact .composer-card {
 }
 body.compose-compact .ac-menu,
 body.compose-compact .att-strip,
-body.compose-compact .queue-strip { flex: 1 1 100%; }
+body.compose-compact .queue-strip,
+body.compose-compact .dict-strip { flex: 1 1 100%; }
 body.compose-compact .composer-bar { display: contents; }
-body.compose-compact #attachBtn { order: 1; flex: none; }
+/* כשהמקלדת פתוחה: מיקרופון החוצה (ימין ב-RTL) ופלוס פנימה — הפוך מסדר
+   ה-DOM הרגיל (＋ ואז mic) שבמצב סגור. */
+body.compose-compact #micBtn { order: 1; flex: none; }
+body.compose-compact #attachBtn { order: 2; flex: none; }
 body.compose-compact textarea#input {
-  order: 2; flex: 1 1 0; min-width: 0;
-  padding: 10px 8px; max-height: 28dvh;
+  order: 3; flex: 1 1 0; min-width: 0;
+  padding: 10px 8px;
+  /* ‎--app-h‎ ולא ‎dvh‎: ב-iOS המקלדת אינה מקטינה את ‎dvh‎, ולכן 28dvh הם 28%
+     מהמסך *כולו* — תיבה שגולשת אל מתחת למקלדת יחד עם כפתור השליחה. */
+  max-height: calc(var(--app-h, 100dvh) * 0.28);
 }
-body.compose-compact #sendBtn { order: 3; flex: none; }
+body.compose-compact #sendBtn { order: 4; flex: none; }
+
+/* כמה שורות: התיבה בשורה עליונה לרוחב מלא; מתחתיה הכפתורים + בורר המודל. */
+body.compose-compact.compose-tall textarea#input {
+  order: 1;
+  flex: 1 1 100%;
+  width: 100%;
+  padding: 10px 12px 4px;
+}
+body.compose-compact.compose-tall #micBtn { order: 2; }
+body.compose-compact.compose-tall #attachBtn { order: 3; }
+body.compose-compact.compose-tall .pill-row {
+  display: flex !important;
+  order: 4;
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  gap: 6px;
+}
+body.compose-compact.compose-tall .pill-row .pill-wrap:has(#perm),
+body.compose-compact.compose-tall .pill-row .pill-wrap:has(#effort) { display: none; }
+body.compose-compact.compose-tall .pill-row .pill-wrap:has(#model) {
+  flex: 1 1 0;
+  min-width: 0;
+}
+body.compose-compact.compose-tall .pill-row .mp-btn {
+  max-width: none;
+  width: 100%;
+  background: var(--panel-2);
+  border-radius: 999px;
+  padding-block: 8px;
+}
+body.compose-compact.compose-tall #sendBtn { order: 5; }
+
+/* שיבוט זמני של בורר המודל במעבר tall→צר — נעלם באנימציה במקום לקפוץ. */
+.cc-ghost { contain: layout style; touch-action: none; }
 
 /* התנאי השני הוא טלפון בשכיבה: ‎844×390‎ עובר את 760px לרוחב, ולכן קיבל את
    פריסת הדסקטופ — סרגל שיחות קבוע שגזל 272px מתוך 844, סרגל עליון עמוס
@@ -2081,7 +2227,7 @@ body.duet-mode #working, body.duet-mode #jumpBtn { display: none !important; }
 
 .dt-mini, .dt-go { border-radius: 10px; font: inherit; font-size: 13px; cursor: pointer; padding: 6px 13px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); transition: background .13s, border-color .13s; }
 .dt-mini:hover { background: var(--border-soft); }
-.dt-go { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.dt-go { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 .dt-go:hover { background: var(--accent-2); border-color: var(--accent-2); }
 .dt-go:disabled { opacity: .55; cursor: default; }
 .dt-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }

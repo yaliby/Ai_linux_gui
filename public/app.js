@@ -1142,7 +1142,19 @@ function connect() {
   ws.onerror = () => { dlog('ws.error', { state: ws ? ws.readyState : -1 }); setStatus('', 'שגיאת חיבור'); };
   ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } handleServer(m); };
 }
-function setStatus(cls, title) { const d = $('statusDot'); d.className = 'dot' + (cls ? ' ' + cls : ''); d.title = title; }
+function setStatus(cls, title) {
+  const d = $('statusDot');
+  d.className = 'dot' + (cls ? ' ' + cls : '');
+  d.title = title;
+  // הפסיל והנקודה חייבים לומר אותו דבר. קודם הפסיל נשאר על «מוכן» גם אחרי
+  // onclose — רק הנקודה האפירה סימנה ניתוק, וזה נסתר בטלפון רחב יחסית.
+  const pill = $('statusPill');
+  if (!pill) return;
+  if (cls === 'busy') pill.textContent = 'מעבד…';
+  else if (cls === 'on') pill.textContent = 'מוכן';
+  else pill.textContent = title || 'מנותק';
+}
+function wsConnected() { return !!(ws && ws.readyState === 1); }
 
 /* ==========================================================================
    קרוס־צ'ק — השוואת מצב המסך למצב האמיתי בשרת
@@ -1560,9 +1572,17 @@ function sendUi(field, value) {
 function applyRemoteUi(m) {
   const conv = convById(m.convId) || activeConv();
   if (m.field === 'draft') {
+    const prev = conv ? (conv.draft || '') : '';
     if (conv) conv.draft = m.value || '';
-    // לא דורסים טקסט שאתה מקליד ברגע זה — רק שדה ריק מתעדכן מרחוק
-    if (conv && conv.id === activeId && !$('input').value) { $('input').value = m.value || ''; autoGrow(); }
+    /* לא דורסים טקסט שאתה מקליד ברגע זה. שני מצבים כן מתעדכנים: שדה ריק,
+       ושדה שמכיל *בדיוק* את הטיוטה הקודמת שהגיעה מהסנכרון — כלומר מה שרואים
+       בו אינו שלך אלא הד של המכשיר השני. בלי המקרה השני הודעה שנשלחה מהמחשב
+       נשארה תלויה בתיבת הטלפון: השידור המנקה הגיע, אבל התיבה כבר לא הייתה
+       ריקה — ומי שהסתכל על הטלפון ראה טקסט שכבר נשלח וחיכה לשליחה. */
+    if (conv && conv.id === activeId) {
+      const box = $('input').value;
+      if (!box || box === prev) { $('input').value = m.value || ''; autoGrow(); }
+    }
     return;
   }
   if (m.field === 'title') {
@@ -2308,14 +2328,17 @@ function onHalt(m) {
 // ---------- שליחה ----------
 // שיגור מהתור נעשה בשרת, ולכן כאן נשארה רק הדרך האחת: מה שהוקלד בתיבה
 async function sendMessage(text) {
+  // ההודעה יוצאת — אין למי להכתיב. חשוב שזה יקרה *לפני* קריאת התיבה, כדי
+  // שתוצאת ביניים שעדיין לא נסגרה תיכנס לטקסט הנשלח ולא תיזרק.
+  if (dictOn) dictStop();
   text = (text != null ? text : $('input').value).trim();
   const atts = pendingAtts.slice();
-  if (!text && !atts.length) return;
+  if (!text && !atts.length) { toast('כתוב הודעה או צרף תמונה'); return; }
   // פקודת-לקוח שנכתבה ביד (בלי תפריט ההשלמה) נתפסת גם כאן, אחרת היא הייתה
   // נשלחת למודל כטקסט
   const cc = !atts.length && text.match(/^(\/[\w-]+)(?:\s+([\s\S]*))?$/);
   if (cc && CLIENT_CMDS[cc[1]]) {
-    $('input').value = ''; autoGrow();
+    clearComposer();
     CLIENT_CMDS[cc[1]]((cc[2] || '').trim());
     return;
   }
@@ -2351,8 +2374,7 @@ async function sendMessage(text) {
     // עקבה לכל דבר. מה שנכתב בצ'אט אנונימי לא נכנס אליה.
     if (text && !conv.anon) { if (!Array.isArray(store.history)) store.history = []; store.history.unshift(text); store.history = store.history.slice(0, 50); histIdx = -1; }
     clearPendingAtts();
-    $('input').value = ''; autoGrow();
-    conv.draft = ''; markDirty(conv);
+    clearComposer();
     return;
   }
   // כותרת נגזרת מההודעה הראשונה. בצ'אט אנונימי היא הייתה מציגה את תוכן השיחה
@@ -2395,7 +2417,7 @@ async function sendMessage(text) {
     if (!Array.isArray(store.history)) store.history = [];
     store.history.unshift(text); store.history = store.history.slice(0, 50); histIdx = -1;
   }
-  $('input').value = ''; autoGrow();
+  clearComposer();
   clearPendingAtts();
   ensureNotifyPermission();
   setBusy(true); save(); renderConvList();
@@ -2409,7 +2431,10 @@ function syncSendAffordance() {
   const chaining = busy || !!limitState;
   const btn = $('sendBtn');
   btn.classList.toggle('queueing', chaining);
+  // title ו-aria-label יחד: בטלפון אין hover, וקורא מסך חייב לשמוע את מצב התור
+  // ולא להישאר על «שלח» הסטטי מ-index.html.
   btn.title = limitState ? 'הוסף לתור — ירוץ כשהמכסה תתחדש' : chaining ? 'הוסף לתור' : 'שלח';
+  btn.setAttribute('aria-label', btn.title);
 }
 
 function setBusy(state) {
@@ -2419,8 +2444,10 @@ function setBusy(state) {
   $('working').classList.toggle('hidden', !state);
   // מחלקה גלובלית שמפעילה את כל האינדיקטורים הבולטים (פס עליון, זוהר, תווית)
   document.body.classList.toggle('busy', state);
-  $('statusPill').textContent = state ? 'מעבד…' : 'מוכן';
-  setStatus(state ? 'busy' : 'on', state ? 'עובד…' : 'מחובר');
+  // הפסיל עובר דרך setStatus — כך סיום תור בזמן ניתוק לא יכתוב «מוכן»/«מחובר» בשקר
+  if (state) setStatus('busy', 'עובד…');
+  else if (wsConnected()) setStatus('on', 'מחובר');
+  else setStatus('', 'מנותק');
   if (state) { resetTurnTok(); godTurn = []; renderWorking(); }
   // מעבר busy→פנוי = התור הסתיים: הבזק "הסתיים" בולט
   if (was && !state) { flashDone(); haptic(HAPTIC_DONE); }
@@ -2590,7 +2617,15 @@ function startRename(c, item, titleEl) {
   const inp = el('input', 'c-rename'); inp.value = c.title || '';
   item.replaceChild(inp, titleEl); inp.focus(); inp.select();
   let done = false;
-  const commit = () => { if (done) return; done = true; const v = inp.value.trim(); if (v) c.title = v; markDirty(c); renderConvList(); if (c.id === activeId) $('convTitle').textContent = c.title; };
+  const commit = () => {
+    if (done) return; done = true;
+    const v = inp.value.trim();
+    // כותרת של 400 תווים הופכת את הסרגל העליון ל־2–3 גליפים ב־360px.
+    // השרת גוזר ל־200; כאן גוזרים קודם כדי שהמסך והדיסק לא יסתרו.
+    if (v) c.title = clamp(v, 80);
+    markDirty(c); renderConvList();
+    if (c.id === activeId) $('convTitle').textContent = c.title;
+  };
   inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } else if (e.key === 'Escape') { done = true; renderConvList(); } };
   inp.onblur = commit;
   inp.onclick = (e) => e.stopPropagation();
@@ -2640,10 +2675,24 @@ function renderConvList() {
 }
 async function switchConv(id) {
   if (id === activeId) return;
+  if (dictOn) dictStop();             // העוגן שייך לטיוטה של השיחה שעוזבים
   if (!leaveAnon(id)) return;         // עזיבת צ'אט אנונימי מוחקת אותו; ביטול = נשארים
   stashDraft();                       // הטיוטה של השיחה הנוכחית נשמרת לפני המעבר
+  // תור רץ בשיחה אחרת: ה־UI של busy נשאר, אבל התמליל כבר של השיחה החדשה —
+  // בלי משוב זה נראה כמו מסך שבור. לא חוסמים את המעבר (לגיטימי לבדוק שיחה
+  // אחרת), רק אומרים איפה העבודה ממשיכה.
+  if (busy && streamOwnerId && streamOwnerId !== id) {
+    const owner = convById(streamOwnerId);
+    const name = owner && owner.title ? clamp(owner.title, 40) : 'שיחה אחרת';
+    toast(`עדיין רץ ב«${name}»`);
+  }
   // התור וההמתנה למכסה שייכים לשיחה שעזבנו. מנקים מיד ולא מחכים ל-sync,
   // אחרת הצ'יפים של השיחה הקודמת נראים לרגע כאילו הם של החדשה.
+  if (limitState) {
+    const owner = streamOwnerId && convById(streamOwnerId);
+    const name = owner && owner.title ? clamp(owner.title, 40) : '';
+    toast(name ? `המתנה למכסה ממשיכה ב«${name}»` : 'המתנה למכסה ממשיכה בשיחה הקודמת');
+  }
   onQueueUpdate([]);
   setLimitState(null);
   duetRun = null; duetLive = null; duetDom = null; duetViewV = 0; duetVerCache.clear();
@@ -3302,16 +3351,485 @@ function toast(text, err) {
 
 // ---------- קלט ----------
 let histIdx = -1;
-function autoGrow() { const i = $('input'); i.style.height = 'auto'; i.style.height = Math.min(i.scrollHeight, window.innerHeight * 0.42) + 'px'; }
+
+/**
+ * האם הטקסט דורש ‎compose-tall‎.
+ *
+ * חשוב: ההחלטה לפי רוחב החריץ *הצר* (שורה אחת בין כפתורים), לא לפי
+ * ‎scrollHeight‎ הנוכחי. אחרת: ברוחב הצר הטקסט נשבר → tall → ברוחב המלא
+ * הוא שוב שורה אחת → יורדים מ-tall → שוב צר → לולאה אינסופית.
+ *
+ * ‎textW‎ / ‎narrowSlot‎ בפיקסלים של תוכן (בלי ריפוד). ‎currentlyTall‎ נותן
+ * היסטרזיס קטן כדי לא לרפרף על סף המדידה.
+ *
+ * הסף לכניסה הוא ‎narrowSlot - 2‎ ולא ‎narrowSlot + 4‎: מרווח לכיוון החיובי
+ * פירושו טקסט שכבר חורג מהחריץ ועדיין מוצג בו — כלומר נשבר לשתי שורות בין
+ * הכפתורים, שזה בדיוק המראה שהמצב הזה בא למנוע. שגיאת מדידה קיימת (מדידת
+ * קנבס מול פריסה אמיתית), ולכן המרווח נשאר — רק בכיוון הבטוח: להקדים
+ * בשני פיקסלים זה בלתי נראה, לאחר בפיקסל אחד זה שורה שבורה.
+ */
+function composeTallDecision(textW, narrowSlot, currentlyTall, hasNewline) {
+  if (hasNewline) return true;
+  if (!(textW > 0) || !(narrowSlot > 0)) return false;
+  if (currentlyTall) return textW > narrowSlot - 16;
+  return textW > narrowSlot - 2;
+}
+
+/** רוחב החריץ הצר לתיבה בשורת compact — card פחות כפתורים ורווחים. */
+function composeNarrowSlotPx(input) {
+  const card = input.closest('.composer-card');
+  if (!card) return Math.max(0, input.clientWidth);
+  const gap = 6;
+  const pad = (() => {
+    const s = getComputedStyle(card);
+    return (parseFloat(s.paddingLeft) || 0) + (parseFloat(s.paddingRight) || 0);
+  })();
+  let btn = 0, n = 0;
+  for (const id of ['micBtn', 'attachBtn', 'sendBtn']) {
+    const el = $(id);
+    if (!el || el.classList.contains('hidden')) continue;
+    const w = el.getBoundingClientRect().width;
+    btn += w > 0 ? w : (id === 'sendBtn' ? 38 : 34);
+    n++;
+  }
+  // mic · attach · [חריץ] · send — n כפתורים ⇒ n רווחים סביב החריץ ביניהם
+  return Math.max(48, card.clientWidth - pad - btn - gap * Math.max(n, 1));
+}
+
+function inputTextWidthPx(input) {
+  const raw = input.value;
+  if (!raw) return 0;
+  // שורה אחת לוגית למדידה: רווחים מנורמלים; \n מטופל בנפרד ב-shouldComposeTall
+  const v = raw.replace(/\s+/g, ' ').trim();
+  if (!v) return 0;
+  const cs = getComputedStyle(input);
+  const ctx = inputTextWidthPx._ctx
+    || (inputTextWidthPx._ctx = document.createElement('canvas').getContext('2d'));
+  ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`.trim();
+  return ctx.measureText(v).width;
+}
+
+function shouldComposeTall(input) {
+  const v = input.value;
+  if (!v) return false;
+  const hasNewline = v.includes('\n');
+  const cs = getComputedStyle(input);
+  const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  const slot = composeNarrowSlotPx(input) - padX;
+  const tw = hasNewline ? 0 : inputTextWidthPx(input);
+  return composeTallDecision(tw, slot, document.body.classList.contains('compose-tall'), hasNewline);
+}
+
+const TALL_MS = 340;
+const TALL_EASE = 'cubic-bezier(.22, .72, .18, 1)';
+
+function visibleBox(el) {
+  if (!el || el.classList.contains('hidden')) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+
+function ghostAt(el, rect) {
+  const g = el.cloneNode(true);
+  g.classList.add('cc-ghost');
+  g.removeAttribute('id');
+  g.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
+  Object.assign(g.style, {
+    position: 'fixed', left: rect.left + 'px', top: rect.top + 'px',
+    width: rect.width + 'px', height: rect.height + 'px',
+    margin: '0', zIndex: '25', pointerEvents: 'none',
+    boxSizing: 'border-box', overflow: 'hidden',
+  });
+  document.body.appendChild(g);
+  return g;
+}
+
+function flipTo(el, first, last, origin) {
+  const dx = first.left - last.left;
+  const dy = first.top - last.top;
+  const sx = last.width ? first.width / last.width : 1;
+  const sy = last.height ? first.height / last.height : 1;
+  if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 && Math.abs(sx - 1) < 0.02 && Math.abs(sy - 1) < 0.02) return;
+  el.getAnimations().forEach((a) => a.cancel());
+  const anim = el.animate(
+    [
+      { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`, transformOrigin: origin },
+      { transform: 'translate(0, 0) scale(1, 1)', transformOrigin: origin },
+    ],
+    { duration: TALL_MS, easing: TALL_EASE, fill: 'both' },
+  );
+  anim.finished.then(() => anim.cancel()).catch(() => {});
+}
+
+/**
+ * מעבר ‎compose-tall‎ באנימציית FLIP: התיבה נמתחת מהחריץ בין הכפתורים
+ * לרוחב מלא, והכפתורים יורדים לשורה מתחת. רק כאן — לא בפתיחת המקלדת.
+ */
+function setComposeTall(on) {
+  const body = document.body;
+  if (body.classList.contains('compose-tall') === on) return;
+  const compact = body.classList.contains('compose-compact');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const input = $('input');
+  if (!compact || reduce || typeof body.animate !== 'function') {
+    body.classList.toggle('compose-tall', on);
+    growInput(input);
+    return;
+  }
+
+  const movers = ['#input', '#micBtn', '#attachBtn', '#sendBtn']
+    .map((s) => document.querySelector(s)).filter(visibleBox);
+  const pills = document.querySelector('.pill-row');
+  const first = new Map();
+  for (const el of movers) first.set(el, el.getBoundingClientRect());
+  let pillGhost = null;
+  if (!on && visibleBox(pills)) pillGhost = ghostAt(pills, pills.getBoundingClientRect());
+
+  body.classList.toggle('compose-tall', on);
+  growInput(input);
+  void body.offsetWidth;
+
+  const origin = 'top right';
+  for (const el of movers) {
+    const f = first.get(el);
+    const l = el.getBoundingClientRect();
+    if (f && l.width) flipTo(el, f, l, origin);
+  }
+
+  if (on && visibleBox(pills)) {
+    pills.getAnimations().forEach((a) => a.cancel());
+    const anim = pills.animate(
+      [
+        { opacity: 0, transform: 'translateY(10px) scale(.96)', transformOrigin: origin },
+        { opacity: 1, transform: 'translateY(0) scale(1)', transformOrigin: origin },
+      ],
+      { duration: TALL_MS * 0.85, delay: 40, easing: TALL_EASE, fill: 'both' },
+    );
+    anim.finished.then(() => anim.cancel()).catch(() => {});
+  } else if (pillGhost) {
+    const anim = pillGhost.animate(
+      [
+        { opacity: 1, transform: 'translateY(0) scale(1)' },
+        { opacity: 0, transform: 'translateY(8px) scale(.96)' },
+      ],
+      { duration: TALL_MS * 0.65, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' },
+    );
+    anim.finished.then(() => pillGhost.remove()).catch(() => pillGhost.remove());
+  }
+}
+
+function growInput(i) {
+  // גובה החלון *החזותי*, לא ‎innerHeight‎: ב-iOS המקלדת אינה מקטינה את
+  // ‎innerHeight‎ (וגם לא את ‎dvh‎), ולכן 42% ממנו הם תיבה שדוחפת את שורת
+  // הכפתורים אל מתחת למקלדת בדיוק כשהיא ארוכה — כלומר כשצריך אותה.
+  const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  i.style.height = 'auto';
+  i.style.height = Math.min(i.scrollHeight, vh * 0.42) + 'px';
+}
+
+function autoGrow() {
+  const i = $('input');
+  const want = shouldComposeTall(i);
+  if (document.body.classList.contains('compose-tall') === want) growInput(i);
+  else setComposeTall(want);
+}
 $('input').addEventListener('input', autoGrow);
 $('input').addEventListener('input', () => stashDraftSoon());
 $('input').addEventListener('keydown', (e) => {
+  // Esc בזמן הכתבה עוצר אותה ולא סוגר חלונית — זה המצב הפעיל ביותר במסך
+  if (e.key === 'Escape' && dictOn) { e.preventDefault(); e.stopPropagation(); dictStop(); return; }
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); return; }
   const i = $('input');
   if (e.key === 'ArrowUp' && i.selectionStart === 0 && store.history && store.history.length) { e.preventDefault(); histIdx = Math.min(histIdx + 1, store.history.length - 1); i.value = store.history[histIdx]; autoGrow(); }
   else if (e.key === 'ArrowDown' && histIdx >= 0) { e.preventDefault(); histIdx--; i.value = histIdx < 0 ? '' : store.history[histIdx]; autoGrow(); }
 });
 $('sendBtn').onclick = () => sendMessage();
+
+/* ==========================================================================
+   הכתבה קולית — מיקרופון בשורת הקלט
+   --------------------------------------------------------------------------
+   הקלדת עברית באצבע אחת בטלפון היא הצוואר הצר של הממשק הזה: כל שאר הדרכים
+   להזין תוכן כבר קיימות (הדבקה, גרירה, שיתוף מאפליקציה אחרת), רק המהירה
+   מכולן חסרה. `SpeechRecognition` של הדפדפן נותן אותה בלי שרת ובלי מפתח.
+
+   שלוש החלטות שמחזיקות את המימוש:
+
+   1. **הטקסט נכנס לתיבה, לא לרצועה נפרדת.** מה שנאמר הוא טיוטה ככל טיוטה
+      אחרת — אפשר לערוך אותו באמצע, למחוק מילה, להוסיף `@קובץ` ולשלוח. רצועה
+      שמחזיקה את הטקסט בנפרד הייתה דורשת "העבר לתיבה" נוסף, וכל מה שנאמר עד
+      שלא נלחץ היה אבוד.
+
+   2. **עוגן במקום append.** בתחילת ההכתבה נרשם היכן עמד הסמן: מה שלפניו הוא
+      `head` ומה שאחריו `suffix`. הדיבור מצטרף ל-`head`, כך שאפשר להכתיב
+      *לתוך* אמצע טקסט קיים ולא רק בסופו. בחירה מסומנת מוחלפת במה שנאמר,
+      בדיוק כמו הקלדה.
+
+   3. **`interim` הוא טקסט לכל דבר.** תוצאת ביניים נכתבת לתיבה ונדרסת בכל
+      עדכון — כך רואים את המשפט נבנה. `mirror` הוא מה שכתבנו לאחרונה: אם
+      התיבה שונה ממנו, המשתמש נגע בה בזמן שדיברנו, ואז נלקח עוגן חדש מהסמן
+      במקום לדרוס את מה שהוא הקליד.
+
+   המנוע של Chrome מסיים את ההכרה מעצמו אחרי שקט, גם עם `continuous = true`
+   (ובאנדרואיד תוך שניות). לכן ההקשבה כאן היא לולאה: `onend` מפעיל מחדש כל
+   עוד `dictOn`, והדבר היחיד שעוצר אותה הוא בקשה מפורשת או שגיאה. `dictOn`
+   הוא הרצון של המשתמש, לא מצב המנוע — וזו ההפרדה שמונעת גם את הלולאה
+   ההפוכה, שבה `stop()` מפעיל `onend` שמפעיל `start()` מחדש.
+   ========================================================================== */
+
+const DICT_LANGS = [
+  { id: 'he-IL', short: 'עב', name: 'עברית' },
+  { id: 'en-US', short: 'EN', name: 'English' },
+];
+const DICT_DEFAULT = 'he-IL';
+
+let dictRec = null;            // מופע ה-SpeechRecognition החי, או null
+let dictOn = false;        // המשתמש מקשיב עכשיו (רצון, לא מצב מנוע)
+let dictAnchor = null;     // { head, suffix, interim, mirror }
+let dictLoops = 0;         // הפעלות-מחדש רצופות שנגמרו מיד — הגנה מלולאה
+let dictStartedAt = 0;
+
+const SpeechRec = () => window.SpeechRecognition || window.webkitSpeechRecognition;
+/**
+ * הכתבה דורשת הקשר מאובטח: ב-http רגיל Chrome לא ייתן הרשאת מיקרופון גם אם
+ * האובייקט קיים. הממשק מוגש ב-https או מ-localhost, ולכן זה בדרך כלל מתקיים —
+ * אבל מאזין ה-LAN יכול לרוץ בלי תעודה, ושם עדיף כפתור מושבת עם הסבר מאשר
+ * כפתור שנכשל בלחיצה. Firefox פשוט אינו מממש את ה-API, ושם אין מה להציג.
+ */
+const dictSupported = () => !!SpeechRec();
+const dictSecure = () => window.isSecureContext !== false;
+
+function dictLang() {
+  const v = store.settings && store.settings.dictLang;
+  return DICT_LANGS.some(l => l.id === v) ? v : DICT_DEFAULT;
+}
+const dictLangInfo = () => DICT_LANGS.find(l => l.id === dictLang()) || DICT_LANGS[0];
+
+/**
+ * חיבור מקטע שנשמע אל הטקסט שלפניו. המנוע מחזיר את המילים בלי רווח מוביל
+ * בעברית ועם רווח מוביל באנגלית, ובלי שום הבטחה לגבי רווחים כפולים — לכן
+ * הנרמול כאן ולא שם. הרווח נוסף גם כשהסמן עמד באמצע מילה: מי שמתחיל להכתיב
+ * שם מתכוון למילה חדשה.
+ */
+function dictJoin(left, chunk) {
+  chunk = String(chunk || '').replace(/\s+/g, ' ').trim();
+  if (!chunk) return left;
+  if (!left) return chunk;
+  return /\s$/.test(left) ? left + chunk : left + ' ' + chunk;
+}
+
+/**
+ * עוגן חדש מהסמן הנוכחי. טווח מסומן נבלע — מה שיוכתב יחליף אותו, כמו הקלדה.
+ * כשהתיבה איננה בפוקוס אין באמת סמן: `selectionStart` מחזיר שם 0 בדפדפנים
+ * מסוימים, ואז הכתבה על טיוטה קיימת הייתה נדחפת *לפני* מה שכבר כתוב. בלי
+ * פוקוס העוגן הוא הסוף, שהוא גם מה שמתכוונים אליו כשמפעילים מקיצור מקלדת.
+ * `mirror` נקבע כאן ולא נשאר ריק, אחרת הבדיקה הראשונה ב-dictReanchor הייתה
+ * מזהה "המשתמש נגע" ומוחקת את העוגן שהרגע נקבע.
+ */
+function dictAnchorAtCaret() {
+  const i = $('input');
+  const end = i.value.length;
+  const live = document.activeElement === i && i.selectionStart != null;
+  const a = live ? i.selectionStart : end;
+  const b = live && i.selectionEnd != null ? i.selectionEnd : a;
+  const head = i.value.slice(0, Math.min(a, b));
+  // `base` הוא אורך ה-head ברגע העיגון. `head` עצמו גדל עם כל מקטע שנסגר,
+  // ולכן הוא לא יכול לשמש כדי לענות על "האם נאמר כבר משהו".
+  return { head, base: head.length, suffix: i.value.slice(Math.max(a, b)), interim: '', mirror: i.value };
+}
+
+/**
+ * סימנים שאין לפניהם רווח בעברית ובאנגלית. מי שמעמיד את הסמן לפני נקודה
+ * ומכתיב עוד מילה מתכוון להוסיף אותה למשפט, לא לרחק את הנקודה ממנו.
+ */
+const DICT_TIGHT = /^[\s.,;:!?)\]}»"'׳״]/;
+
+/**
+ * כותב `head + interim + suffix` לתיבה ומשאיר את הסמן בין הדיבור לשארית.
+ * `dictJoin` מטפל ברווח שמשמאל לדיבור; הרווח שמימין לו הוא עניין נפרד, כי שם
+ * יושב טקסט שהיה בתיבה מלכתחילה — בלעדיו הכתבה לאמצע משפט הייתה מדביקה את
+ * המילה החדשה למילה שאחריה.
+ */
+function dictRender() {
+  const a = dictAnchor; if (!a) return;
+  const i = $('input');
+  const spoken = dictJoin(a.head, a.interim);
+  const gap = (spoken.length > a.base && a.suffix && !DICT_TIGHT.test(a.suffix)) ? ' ' : '';
+  const val = spoken + gap + a.suffix;
+  i.value = val;
+  a.mirror = val;
+  try { i.setSelectionRange(spoken.length, spoken.length); } catch {}
+  autoGrow();
+  stashDraftSoon();
+}
+
+/**
+ * לפני כל עדכון: האם התיבה עדיין מה שכתבנו? אם לא — המשתמש הקליד או מחק בזמן
+ * שדיברנו, ועוגן ישן היה מוחק את העריכה שלו ברגע שתגיע המילה הבאה. עוגן חדש
+ * מהסמן שומר את שני הצדדים: מה שהוא כתב נשאר, וההמשך נכנס במקום שבו הוא עומד.
+ */
+function dictReanchor() {
+  if (!dictAnchor || $('input').value !== dictAnchor.mirror) dictAnchor = dictAnchorAtCaret();
+}
+
+/** מכבה את המנוע בלי לגעת ב-dictOn וב-dictAnchor (שימושי גם להחלפת שפה). */
+function dictKillEngine() {
+  if (!dictRec) return;
+  try { dictRec.onresult = dictRec.onerror = dictRec.onend = dictRec.onstart = null; dictRec.abort(); } catch {}
+  dictRec = null;
+}
+
+/**
+ * מרים מנוע חדש בשפה הנוכחית. `abort` (ולא `stop`) בכיבוי זורק תוצאות ביניים
+ * שלא הספיקו להסתיים — וזה בסדר בדיוק כאן, כי הן כבר כתובות בתיבה: מה שנראה
+ * על המסך הוא מה שנשאר, ואין רגע שבו טקסט נעלם מתחת ליד.
+ */
+function dictSpin() {
+  const R = SpeechRec();
+  let r;
+  try { r = new R(); } catch { dictStop('ההכתבה לא נתמכת בדפדפן הזה'); return; }
+  r.lang = dictLang();
+  r.continuous = true;
+  r.interimResults = true;
+  r.maxAlternatives = 1;
+
+  r.onstart = () => { dictStartedAt = Date.now(); dictPaint(); };
+
+  r.onresult = (e) => {
+    if (!dictOn) return;
+    dictReanchor();
+    let interim = '';
+    for (let k = e.resultIndex; k < e.results.length; k++) {
+      const res = e.results[k];
+      const t = (res[0] && res[0].transcript) || '';
+      if (res.isFinal) dictAnchor.head = dictJoin(dictAnchor.head, t);
+      else interim += t;
+    }
+    dictAnchor.interim = interim.replace(/\s+/g, ' ').trim();
+    dictRender();
+    dictLoops = 0;                    // נשמע דיבור — המנוע חי, לא בלולאה
+  };
+
+  r.onerror = (e) => {
+    const err = (e && e.error) || '';
+    // שקט הוא לא שגיאה, וביטול הוא אנחנו. בשניהם onend יחליט מה הלאה.
+    if (err === 'no-speech' || err === 'aborted') return;
+    if (err === 'not-allowed' || err === 'service-not-allowed') {
+      dictStop('אין הרשאת מיקרופון — צריך לאשר אותה בהגדרות האתר בדפדפן');
+      return;
+    }
+    if (err === 'network') { dictStop('שירות ההכתבה של הדפדפן לא זמין (נדרשת רשת)'); return; }
+    if (err === 'language-not-supported') { dictStop(`הדפדפן לא יודע להכתיב ב${dictLangInfo().name}`); return; }
+    if (err === 'audio-capture') { dictStop('לא נמצא מיקרופון'); return; }
+    dictStop('ההכתבה נעצרה' + (err ? ` (${err})` : ''));
+  };
+
+  r.onend = () => {
+    if (!dictOn) { dictPaint(); return; }
+    // סיום מיידי וחוזר אינו שקט אלא מנוע שמסרב לעלות (הרשאה שנשללה בלי
+    // אירוע שגיאה, מיקרופון תפוס). ארבעה כאלה ברצף = עוצרים ואומרים.
+    dictLoops = (Date.now() - dictStartedAt < 500) ? dictLoops + 1 : 0;
+    if (dictLoops >= 4) { dictStop('לא הצלחתי להחזיק את המיקרופון פתוח'); return; }
+    dictRestart(r, 0);
+  };
+
+  dictRec = r;
+  try { dictStartedAt = Date.now(); r.start(); }
+  catch { dictKillEngine(); dictStop('לא הצלחתי להפעיל את המיקרופון'); }
+}
+
+/**
+ * הפעלה מחדש אחרי שהמנוע סיים מעצמו (שקט). ‎start()‎ בתוך ‎onend‎ זורק
+ * ‎InvalidStateError‎ כשהמנוע עוד לא שחרר את ההתקן — וזה קורה דווקא
+ * באנדרואיד, שם הוא מסיים כל כמה שניות. לכן ניסיון נוסף אחרי רבע שנייה
+ * במקום לוותר: מיקרופון שנכבה באמצע משפט בלי מילה אחת הוא בדיוק מה שנראה
+ * כמו תקלה אקראית. גם הוויתור, כשהוא מגיע, נאמר בקול.
+ */
+function dictRestart(r, tries) {
+  if (!dictOn || dictRec !== r) return;      // נעצר או הוחלף בינתיים
+  try { dictStartedAt = Date.now(); r.start(); }
+  catch {
+    if (tries >= 2) { dictStop('ההכתבה נעצרה — אפשר להפעיל שוב'); return; }
+    setTimeout(() => dictRestart(r, tries + 1), 250);
+  }
+}
+
+function dictStart() {
+  if (dictOn) return;
+  if (!dictSupported()) { toast('הדפדפן הזה לא תומך בהכתבה קולית', true); return; }
+  if (!dictSecure()) { toast('הכתבה קולית דורשת חיבור מאובטח (https)', true); return; }
+  dictOn = true;
+  dictLoops = 0;
+  dictAnchor = dictAnchorAtCaret();
+  dictSpin();
+  dictPaint();
+  dlog('dict.start', { lang: dictLang() });
+}
+
+/** עצירה מכל סיבה. `msg` נאמר רק כשהעצירה לא נתבקשה. */
+function dictStop(msg) {
+  if (!dictOn && !dictRec) { dictPaint(); return; }
+  dictOn = false;
+  dictKillEngine();
+  dictAnchor = null;                  // מה שנכתב לתיבה נשאר בה כטקסט רגיל
+  dictPaint();
+  if (msg) toast(msg, true);
+  stashDraft();
+  dlog('dict.stop', { reason: msg || 'user' });
+}
+
+const dictToggle = () => (dictOn ? dictStop() : dictStart());
+
+/** החלפת שפה תוך כדי הקשבה מרימה מנוע חדש ומשאירה את העוגן — מה שכבר הוכתב נשאר. */
+function dictSetLang(id) {
+  if (!DICT_LANGS.some(l => l.id === id)) return;
+  store.settings.dictLang = id;
+  save();
+  if (dictOn) { const a = dictAnchor; dictKillEngine(); dictAnchor = a; dictLoops = 0; dictSpin(); }
+  dictPaint();
+}
+const dictNextLang = () => DICT_LANGS[(DICT_LANGS.findIndex(l => l.id === dictLang()) + 1) % DICT_LANGS.length];
+
+function dictPaint() {
+  const btn = $('micBtn'); if (!btn) return;
+  const usable = dictSupported();
+  btn.classList.toggle('hidden', !usable);
+  if (!usable) return;
+  // לא ‎disabled‎: כפתור מושבת בולע לחיצות, ואז אין דרך להסביר למה אין הכתבה
+  // ב-http. ‎aria-disabled‎ + שמירה ב-dictStart (toast) משאירים את הלחיצה חיה.
+  const secure = dictSecure();
+  btn.disabled = false;
+  btn.setAttribute('aria-disabled', secure ? 'false' : 'true');
+  btn.classList.toggle('on', dictOn);
+  btn.setAttribute('aria-pressed', dictOn ? 'true' : 'false');
+  btn.title = !secure ? 'הכתבה קולית דורשת חיבור מאובטח (https)'
+    : dictOn ? 'עצור הכתבה (Esc)'
+    : `הכתבה קולית · ${dictLangInfo().name} · Ctrl/⌘+Shift+M`;
+  const strip = $('dictStrip');
+  if (strip) {
+    strip.classList.toggle('hidden', !dictOn);
+    if (dictOn) {
+      const lang = $('dictLang');
+      lang.textContent = dictLangInfo().short;
+      lang.title = `החלף ל${dictNextLang().name}`;
+    }
+  }
+  document.body.classList.toggle('dictating', dictOn);
+}
+
+if (dictSupported()) {
+  // אף כפתור של ההכתבה לא גונב פוקוס: הסמן שבתיבה הוא נקודת העיגון, וכפתור
+  // שמאפס אותו היה שולח את המשפט הבא לסוף הטיוטה במקום למקום שבו עמדת.
+  for (const id of ['micBtn', 'dictDone', 'dictLang']) {
+    $(id).addEventListener('mousedown', (e) => e.preventDefault());
+  }
+  $('micBtn').onclick = dictToggle;
+  $('dictDone').onclick = () => dictStop();
+  $('dictLang').onclick = () => dictSetLang(dictNextLang().id);
+  // הלשונית ברקע = המיקרופון נשאר פתוח בכיס. משחררים אותו; מה שנאמר עד כה
+  // כבר בתיבה, וההכתבה מתחדשת בלחיצה אחת בחזרה.
+  document.addEventListener('visibilitychange', () => { if (document.hidden && dictOn) dictStop(); });
+  addEventListener('pagehide', () => dictStop());
+}
 $('stopBtn').onclick = () => { interruptTurn(); };
 /**
  * הבדיקה הידנית, מכל נקודת כניסה: הכפתור הקבוע בסרגל, הכפתור שצץ כשהתור
@@ -3844,7 +4362,34 @@ function checkCwd() {
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 function isDark() { const t = document.documentElement.getAttribute('data-theme'); if (t) return t === 'dark'; return matchMedia('(prefers-color-scheme: dark)').matches; }
-$('themeToggle').onclick = () => { const next = isDark() ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', next); store.settings.theme = next; save(); };
+
+/* ערכת הדגשת התחביר הולכת אחרי המתג של האפליקציה, לא אחרי מערכת ההפעלה.
+   שתי הערכות של highlight.js נטענות ב-index.html עם ‎media‎ של
+   ‎prefers-color-scheme‎, וזה נכון כל עוד אין באפליקציה מתג משלה — אבל יש.
+   טלפון שמערכת ההפעלה שלו בהירה ושהאפליקציה בו הוחלפה לכהה קיבל את הערכה
+   *הבהירה*: דיו כהה על ‎--code-bg‎ כהה, כלומר בלוק קוד שלא ניתן לקרוא בכלל.
+
+   ‎media="not all"‎ ולא ‎disabled‎: הוא מנטרל את הגיליון בלי לגרום לדפדפן
+   למשוך אותו מחדש בכל החלפה. */
+function syncHljsTheme() {
+  const dark = isDark();
+  const light = document.getElementById('hlLight');
+  const night = document.getElementById('hlDark');
+  if (light) light.media = dark ? 'not all' : 'all';
+  if (night) night.media = dark ? 'all' : 'not all';
+}
+
+$('themeToggle').onclick = () => {
+  const next = isDark() ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  store.settings.theme = next;
+  syncHljsTheme();
+  save();
+};
+
+// בלי העדפה מפורשת הערכה עדיין הולכת אחרי מערכת ההפעלה, ולכן שינוי שם
+// חייב להגיע גם לערכת הקוד. ‎isDark‎ מכריע מי גובר, ולכן הקריאה בטוחה תמיד.
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncHljsTheme);
 
 // ---------- קונפיג דינמי (נמשך מה-CLI) ----------
 let CONFIG = { models: [], permissionModes: [], cursorPermissionModes: [], cursorPrefix: 'cursor/' };
@@ -4169,7 +4714,13 @@ const withGodMode = (modes) => (modes.includes('god') ? modes : [...modes, 'god'
 /** הבורר עצמו נצבע כשהמצב הנבחר הוא GOD — אי אפשר להיות בו בלי לראות את זה. */
 function markGodPill() {
   const sel = $('perm');
-  if (sel) sel.classList.toggle('god-on', sel.value === 'god');
+  if (!sel) return;
+  const god = sel.value === 'god';
+  sel.classList.toggle('god-on', god);
+  // title על ה־<select> עצמו (לא רק על ה־<option>): בטלפון אין hover על אפשרות
+  // ברשימה לפני הבחירה, ואחריה חייבים הסבר גלוי בלי לפתוח את התפריט שוב.
+  sel.title = god ? GOD_HINT
+    : (activeAgent() === 'cursor' ? 'מצב הרשאות · cursor-agent' : 'מצב הרשאות · Claude Code');
 }
 function populatePerms() {
   const sel = $('perm');
@@ -4191,7 +4742,6 @@ function populatePerms() {
     sel.appendChild(o);
   }
   keepValue(sel, remembered, fallback);
-  sel.title = cursorMode ? 'מצב הרשאות · cursor-agent' : 'מצב הרשאות · Claude Code';
   markGodPill();
 }
 
@@ -4215,6 +4765,22 @@ function restoreDraft() {
   autoGrow();
 }
 const stashDraftSoon = debounce(stashDraft, 500);
+
+/**
+ * ניקוי התיבה אחרי שליחה — כולל ביטול הטיוטה במכשיר השני.
+ *
+ * ‎stashDraft‎ לא מספיק כאן משתי סיבות: השמה ל-‎value‎ אינה מייצרת אירוע
+ * ‎input‎, ובמסלול שכבר אפס את ‎conv.draft‎ הוא יוצא מוקדם כי אין מה לשמור.
+ * בלי השידור המפורש, המכשיר השני נשאר עם הטקסט *שכבר נשלח* בתיבת הכתיבה
+ * שלו — ומאחר שטיוטה מרחוק נכנסת רק לשדה ריק, היא גם לא תנוקה משם לבד.
+ */
+function clearComposer() {
+  const i = $('input');
+  if (i.value) { i.value = ''; autoGrow(); }
+  const c = activeConv();
+  if (c && c.draft) { c.draft = ''; markDirty(c); }
+  sendUi('draft', '');
+}
 
 /** תיקיית העבודה נזכרת לכל שיחה בנפרד — לא מריצים פקודות בפרויקט הלא נכון. */
 function syncConvCwd() {
@@ -4321,8 +4887,10 @@ async function init() {
 
   // כל מה שתלוי בהגדרות חייב לרוץ רק אחרי שהן הגיעו מהשרת
   if (store.settings.theme) document.documentElement.setAttribute('data-theme', store.settings.theme);
+  syncHljsTheme();   // אחרי החלת הערכה השמורה, ולא לפניה
   initSideResize();
   applyWide();
+  dictPaint();        // חושף את המיקרופון ומציג את השפה שנשמרה בהגדרות
   renderNotifyChip(); // תלוי ב-settings.notify, לכן רק אחרי שההגדרות הגיעו
   if (!activeId) newConv();
   const cur = activeConv();
@@ -5826,6 +6394,10 @@ const paletteActions = () => [
   { ic: '⚙', name: 'הגדרות', run: () => openSettings() },
   { ic: '⌕', name: 'חיפוש בתוך השיחה', run: () => openFind() },
   { ic: '⇩', name: 'ייצוא השיחה ל-Markdown', run: () => exportActiveConv() },
+  ...(dictSupported() ? [
+    { ic: '🎙', name: dictOn ? 'עצור את ההכתבה הקולית' : 'הכתבה קולית — הכתב את ההודעה', run: () => dictToggle() },
+    { ic: '⇄', name: `החלף את שפת ההכתבה ל${dictNextLang().name}`, run: () => dictSetLang(dictNextLang().id) },
+  ] : []),
   { ic: '⌨', name: 'מקשי קיצור', run: () => openShortcuts() },
 ];
 let pal = null;
@@ -6114,6 +6686,8 @@ function renderNotifyChip() {
     unsupported: 'הדפדפן הזה לא תומך בהתרעות',
     ask: 'לא תקבלו הודעה בסיום משימה — לחצו כדי לאשר התרעות',
   }[why];
+  // מתחת ל־640px הטקסט מוסתר ב־CSS; בלי aria-label נשאר רק אייקון אילם.
+  chip.setAttribute('aria-label', $('notifyChipText').textContent + ' — ' + (chip.title || ''));
 }
 
 /**
@@ -6290,6 +6864,7 @@ const SHORTCUTS = [
   ['Ctrl/⌘ + Shift + F', 'חיפוש בכל השיחות (סרגל הצד)'],
   ['Ctrl/⌘ + N', 'שיחה חדשה'],
   ['Ctrl/⌘ + E', 'ייצוא השיחה ל-Markdown'],
+  ['Ctrl/⌘ + Shift + M', 'הכתבה קולית — התחלה ועצירה'],
   ['Enter', 'שליחה · Shift+Enter לשורה חדשה'],
   ['↑ / ↓ בתיבה ריקה', 'מעבר בהיסטוריית ההודעות'],
   ['/ בתחילת שורה', 'תפריט פקודות'],
@@ -6343,7 +6918,9 @@ document.addEventListener('keydown', (e) => {
   }
   if (mod && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); $('newChat').click(); return; }
   if (mod && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); exportActiveConv(); return; }
+  if (mod && e.shiftKey && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); dictToggle(); return; }
   if (e.key === '?' && !typing && !mod) { e.preventDefault(); openShortcuts(); return; }
+  if (e.key === 'Escape' && dictOn) { e.preventDefault(); dictStop(); return; }
   if (e.key === 'Escape' && !$('findBar').classList.contains('hidden')) { closeFind(); }
 });
 
@@ -6372,6 +6949,9 @@ document.addEventListener('keydown', (e) => {
 // שמתחילים להקליד. visualViewport הוא היחיד שיודע כמה מסך באמת נשאר.
 // רק במגע: בדסקטופ זום של הדפדפן משנה את visualViewport ויכווץ את הממשק לחינם.
 //
+// --app-top (= offsetTop): כשהמקלדת דוחפת את החלון החזותי למעלה בלי לשנות
+// את ה-layout, גובה לבדו משאיר פער מת בין תחתית האפליקציה למקלדת. מצמידים.
+//
 // compose-compact: *רק* כשהמקלדת באמת פתוחה. משווים לגובה המנוחה (הגבוה
 // ביותר שראינו), לא לפוקוס בשדה — אחרת המטא־נתונים נעלמים גם בלי מקלדת.
 // הסף 150px מבדיל מקלדת מצמצום סרגל הכתובת (~50–100).
@@ -6381,12 +6961,20 @@ document.addEventListener('keydown', (e) => {
   let resting = vv.height;
   const apply = () => {
     const h = Math.round(vv.height);
+    const top = Math.round(vv.offsetTop);
     document.documentElement.style.setProperty('--app-h', h + 'px');
+    document.documentElement.style.setProperty('--app-top', top + 'px');
     // ה-layout viewport עצמו נגלל כשהמקלדת נפתחת, והממשק "בורח" כלפי מעלה
-    if (vv.offsetTop > 0 || window.scrollY > 0) window.scrollTo(0, 0);
+    if (window.scrollY > 0) window.scrollTo(0, 0);
     if (stick) autoScroll(true);
     if (h > resting) resting = h;
-    document.body.classList.toggle('compose-compact', (resting - h) > 150);
+    // פתיחת המקלדת וסגירתה משנות את הפריסה של שורת הכתיבה: החריץ שבו הטקסט
+    // צריך להיכנס, הריפוד, והתקרה לגובה התיבה. בלי חישוב מחדש כאן, המצב
+    // שנקבע לפני המקלדת נשאר עד ההקלדה הבאה — ורואים תיבה בגובה הלא נכון.
+    const wasCompact = document.body.classList.contains('compose-compact');
+    const compact = (resting - h) > 150;
+    document.body.classList.toggle('compose-compact', compact);
+    if (compact !== wasCompact) autoGrow();
   };
   vv.addEventListener('resize', apply);
   vv.addEventListener('scroll', apply);

@@ -2,12 +2,14 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <!-- viewport-fit=cover + safe-area ב-CSS: בלי זה המחבר נחתך מתחת לפס הבית באייפון -->
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- viewport-fit=cover + safe-area ב-CSS: בלי זה המחבר נחתך מתחת לפס הבית באייפון.
+       interactive-widget=resizes-content: ב-Chrome/Android המקלדת מקטינה את ה-layout
+       ולא רק את ה-visual — אחרת נשאר רווח מת בין תיבת הטקסט למקלדת. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Sol · ממשק עברית</title>
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#f5f4ef" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#1c1b19" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f1f2f4" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#1a1d20" media="(prefers-color-scheme: dark)" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -16,8 +18,12 @@
   <link rel="icon" href="/icons/icon-128.png" type="image/png" sizes="128x128" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/icons/icon-256.png" />
-  <link rel="stylesheet" href="/vendor/highlight/styles/github.min.css" media="(prefers-color-scheme: light)" />
-  <link rel="stylesheet" href="/vendor/highlight/styles/github-dark.min.css" media="(prefers-color-scheme: dark)" />
+  <!-- ‎media‎ כאן הוא ברירת המחדל לפני ש-JS רץ בלבד. מרגע שיש העדפת ערכה
+       מפורשת באפליקציה (‎data-theme‎), ‎syncHljsTheme‎ ב-app.js משתלט על
+       השדה הזה — אחרת ערכת הקוד הולכת אחרי מערכת ההפעלה בזמן שכל שאר
+       הממשק הולך אחרי המתג, והתוצאה היא קוד כהה על רקע כהה. -->
+  <link id="hlLight" rel="stylesheet" href="/vendor/highlight/styles/github.min.css" media="(prefers-color-scheme: light)" />
+  <link id="hlDark" rel="stylesheet" href="/vendor/highlight/styles/github-dark.min.css" media="(prefers-color-scheme: dark)" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
@@ -26,7 +32,15 @@
   <!-- ===== סרגל צד ===== -->
   <aside class="sidebar" id="sidebar">
     <div class="side-head">
-      <span class="wordmark">Sol</span>
+      <span class="wordmark">
+        <!-- סימן Sol — ראו icon.svg. הוא לוקח את ‎--accent‎, ולכן הוא הדבר
+             היחיד בסרגל שצבוע בצבע של האפליקציה עצמה ולא של ספק כלשהו. -->
+        <svg class="wm-mark" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M16.6 7.4A4.6 4.6 0 1 0 12 12 4.6 4.6 0 1 1 7.4 16.6"
+                transform="rotate(30 12 12)"/>
+        </svg>
+        <span class="wm-text">Sol</span>
+      </span>
       <button id="sideCollapse" class="icon-btn" title="כווץ" aria-label="כווץ סרגל"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5l-6 6.5 6 6.5"/></svg></button>
     </div>
     <!-- גוף הסרגל הוא אזור גלילה אחד: האופציות, החיפוש ורשימת השיחות זזים
@@ -167,7 +181,7 @@
     </div>
 
     <!-- פס "ממתין לתשובה" — שאלה של Claude לא יכולה להיעלם מהעין -->
-    <div id="askBar" class="ask-bar hidden" role="status">
+    <div id="askBar" class="ask-bar hidden" role="status" aria-live="polite">
       <span class="ab-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M9.8 9.6a2.3 2.3 0 1 1 2.9 2.6v1.2"/><path d="M12.7 16.6h.01"/></svg></span>
       <span id="askBarText">Claude ממתין לתשובה שלך</span>
       <button type="button" id="askBarGo" class="ab-go">לענות עכשיו</button>
@@ -232,7 +246,7 @@
 
     <main id="log" class="log" aria-live="polite"></main>
 
-    <button id="jumpBtn" class="jump hidden" title="לתחתית">↓</button>
+    <button id="jumpBtn" class="jump hidden" title="לתחתית" aria-label="גלול לתחתית">↓</button>
 
     <div id="working" class="working hidden">
       <span class="spinner"></span>
@@ -260,9 +274,23 @@
         <div class="ac-menu hidden" id="acMenu"></div>
         <div class="att-strip hidden" id="attStrip"></div>
         <div class="queue-strip hidden" id="queueStrip"></div>
+        <!-- רצועת ההכתבה: המצב בלבד, בלי הטקסט עצמו — הטקסט נכנס לתיבה
+             ונראה שם. רצועה שמשכפלת אותו הייתה גורמת לקרוא את אותו משפט
+             פעמיים ולא לדעת מי משניהם ישלח. -->
+        <div class="dict-strip hidden" id="dictStrip" role="status" aria-live="polite">
+          <span class="dk-wave" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span class="dk-text" id="dictState">מקשיב…</span>
+          <button type="button" class="dk-lang" id="dictLang" title="החלף את שפת ההכתבה"></button>
+          <button type="button" class="dk-stop" id="dictDone">סיום</button>
+        </div>
         <textarea id="input" rows="1" placeholder="במה אפשר לעזור לך היום? · / לפקודות · @ לקבצים"></textarea>
         <div class="composer-bar">
           <button id="attachBtn" class="attach" title="צירוף תמונה" aria-label="צירוף תמונה">＋</button>
+          <!-- הכתבה קולית. מוסתר כברירת מחדל ונחשף רק אם הדפדפן באמת יודע
+               (ראו dictSupported ב-app.js) — כפתור שלא עושה כלום גרוע מכפתור חסר. -->
+          <button id="micBtn" class="attach mic hidden" title="הכתבה קולית" aria-label="הכתבה קולית" aria-pressed="false">
+            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><rect x="9" y="3" width="6" height="10.5" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3"/></svg>
+          </button>
           <!-- ב-RTL הילדים הראשונים יושבים מימין: צירוף + בוררים יחד בצד ימין,
                spacer דוחף את "שלח" לשמאל. קודם הבוררים היו אחרי ה-spacer ונדבקו
                לשליחה בצד שמאל — בדיוק ההפך ממה שממשק עברי מצפה. -->

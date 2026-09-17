@@ -199,7 +199,9 @@ t.section('דפדפן בלי תמיכה / חיבור לא מאובטח');
   env = makeEnv({ secure: false });
   env.api.dictPaint();
   t.ok('הכפתור מוצג', !env.els.mic.classList.contains('hidden'));
-  t.eq('אבל מושבת', env.els.mic.disabled, true);
+  // לא disabled: לחיצה חייבת להגיע ל-dictStart כדי שיופיע toast עם ההסבר
+  t.eq('לא disabled (לחיצה חיה)', env.els.mic.disabled, false);
+  t.eq('מסומן aria-disabled', env.els.mic.getAttribute('aria-disabled'), 'true');
   env.api.dictToggle();
   t.eq('ולא מדליק', env.api.on, false);
   t.ok('ההסבר נאמר', env.toasts.some((x) => /מאובטח/.test(x.t)));
