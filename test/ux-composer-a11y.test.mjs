@@ -530,7 +530,7 @@ t.section('סבב 23 — נוכחות / הכתבה / התראת אישור');
 
 t.section('סבב 24 — ערכת מערכת / סנכרון הרשאות');
 {
-  t.ok('שינוי ערכת מערכת מרענן mermaid', /prefers-color-scheme[\s\S]{0,120}rethemeMermaid/.test(app));
+  t.ok('שינוי ערכת מערכת מרענן mermaid', /matchMedia\('\(prefers-color-scheme: dark\)'\)[\s\S]{0,160}rethemeMermaid/.test(app));
   t.ok('סנכרון מחייה כרטיסים בשקט', /showPermission\([^)]+\{ silent: true \}/.test(app));
 }
 
