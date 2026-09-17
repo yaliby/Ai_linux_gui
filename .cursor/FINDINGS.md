@@ -274,3 +274,9 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F91 Enter queues while ask pending → FIXED (Round 10)
 [FRICTION] toast + jumpToPendingAsk · Source: Worker B
+
+### F92 loadConfig fail silent → FIXED (Round 11)
+[FEEDBACK] toast · Source: [חקירה עצמאית]
+
+### F93 sideBackdrop skips closeDrawer focus → FIXED (Round 11)
+[ACCESSIBILITY] uses closeDrawer() · Source: [חקירה עצמאית]

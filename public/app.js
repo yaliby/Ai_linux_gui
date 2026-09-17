@@ -4150,7 +4150,7 @@ function toggleSide() { const app = document.querySelector('.app'); if (drawerMo
 $('sideToggle').onclick = toggleSide;
 $('sideCollapse').onclick = toggleSide;
 // המגירה בטלפון נסגרת בהקשה על העמעום — הדרך שבה סוגרים מגירה בכל אפליקציה
-$('sideBackdrop').onclick = () => document.querySelector('.app').classList.remove('side-open');
+$('sideBackdrop').onclick = () => closeDrawer();
 
 /* ---------- סגירת המגירה בהחלקה ----------
    שלוש הדרכים שהיו לסגור אותה בטלפון: ה-‹ בפינה, רצועת עמעום של ~55px
@@ -4920,7 +4920,11 @@ $('modelPickerInput').addEventListener('keydown', (e) => {
 $('modelPicker').addEventListener('click', (e) => { if (e.target === $('modelPicker')) closeModelPicker(); });
 
 async function loadConfig() {
-  try { const r = await fetch('/api/config'); if (r.ok) CONFIG = await r.json(); } catch {}
+  try {
+    const r = await fetch('/api/config');
+    if (r.ok) CONFIG = await r.json();
+    else toast('טעינת הגדרות השרת נכשלה', true);
+  } catch { toast('טעינת הגדרות השרת נכשלה', true); }
   // הכפתור נדלק רק כשה-CLI שמותקן כאן באמת יודע לרוץ בלי לשמור סשן
   anonAvailable = !!(CONFIG && CONFIG.anonymous);
   const nav = $('newAnon');

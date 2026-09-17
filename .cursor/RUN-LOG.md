@@ -25,6 +25,9 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 09:00 | COMMIT | Round 8 F76–F85 | touch+a11y batch from Workers · CACHE v31 |
 | 09:01 | COMMIT | Round 9 F86–F88 | wakeLock, pair tick, landscape · CACHE v32 |
 | 09:04 | COMMIT | Round 10 F89–F91 | toast alert, hot ctx, Enter→ask · CACHE v33 |
+| 09:05 | HEARTBEAT | hunting Round 11 | F01–F91 · 16/16 |
+| 09:20 | HEARTBEAT | continue discovery | USER-FLOWS updated · Workers Round 10 |
+| 09:21 | COMMIT | Round 11 F92–F93 | loadConfig toast, backdrop focus · CACHE v34 |
 
 ## Decisions
 
@@ -33,9 +36,9 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 - First commit mixed Sol rename dirt (inseparable); later commits UX-only.
 - Premature 33.B stop reversed by user — continue window without inventing work.
 
-## Commits
+## Commits (local only)
 
-`b5335a6` `b3632ac` `0b9962e` `0d3854a` `82af9c8` `2fbb65c` `4542bda` `a5d676b` + Round 2 pending
+`b5335a6` … `e025fe2` (Rounds 1–10 on `ux-optimization-run`)
 
 ## Existing dirty (owner — do not commit)
 
