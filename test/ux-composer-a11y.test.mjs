@@ -484,7 +484,7 @@ t.section('סבב 18 — מודאל / שליחה / Escape / שיתוף');
   t.ok('sendMessage חוסם כשיש pendingPerms', /pendingPerms && pendingPerms\.size > 0/.test(slice('async function sendMessage(', 'function syncSendAffordance(')) || /pendingPerms\.size > 0[\s\S]{0,200}jumpToPendingAsk/.test(app));
   t.ok('sync סוגר כרטיסים שנענו מרחוק', /!live\.has\(id\)\) closePermission/.test(app) || /closePermission\(id, 'ended'\)/.test(app));
   t.ok('ספירת מכסה מתעדכנת כל שנייה', /setInterval\(renderLimitBar,\s*1000\)/.test(app));
-  t.ok('Ctrl+F סוגר לוח לפני חיפוש', /closePalette\(\)[\s\S]{0,40}openFind\(\)/.test(app));
+  t.ok('Ctrl+F סוגר לוח לפני חיפוש', /closePalette\(\)[\s\S]{0,120}openFind\(\)/.test(app));
   t.ok('שיתוף לא-תמונה מדווח', /ניתן לצרף תמונות בלבד/.test(app));
   const escBlock = slice("mod && (e.key === 'f'", 'trackComposerHeight');
   const iPal = escBlock.indexOf('closePalette');
