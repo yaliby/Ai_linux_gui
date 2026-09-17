@@ -465,4 +465,17 @@ t.section('סבב 16 — מחיקה / מגירה / חיפוש בדואט');
   t.ok('סגירת חיפוש בדואט לא ממקדת את תיבת הקלט', /duet-mode[\s\S]{0,120}findBtn/.test(cf));
 }
 
+t.section('סבב 17 — הרשאות / השלמה / מעבר שיחה');
+{
+  t.ok('jumpToPendingAsk מעדיף AskUserQuestion', /AskUserQuestion[\s\S]{0,80}first\s*=\s*p/.test(app) || /tool === 'AskUserQuestion'/.test(slice('async function jumpToPendingAsk(', 'function notifyQuestion(')));
+  t.ok('Enter חוסם גם בקשות אישור', /pendingPerms\.size\s*>\s*0/.test(app) && /בקשת אישור שממתינה/.test(app));
+  t.ok('השלמה בטעינה בולמת Enter', /!ac\.items\.length[\s\S]{0,120}Enter/.test(app));
+  t.ok('fileFetch בודק q עדכני', /ac\.token\.q === q/.test(app));
+  t.ok('לחיצה על התראה קופצת לכרטיס', /notification-click[\s\S]{0,120}jumpToPendingAsk/.test(app));
+  t.ok('sync לא מפיל busy של שיחה אחרת', /busy && streamOwnerId === subId/.test(app));
+  const del = slice('function deleteConv(', 'function updateStatusbar(');
+  t.ok('× על אנונימית פעילה משחזר אח', /leaveAnon\(null\)[\s\S]{0,200}subscribeActive|newConv/.test(del));
+  t.ok('אופליין+עסוק מסביר שלא ניתן לשרשר', /לא ניתן לשרשר הודעה לתור/.test(app));
+}
+
 t.done();

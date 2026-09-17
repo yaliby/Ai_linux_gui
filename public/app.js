@@ -1525,8 +1525,10 @@ async function onSync(m) {
   // רק כאן מותר להוריד "עסוק" לפי השרת: זו התמונה המלאה של מצב השיחה ברגע
   // ההתחברות. בזרם הרגיל הורדת הדגל שייכת לאירוע result, כדי שלא נבטל בטעות
   // תור שכבר שוגר מהתור-הממתין בין שני הפריימים.
+  // וגם: מעבר לשיחה אחרת בזמן תור רץ — ה-sync של היעד (running:false) לא
+  // אמור לכבות busy של השיחה שנותרה בעלים של התור.
   if (m.running) onRemoteBusy(true);
-  else if (busy) abandonTurn();
+  else if (busy && streamOwnerId === subId) abandonTurn();
 }
 
 /** מצב "עובד" נקבע בשרת, כך ששני המכשירים מראים את אותו דבר. */
@@ -2416,7 +2418,12 @@ async function sendMessage(text) {
     CLIENT_CMDS[cc[1]]((cc[2] || '').trim());
     return;
   }
-  if (!ws || ws.readyState !== ws.OPEN) { toast('אין חיבור לשרת', true); return; }
+  if (!ws || ws.readyState !== ws.OPEN) {
+    toast(busy || limitState
+      ? 'אין חיבור — לא ניתן לשרשר הודעה לתור כרגע'
+      : 'אין חיבור לשרת', true);
+    return;
+  }
   let conv = activeConv(); if (!conv) conv = newConv();
   // אם גוף השיחה עדיין נקרא מהדיסק, הטעינה שתסתיים אחר כך תדרוס את ההודעה
   // שנוסיף כאן — לכן מחכים לה קודם.
@@ -2865,6 +2872,15 @@ function deleteConv(id) {
     // אותו אישור כמו יציאה/מעבר — × ברשימה לא אמור למחוק בטעות בלי שאלה
     if (activeId === anon.id) {
       if (!leaveAnon(null)) return;
+      // leaveAnon משאיר activeId=null לטובת switchConv; כאן אין יעד — בוחרים אח
+      stick = true;
+      activeId = store.convs[0] ? store.convs[0].id : null;
+      if (!activeId) newConv();
+      else subscribeActive();
+      const c = activeConv();
+      if (c && !c.loaded) ensureLoaded(c.id).then(() => { if (activeId === c.id) { renderConversation(); restoreDraft(); syncConvCwd(); } });
+      renderConversation(); renderConvList();
+      if (c && c.loaded && activeId === c.id) { restoreDraft(); syncConvCwd(); renderQueue(); }
       return;
     }
     if (!anonLeaveOk(anon)) return;
@@ -3724,10 +3740,13 @@ $('input').addEventListener('keydown', (e) => {
   // Esc בזמן הכתבה עוצר אותה ולא סוגר חלונית — זה המצב הפעיל ביותר במסך
   if (e.key === 'Escape' && dictOn) { e.preventDefault(); e.stopPropagation(); dictStop(); return; }
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-    // כרטיס שאלה פתוח — Enter בתור לא צריך לשרשר פרומפט במקום לענות
-    if (typeof pendingAskCount === 'function' && pendingAskCount() > 0) {
+    // כרטיס שאלה/אישור פתוח — Enter בתור לא צריך לשרשר פרומפט במקום לענות
+    if (typeof pendingPerms !== 'undefined' && pendingPerms && pendingPerms.size > 0) {
       e.preventDefault();
-      toast('יש שאלה שממתינה לתשובה — ענה בכרטיס או לחץ על הפס למעלה');
+      const asks = typeof pendingAskCount === 'function' ? pendingAskCount() : 0;
+      toast(asks
+        ? 'יש שאלה שממתינה לתשובה — ענה בכרטיס או לחץ על הפס למעלה'
+        : 'יש בקשת אישור שממתינה — אשר או דחה בכרטיס או בפס למעלה');
       jumpToPendingAsk();
       return;
     }
@@ -5742,7 +5761,12 @@ function renderAskBar() {
     : (n > 1 ? `${n} בקשות אישור ממתינות` : 'Claude ממתין לאישור שלך');
 }
 async function jumpToPendingAsk() {
-  const first = pendingPerms.values().next().value;
+  // מעדיפים שאלת AskUserQuestion על פני כרטיס הרשאה שנפתח קודם ב-Map
+  let first = null;
+  for (const p of pendingPerms.values()) {
+    if (p.ref && p.ref.tool === 'AskUserQuestion') { first = p; break; }
+  }
+  if (!first) first = pendingPerms.values().next().value;
   if (!first || !first.ref) return;
   if (streamOwnerId && activeId !== streamOwnerId) await switchConv(streamOwnerId);
   const node = document.querySelector(`[data-ask-id="${CSS.escape(first.ref.id)}"]`);
@@ -5832,7 +5856,8 @@ const fileFetch = debounce(async (q) => {
   try {
     const r = await fetch('/api/files?cwd=' + encodeURIComponent($('cwd').value || '') + '&q=' + encodeURIComponent(q));
     const files = (await r.json()).files || [];
-    if (ac && ac.mode === 'file') {
+    // תשובה מאוחרת לשאילתה ישנה לא דורסת את הרשימה הנוכחית
+    if (ac && ac.mode === 'file' && ac.token && ac.token.q === q) {
       ac.items = files.map(f => ({ name: f }));
       ac.sel = 0;
       ac.error = false;
@@ -5840,7 +5865,7 @@ const fileFetch = debounce(async (q) => {
       renderAc();
     }
   } catch {
-    if (ac && ac.mode === 'file') { ac.items = []; ac.error = true; ac.empty = false; renderAc(); }
+    if (ac && ac.mode === 'file' && ac.token && ac.token.q === q) { ac.items = []; ac.error = true; ac.empty = false; renderAc(); }
   }
 }, 160);
 
@@ -5936,7 +5961,15 @@ function closeAc() { ac = null; const m = acMenu(); m.classList.add('hidden'); m
 // אינטגרציה עם הקלט: מאזין input לעדכון, ומאזין keydown בשלב הלכידה כדי לתפוס ניווט לפני שליחה
 $('input').addEventListener('input', updateAc);
 $('input').addEventListener('keydown', (e) => {
-  if (!ac || !ac.items.length) return;
+  if (!ac) return;
+  // בזמן טעינה / ריק / שגיאה — Enter לא אמור לשלוח את מחרוזת ה-@ החצויה
+  if (!ac.items.length) {
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (ac.empty || ac.error) closeAc();
+    } else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeAc(); }
+    return;
+  }
   if (e.key === 'ArrowDown') { e.preventDefault(); e.stopImmediatePropagation(); ac.sel = (ac.sel + 1) % Math.min(ac.items.length, 40); renderAc(); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); const n = Math.min(ac.items.length, 40); ac.sel = (ac.sel - 1 + n) % n; renderAc(); }
   else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopImmediatePropagation(); acceptAc(); }
@@ -6855,7 +6888,10 @@ addEventListener('focus', clearTitleBadge);
 addEventListener('focus', renderNotifyChip);
 // ב-PWA מותקן לחיצה על התרעה לא תמיד מייצרת focus — ה-SW מודיע לנו ישירות
 navigator.serviceWorker?.addEventListener('message', (e) => {
-  if (e.data && e.data.type === 'notification-click') clearTitleBadge();
+  if (e.data && e.data.type === 'notification-click') {
+    clearTitleBadge();
+    if (pendingPerms && pendingPerms.size) jumpToPendingAsk();
+  }
 });
 
 /**
@@ -6947,7 +6983,7 @@ function desktopNotify(title, body, extra) {
   const direct = () => {
     try {
       const n = new Notification(title, plain);
-      n.onclick = () => { window.focus(); clearTitleBadge(); n.close(); };
+      n.onclick = () => { window.focus(); clearTitleBadge(); n.close(); if (pendingPerms && pendingPerms.size) jumpToPendingAsk(); };
       return true;
     } catch { return false; }
   };

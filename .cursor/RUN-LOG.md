@@ -41,16 +41,20 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 10:12 | HEARTBEAT | Round 14 discover | F01–F96 · evidence-only |
 | 11:05 | HEARTBEAT | Round 15 hunt | F01–F101 · 16/16 |
 | 11:55 | HEARTBEAT | Round 16 discover | F01–F106 · re-sim pending |
+| 11:58 | COMMIT | Round 16 F107–F110 | delete/palette/find · CACHE v39 |
+| 12:03 | COMMIT | Round 17 F111–F115,F117–F119 | perms/ac/anon/busy · CACHE v40 · F116 OPEN |
+| 12:03 | HEARTBEAT | continue to 16:08 | F01–F119 · 16/16 |
 ## Decisions
 
 - Parallel workers; serialize writers on same files.
 - No push; ports 5xxx only; kill by PID.
 - First commit mixed Sol rename dirt (inseparable); later commits UX-only.
 - Premature 33.B stop reversed by user — continue window without inventing work.
+- F111: no local offline queue (needs WS); clearer toast only.
 
 ## Commits (local only)
 
-`b5335a6` … `e025fe2` (Rounds 1–10 on `ux-optimization-run`)
+`b5335a6` … `ad1b0f4` (Rounds 1–16) · Round 17 pending
 
 ## Existing dirty (owner — do not commit)
 

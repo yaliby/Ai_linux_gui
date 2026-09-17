@@ -332,29 +332,29 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 ### F110 closeFind duet focuses hidden input → FIXED (Round 16)
 [ACCESSIBILITY] focus findBtn/moreBtn · Source: Worker Round 16
 
-### F111 Offline send blocks queue-while-busy → OPEN
-[RECOVERY] sendMessage offline toast before queue_add · Source: Worker A Round 16b
+### F111 Offline send blocks queue-while-busy → FIXED (Round 17)
+[FEEDBACK] clearer toast when busy/limit offline · Source: Worker A Round 16b
 
-### F112 askBar jump takes first perm not AskUserQuestion → OPEN
-[CONFUSION] jumpToPendingAsk Map order · Source: Worker A Round 16b
+### F112 askBar jump takes first perm not AskUserQuestion → FIXED (Round 17)
+[CONFUSION] prefer AskUserQuestion in jumpToPendingAsk · Source: Worker A Round 16b
 
-### F113 Enter sends while @ autocomplete still loading → OPEN
-[FRICTION] acMenu open, items empty → sendMessage · Source: Worker A Round 16b
+### F113 Enter sends while @ autocomplete still loading → FIXED (Round 17)
+[FRICTION] capture handler swallows Enter while ac open · Source: Worker A Round 16b
 
-### F114 Notification tap no jumpToPendingAsk → OPEN
-[DISCOVERABILITY] notification-click only clears badge · Source: Worker A Round 16b
+### F114 Notification tap no jumpToPendingAsk → FIXED (Round 17)
+[DISCOVERABILITY] notification-click + direct onclick · Source: Worker A Round 16b
 
-### F115 fileFetch race overwrites newer query → OPEN
-[FRICTION] no ac.token.q check · Source: Worker A Round 16b
+### F115 fileFetch race overwrites newer query → FIXED (Round 17)
+[FRICTION] ac.token.q === q guard · Source: Worker A Round 16b
 
 ### F116 Shortcuts modal Tab escapes → OPEN
 [ACCESSIBILITY] no focus trap · Source: Worker A Round 16b
 
-### F117 Enter ignores pending tool permissions → OPEN
-[FRICTION] pendingAskCount only AskUserQuestion · Source: Worker B Round 16
+### F117 Enter ignores pending tool permissions → FIXED (Round 17)
+[FRICTION] pendingPerms.size gate · Source: Worker B Round 16
 
-### F118 switchConv while busy → abandonTurn on idle sync → OPEN
-[RECOVERY] subscribeActive idle clears local busy · Source: Worker B Round 16
+### F118 switchConv while busy → abandonTurn on idle sync → FIXED (Round 17)
+[RECOVERY] abandon only if streamOwnerId === subId · Source: Worker B Round 16
 
-### F119 Active anon × leaveAnon keepActive leaves null → OPEN
-[RECOVERY] no sibling restore vs anonExit · Source: Worker B Round 16
+### F119 Active anon × leaveAnon keepActive leaves null → FIXED (Round 17)
+[RECOVERY] restore sibling after leaveAnon · Source: Worker B Round 16
