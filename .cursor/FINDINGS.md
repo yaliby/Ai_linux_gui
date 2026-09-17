@@ -256,3 +256,12 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F85 cwdChip aria-label when icon-only → FIXED (Round 8)
 [ACCESSIBILITY] · Source: Worker B
+
+### F86 Wake lock not re-acquired after OS release → FIXED (Round 9)
+[FEEDBACK] re-request on release · Source: Worker B
+
+### F87 Pair expiry countdown stale → FIXED (Round 9)
+[CONFUSION] 15s tick while modal open · Source: Worker A
+
+### F88 Landscape viewport untested → FIXED (Round 9)
+[RESPONSIVENESS] 844×390 in ux-viewport-matrix · Source: simulation

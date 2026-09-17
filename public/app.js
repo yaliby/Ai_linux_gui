@@ -2543,7 +2543,11 @@ async function syncWakeLock() {
     wakeLock = await navigator.wakeLock.request('screen');
     // המערכת משחררת בעצמה (מסך שנכבה בכל זאת, סוללה חלשה) — בלי הניקוי הזה
     // ‎wakeLock‎ היה נשאר מלא ומונע כל ניסיון לקחת אותה שוב.
-    wakeLock.addEventListener('release', () => { wakeLock = null; }, { once: true });
+    wakeLock.addEventListener('release', () => {
+      wakeLock = null;
+      // שחרור מערכת באמצע תור — מנסים שוב כל עוד עדיין עובדים ומסתכלים
+      if (wakeLockWanted()) syncWakeLock();
+    }, { once: true });
     dlog('wakelock', { on: true });
   } catch (e) {
     // סירוב אינו תקלה: אין הרשאה, הסוללה נמוכה, או שהמשתמש כיבה את זה במערכת
@@ -6151,8 +6155,24 @@ function renderRemote(wrap) {
     img.src = '/api/remote/qr?t=' + Date.now();
     img.alt = 'קוד קישור';
     qr.appendChild(img);
-    qr.appendChild(el('div', 'remote-meta', `סרוק מהטלפון · תקף עוד ${fmtLeft((s.pairExpiresAt || 0) - Date.now())}`));
+    const expMeta = el('div', 'remote-meta', '');
+    const paintExp = () => {
+      const left = (s.pairExpiresAt || 0) - Date.now();
+      expMeta.textContent = left <= 0
+        ? 'פג תוקף — בטלו והנפיקו קוד חדש'
+        : `סרוק מהטלפון · תקף עוד ${fmtLeft(left)}`;
+    };
+    paintExp();
+    qr.appendChild(expMeta);
     box.appendChild(qr);
+    if (!wrap._pairTick) {
+      wrap._pairTick = setInterval(() => {
+        if ($('modal').classList.contains('hidden') || !wrap.isConnected || !remoteState.pairUrl) {
+          clearInterval(wrap._pairTick); wrap._pairTick = null; return;
+        }
+        paintExp();
+      }, 15000);
+    }
 
     // מי שלא יכול לסרוק — מחשב מול מחשב, או קוד שנשלח בהודעה — מקליד את הקוד
     // הקצר בכתובת ה-LAN. לכן הוא מוצג כאן באותה בולטות כמו ה-QR.
