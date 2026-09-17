@@ -1888,19 +1888,80 @@ function ensureLive() {
   return live;
 }
 
+/* ==========================================================================
+   גוף של כרטיס נבנה רק כשפותחים אותו
+   --------------------------------------------------------------------------
+   כרטיס כלי וכרטיס חשיבה הם ‎<details>‎ סגורים, והכותרת שלהם (שם, תצוגה
+   מקדימה, סטטוס) היא כל מה שנראה עד שלוחצים. הגוף — הפרמטרים המלאים, ה-diff,
+   התוצאה, תמליל החשיבה — נבנה בכל זאת, בכל כרטיס, בכל ציור.
+
+   נמדד בדפדפן אמיתי על שלוש השיחות הגדולות כאן: מתוך 8,057 צמתי DOM בגדולה
+   שבהן, **4,932 (61%) יושבים בגופים של 352 כרטיסים — שכולם סגורים**. בשתי
+   האחרות: 52% ו-35%.
+
+   המדידה גם פסלה כיוון אחר. ‎markStatusSeparators‎ נראה בפרופיל כ-47% מזמן
+   הרינדור, אבל הוא רק ‎getComputedStyle‎ שמאלץ פריסה מיד אחרי בניית ה-DOM:
+   לנטרל אותו הוריד את ‎renderConversation‎ מ-95ms ל-42ms, ואת *סך* העבודה
+   (רינדור ועוד פריסה כפויה) מ-88.8ms ל-90.2ms. כלומר אפס — הפריסה רק זזה
+   מחוץ למדידה. מה שבאמת עולה זה צמתים, ולכן זה מה שנחסך כאן.
+
+   הגוף נרשם כסגירה שממתינה, והאירוע ‎toggle‎ בונה אותו בפתיחה הראשונה.
+   ‎toggle‎ אינו מבעבע, ולכן המאזין יושב על ‎#log‎ בשלב ה-*לכידה*.
+   ========================================================================== */
+const pendingBody = new WeakMap();   // <details> → הבונה שממתין
+
+/** רושם בונה לגוף הכרטיס: מיד אם הוא כבר פתוח, אחרת בפתיחה הראשונה. */
+function setBody(d, build) {
+  if (!d) return;
+  if (d.open) { pendingBody.delete(d); build(); return; }
+  // כתיבה חוזרת דורסת: בזמן סטרימינג אותו כרטיס מתעדכן עשרות פעמים, ומה
+  // שייבנה בפתיחה צריך להיות המצב האחרון ולא הראשון.
+  pendingBody.set(d, build);
+}
+
+/** בונה עכשיו גוף שהמתין. מחזיר אם היה מה לבנות. */
+function flushBody(d) {
+  const build = d && pendingBody.get(d);
+  if (!build) return false;
+  pendingBody.delete(d);
+  build();
+  return true;
+}
+
+/** כל מה שממתין תחת שורש. נדרש לפני חיפוש, שסורק טקסט מתוך ה-DOM עצמו. */
+function flushBodies(root) {
+  if (!root) return 0;
+  let n = 0;
+  for (const d of root.querySelectorAll('details')) if (flushBody(d)) n++;
+  return n;
+}
+
 // חשיבה מוצפנת: חלק מהמודלים (בהם Opus 5) מחזירים בלוק thinking עם signature בלבד
 // ותוכן ריק — ה-CLI לא מקבל את הטקסט, ולכן במקום כרטיס ריק מציגים כמה טוקני חשיבה הוקדשו.
 function fillThink(d, ref, streaming) {
   if (!d) return;
   const has = !!(ref.text && ref.text.trim());
   const tok = ref.tokens ? `~${Number(ref.tokens).toLocaleString('he-IL')} טוקנים` : '';
-  const think = d.querySelector('.think');
-  if (think) {
-    if (has) { think.innerHTML = streaming ? renderMdLive(ref.text) : renderMd(ref.text); if (!streaming) enhance(think); }
+  setBody(d, () => {
+    const think = d.querySelector('.think');
+    if (!think) return;
+    // ‎ref‎ נקרא כאן ולא למעלה: הוא מוטב במקום בזמן סטרימינג, ומי שפותח את
+    // הכרטיס אחר כך צריך לראות את הטקסט המלא ולא את מה שהיה בקריאה שרשמה.
+    const t = ref.text || '';
+    if (t.trim()) { think.innerHTML = streaming ? renderMdLive(t) : renderMd(t); if (!streaming) enhance(think); }
     else think.innerHTML = `<p class="think-empty">המודל הזה לא חושף את תוכן החשיבה${tok ? ' · ' + tok : ''}</p>`;
-  }
+  });
   const prev = d.querySelector('.tprev');
-  if (prev) prev.textContent = has ? clamp(ref.text.split('\n').pop(), 80) : (tok || 'ללא תוכן גלוי');
+  if (prev) prev.textContent = has ? clamp(lastLine(ref.text), 80) : (tok || 'ללא תוכן גלוי');
+}
+
+/* השורה האחרונה שיש בה משהו. תמליל חשיבה מסתיים כמעט תמיד ב-‎\n‎ (ולא פעם
+   בשניים), ולכן ‎split('\n').pop()‎ החזיר מחרוזת ריקה — ב-39% מכרטיסי החשיבה
+   שבשיחות כאן הכרטיס הוצג בלי שום רמז למה שבתוכו. */
+function lastLine(s) {
+  const lines = String(s || '').split('\n');
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  return lines.length ? lines[lines.length - 1].trim() : '';
 }
 
 function startBlock(index, cb) {
@@ -2038,8 +2099,12 @@ function updateToolCard(d, ref) {
   const st = d.querySelector('.tstatus');
   st.className = 'tstatus ' + ref.status;
   st.textContent = ref.status === 'ok' ? 'הושלם' : ref.status === 'rej' ? 'נדחה' : ref.status === 'err' ? 'שגיאה' : 'רץ…';
-  const body = d.querySelector('.tbody'); body.innerHTML = '';
-  renderToolBody(body, ref);
+  setBody(d, () => {
+    const body = d.querySelector('.tbody');
+    if (!body) return;
+    body.innerHTML = '';
+    renderToolBody(body, ref);
+  });
 }
 function renderToolBody(body, ref) {
   const i = ref.input || {};
@@ -3626,6 +3691,14 @@ const stickRo = new ResizeObserver(() => {
 function watchStickHeight(node) {
   if (node) stickRo.observe(node);
 }
+
+/* פתיחת כרטיס בונה את גופו, אם הוא עדיין לא נבנה — ראו ‎setBody‎.
+   ‎toggle‎ אינו מבעבע, ולכן המאזין חייב לשבת בשלב הלכידה; מאזין אחד על ‎#log‎
+   חוסך מאזין לכל אחד מ-352 הכרטיסים שבשיחה ארוכה. */
+$('log').addEventListener('toggle', (e) => {
+  const d = e.target;
+  if (d && d.tagName === 'DETAILS' && d.open) flushBody(d);
+}, true);
 
 $('jumpBtn').onclick = () => {
   stick = true;
@@ -7522,6 +7595,10 @@ function runFind(q) {
   if (!q || q.length < 2) { updateFindCount(); return; }
   const needle = q.toLowerCase();
   const root = $('log');
+  // החיפוש סורק את הטקסט שב-DOM, ולכן גופי כרטיסים שעדיין לא נבנו היו
+  // נעלמים ממנו. בונים את כולם קודם — חיפוש הוא פעולה יזומה של המשתמש,
+  // ולשלם עליה פעם אחת עדיף על לשלם על כל ציור.
+  flushBodies(root);
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => (n.nodeValue && n.nodeValue.toLowerCase().includes(needle) && n.parentElement
       && !['SCRIPT', 'STYLE', 'MARK'].includes(n.parentElement.tagName)) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
