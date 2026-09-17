@@ -2121,14 +2121,46 @@ function enhance(container) {
 }
 let mermaidMod = null, mermaidTry = false;
 async function renderMermaid(pre, code) {
-  const box = el('div', 'mermaid-box'); pre.replaceWith(box);
+  const box = el('div', 'mermaid-box');
+  box.dataset.mermaid = code;
+  const wrap = el('div', 'code-wrap mermaid-wrap');
+  pre.replaceWith(wrap);
+  wrap.appendChild(box);
+  const btn = el('button', 'copy-btn', 'העתק');
+  btn.onclick = async () => {
+    const ok = await copyText(code);
+    btn.textContent = ok ? 'הועתק ✓' : 'ההעתקה נכשלה';
+    btn.classList.toggle('done', ok);
+    setTimeout(() => { btn.textContent = 'העתק'; btn.classList.remove('done'); }, 1400);
+  };
+  wrap.appendChild(btn);
+  await paintMermaid(box, code);
+  autoScroll();
+}
+async function paintMermaid(box, code) {
   try {
-    if (!mermaidMod && !mermaidTry) { mermaidTry = true; mermaidMod = (await import('/vendor/mermaid/mermaid.esm.min.mjs')).default; mermaidMod.initialize({ startOnLoad: false, theme: isDark() ? 'dark' : 'default' }); }
-    if (!mermaidMod) throw 0;
+    if (!mermaidMod) {
+      if (!mermaidTry) {
+        mermaidTry = true;
+        try {
+          mermaidMod = (await import('/vendor/mermaid/mermaid.esm.min.mjs')).default;
+        } catch { mermaidMod = null; }
+      }
+      if (!mermaidMod) throw 0;
+      mermaidMod.initialize({ startOnLoad: false, securityLevel: 'strict', theme: isDark() ? 'dark' : 'default' });
+    }
     const { svg } = await mermaidMod.render('mm' + uid(), code);
     box.innerHTML = svg;
-  } catch { box.innerHTML = ''; const p = el('pre'); p.textContent = code; box.appendChild(p); }
-  autoScroll(); // גובה הדיאגרמה משתנה אחרי await — לשמור על מעקב אם stick פעיל
+  } catch {
+    box.innerHTML = '';
+    const p = el('pre'); p.textContent = code; box.appendChild(p);
+  }
+}
+async function rethemeMermaid() {
+  // אתחול מחדש עם ערכת הנושא הנוכחית — אחרת דיאגרמות נשארות בערכת הפעם הראשונה
+  mermaidMod = null; mermaidTry = false;
+  const boxes = [...document.querySelectorAll('.mermaid-box[data-mermaid]')];
+  for (const box of boxes) await paintMermaid(box, box.dataset.mermaid || '');
 }
 
 // ---------- סיום תור ----------
@@ -2379,8 +2411,18 @@ function renderHaltCard(ref) {
     retry.type = 'button';
     retry.title = 'מחזיר את הפרומפט האחרון לתיבה';
     retry.onclick = () => {
-      const last = (store.history && store.history[0]) || '';
+      // באנונימי ההיסטוריה הגלובלית לא מתעדכנת — לוקחים את הודעת המשתמש האחרונה בשיחה
+      let last = '';
+      const conv = activeConv();
+      if (conv && Array.isArray(conv.messages)) {
+        for (let i = conv.messages.length - 1; i >= 0; i--) {
+          const m = conv.messages[i];
+          if (m && m.role === 'user' && m.text) { last = m.text; break; }
+        }
+      }
+      if (!last) last = (store.history && store.history[0]) || '';
       if (last) { $('input').value = last; autoGrow(); }
+      else toast('אין פרומפט לשחזור', true);
       $('input').focus();
     };
     foot.appendChild(retry);
@@ -4719,6 +4761,7 @@ $('themeToggle').onclick = () => {
   document.documentElement.setAttribute('data-theme', next);
   store.settings.theme = next;
   syncHljsTheme();
+  rethemeMermaid();
   save();
   const btn = $('themeToggle');
   const label = next === 'dark' ? 'מצב כהה · לחץ לבהיר' : 'מצב בהיר · לחץ לכהה';
@@ -4977,11 +5020,21 @@ function renderModelPicker() {
       fav.setAttribute('aria-label', fav.title);
       fav.setAttribute('aria-pressed', on ? 'true' : 'false');
       fav.textContent = on ? '★' : '☆';
-      fav.onmousedown = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+      const doFav = () => {
         toggleFavoriteModel(it.value);
         buildModelPicker($('modelPickerInput').value);
+      };
+      fav.onmousedown = (e) => {
+        // מונע blur של שדה החיפוש לפני ה-click; העכבר מטפל כאן
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.button === 0) doFav();
+      };
+      fav.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // Enter/Space מהמקלדת — detail=0; עכבר כבר טופל ב-mousedown
+        if (e.detail === 0) doFav();
       };
       row.appendChild(fav);
     }
@@ -4994,7 +5047,7 @@ function renderModelPicker() {
     }
   });
   if (cols.childNodes.length) list.appendChild(cols);
-  $('modelPickerFoot').textContent = st.items.length + ' מודלים · ★ מועדף · ↑↓ לניווט · Enter לבחירה';
+  $('modelPickerFoot').textContent = st.items.length + ' מודלים · ★ מועדף · ↑↓ לניווט · Enter לבחירה · F למועדף';
   const sel = list.querySelector('.pl-item.sel');
   if (sel) sel.scrollIntoView({ block: 'nearest' });
 }
@@ -5020,6 +5073,11 @@ $('modelPickerInput').addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown') { e.preventDefault(); mpState.idx = (mpState.idx + 1) % n; renderModelPicker(); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); mpState.idx = (mpState.idx - 1 + n) % n; renderModelPicker(); }
   else if (e.key === 'Enter') { e.preventDefault(); pickModel(); }
+  else if (e.key === 'f' || e.key === 'F' || e.key === '*') {
+    e.preventDefault();
+    const it = mpState.items[mpState.idx];
+    if (it && it.value) { toggleFavoriteModel(it.value); buildModelPicker($('modelPickerInput').value); }
+  }
 });
 $('modelPicker').addEventListener('click', (e) => { if (e.target === $('modelPicker')) closeModelPicker(); });
 

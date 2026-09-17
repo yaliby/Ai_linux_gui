@@ -500,4 +500,12 @@ t.section('סבב 19 — מכסה / rewind / תיקייה / pair');
   t.ok('קוד pair מושבת אחרי פקיעה', /codeBtn\.disabled\s*=\s*dead|code\.disabled/.test(app) && /פג תוקף/.test(app));
 }
 
+t.section('סבב 20 — mermaid / מועדפים / halt');
+{
+  t.ok('mermaid עם כפתור העתק', /mermaid-wrap[\s\S]{0,200}copy-btn|dataset\.mermaid[\s\S]{0,300}copy-btn/.test(app));
+  t.ok('החלפת ערכה מרעננת mermaid', /rethemeMermaid\(\)/.test(app));
+  t.ok('מועדף במודל ב-F או click', /e\.key === 'f'[\s\S]{0,200}toggleFavoriteModel/.test(app) && /e\.detail === 0/.test(app));
+  t.ok('נסה שוב לוקח הודעת משתמש מהשיחה', /role === 'user'[\s\S]{0,80}last = m\.text/.test(app));
+}
+
 t.done();

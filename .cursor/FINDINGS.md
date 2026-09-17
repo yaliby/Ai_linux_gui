@@ -388,3 +388,15 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F129 Pair actions live after expiry → FIXED (Round 19)
 [FEEDBACK] disable code/copy + fade QR · Source: Worker Round 19
+
+### F130 Mermaid no copy button → FIXED (Round 20)
+[FRICTION] copy-btn on mermaid-wrap · Source: Worker Round 20
+
+### F131 Model picker ★ mouse-only → FIXED (Round 20)
+[ACCESSIBILITY] click + F key · Source: Worker Round 20
+
+### F132 Theme toggle skips mermaid → FIXED (Round 20)
+[CONFUSION] rethemeMermaid · Source: Worker Round 20
+
+### F133 Halt retry wrong in anon → FIXED (Round 20)
+[RECOVERY] last user msg from conv · Source: Worker Round 20
