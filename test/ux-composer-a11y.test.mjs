@@ -546,4 +546,10 @@ t.section('סבב 26 — שינוי שם Escape');
   t.ok('Escape בשינוי שם לא סוגר מגירה', /Escape[\s\S]{0,120}stopPropagation/.test(ren));
 }
 
+t.section('סבב 27 — חיפוש מול מגירה');
+{
+  t.ok('Ctrl+F סוגר מגירה לפני חיפוש', /drawerMode\(\)\) closeDrawer\(\)[\s\S]{0,40}openFind/.test(app) || /closeDrawer\(\);\s*\n\s*openFind/.test(app));
+  t.ok('Ctrl+Shift+F פותח מגירה בטלפון', /drawerMode\(\)\) document\.querySelector\('\.app'\)\.classList\.add\('side-open'\)/.test(app));
+}
+
 t.done();

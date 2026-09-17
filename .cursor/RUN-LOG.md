@@ -52,7 +52,8 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 12:36 | COMMIT | Round 24 F142–F143 | OS mermaid + sync toast · CACHE v47 |
 | 12:37 | HEARTBEAT | residual hunt | F01–F143 · diminishing · →16:08 |
 | 12:52 | COMMIT | Round 25 F144–F145 | modal listeners, anon disabled · CACHE v48 |
-| 12:52 | HEARTBEAT | continue →16:08 | F01–F145 · 16/16 · diminishing |
+| 13:07 | COMMIT | Round 26 F146 | rename Escape vs drawer · CACHE v49 |
+| 13:07 | HEARTBEAT | continue →16:08 | F01–F146 · diminishing |
 ## Decisions
 
 - Parallel workers; serialize writers on same files.
@@ -63,7 +64,7 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 
 ## Commits (local only)
 
-Rounds 1–25 on `ux-optimization-run` through `e66f4a1`
+Rounds 1–26 on `ux-optimization-run` through `e1cbe06`
 
 ## Existing dirty (owner — do not commit)
 

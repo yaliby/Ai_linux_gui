@@ -439,3 +439,6 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F146 Rename Escape closes drawer on mobile → FIXED (Round 26)
 [CONFUSION] stopPropagation on Escape in startRename · Source: Worker Round 26
+
+### F147 Ctrl+F / Shift+F ignore drawer mode → FIXED (Round 27)
+[CONFUSION] closeDrawer before find; open side for convSearch · Source: Worker Round 27

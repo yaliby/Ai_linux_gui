@@ -7556,9 +7556,14 @@ document.addEventListener('keydown', (e) => {
   const typing = ['INPUT', 'TEXTAREA'].includes((e.target.tagName || '')) || e.target.isContentEditable;
   if (mod && (e.key === 'f' || e.key === 'F')) {
     e.preventDefault();
-    if (e.shiftKey) { document.querySelector('.app').classList.remove('side-collapsed'); $('convSearch').focus(); $('convSearch').select(); }
-    else {
+    if (e.shiftKey) {
+      // חיפוש בכל השיחות — במגירה צריך לפתוח את הסרגל, לא רק side-collapsed של דסקטופ
+      if (drawerMode()) document.querySelector('.app').classList.add('side-open');
+      else document.querySelector('.app').classList.remove('side-collapsed');
+      $('convSearch').focus(); $('convSearch').select();
+    } else {
       if (!$('palette').classList.contains('hidden')) closePalette();
+      if (drawerMode()) closeDrawer();
       openFind();
     }
     return;
