@@ -2149,9 +2149,10 @@ function sendQueueCmd(type, extra) {
 }
 function clearQueue() {
   if (!msgQueue.length) return;
+  // בלי חיבור השרת עדיין מחזיק את התור — ניקוי מקומי היה משקר עד הסנכרון הבא
+  if (!sendQueueCmd('queue_clear')) { toast('אין חיבור לשרת', true); return; }
   msgQueue = [];
   renderQueue();
-  sendQueueCmd('queue_clear');
 }
 /** עדכון מהשרת — התור השתנה (כאן, במכשיר אחר, או ששוגר הפריט הבא) */
 function onQueueUpdate(items) {
@@ -2183,7 +2184,9 @@ function renderQueue() {
     chip.appendChild(txt);
     const rm = el('button', 'q-rm', '×');
     rm.type = 'button'; rm.title = 'הסר מהתור'; rm.setAttribute('aria-label', 'הסר מהתור');
-    rm.onclick = () => sendQueueCmd('queue_remove', { id: q.id });
+    rm.onclick = () => {
+      if (!sendQueueCmd('queue_remove', { id: q.id })) toast('אין חיבור לשרת', true);
+    };
     chip.appendChild(rm);
     strip.appendChild(chip);
   });
@@ -2249,6 +2252,11 @@ async function rewindToMessage(msg, getText) {
   // סדר ההודעה בין הודעות המשתמש = ה-ordinal שהשרת סופר בקובץ הסשן
   let idx = msg ? conv.messages.indexOf(msg) : -1;
   if (idx < 0) { toast('לא נמצאה ההודעה', true); return; }
+  const after = conv.messages.length - idx;
+  if (!confirm(
+    after > 1
+      ? `לחתוך את השיחה כאן?\n${after} הודעות (כולל זו) יימחקו מהתמליל, והסשן ימשיך מהנקודה הזו.`
+      : 'לחתוך את השיחה כאן?\nההודעה הזו תימחק מהתמליל, והסשן ימשיך מהנקודה שלפניה.')) return;
   const ordinal = conv.messages.slice(0, idx).filter((m) => m.role === 'user').length;
   const text = (getText && getText()) || (msg && msg.text) || '';
   let res;
@@ -3434,7 +3442,12 @@ function hideWelcome() { const w = $('log').querySelector('.welcome'); if (w) w.
 
 // ---------- toasts ----------
 function toast(text, err) {
-  const t = el('div', 'toast' + (err ? ' err' : ''), text); $('toasts').appendChild(t);
+  const host = $('toasts');
+  if (host && !host.getAttribute('aria-live')) {
+    host.setAttribute('aria-live', 'polite');
+    host.setAttribute('role', 'status');
+  }
+  const t = el('div', 'toast' + (err ? ' err' : ''), text); host.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(() => t.remove(), 300); }, 4200);
 }
 
@@ -4472,7 +4485,7 @@ function checkCwd() {
   const v = $('cwd').value.trim(); const h = $('cwdHint');
   if (isNoDir(v)) { h.textContent = '✓ שיחה בלבד — הכלים כבויים, אין גישה לקבצים'; h.className = 'hint ok'; return; }
   if (!v) { h.textContent = ''; h.className = 'hint'; return; }
-  fetch('/api/check-dir?path=' + encodeURIComponent(v)).then(r => r.json()).then(d => { h.textContent = d.ok ? '✓ תיקייה קיימת' : '✗ לא נמצאה'; h.className = 'hint ' + (d.ok ? 'ok' : 'bad'); }).catch(() => {});
+  fetch('/api/check-dir?path=' + encodeURIComponent(v)).then(r => r.json()).then(d => { h.textContent = d.ok ? '✓ תיקייה קיימת' : '✗ לא נמצאה'; h.className = 'hint ' + (d.ok ? 'ok' : 'bad'); }).catch(() => { h.textContent = '✗ לא הצלחתי לבדוק את התיקייה'; h.className = 'hint bad'; });
 }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
@@ -5091,6 +5104,7 @@ async function takeSharedInput() {
     if (files.length) toast(files.length === 1 ? 'תמונה צורפה מהשיתוף' : files.length + ' תמונות צורפו מהשיתוף');
   } catch (e) {
     dlog('share.fail', { err: String((e && e.message) || e) });
+    toast('קליטת השיתוף נכשלה', true);
   }
 }
 
@@ -6948,14 +6962,16 @@ function convToMarkdown(c) {
 }
 async function exportActiveConv() {
   const c = activeConv();
-  if (!c) return;
+  if (!c) { toast('אין שיחה לייצוא', true); return; }
   if (!c.loaded) await ensureLoaded(c.id);
   // דואט: התוצר חי ב-duetRun, לא ב-messages — אחרת הייצוא יוצא כמעט ריק
   let md;
   if (isDuet(c) && duetRun && duetRun.convId === c.id) {
     const body = duetShownText() || '';
+    if (!body.trim()) { toast('אין תוצר דואט לייצוא עדיין', true); return; }
     md = `# ${c.title || 'דואט'}\n\n${body}\n`;
   } else {
+    if (!c.messages || !c.messages.length) { toast('אין מה לייצא — השיחה ריקה', true); return; }
     md = convToMarkdown(c);
   }
   const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
@@ -7069,7 +7085,7 @@ $('limitResumeNow').onclick = () => {
   toast('מנסים להמשיך עכשיו…');
 };
 $('limitCancel').onclick = () => {
-  if (!sendQueueCmd('limit_cancel')) return;
+  if (!sendQueueCmd('limit_cancel')) { toast('אין חיבור לשרת', true); return; }
   setLimitState(null);
   toast('ההמשך האוטומטי בוטל');
 };

@@ -346,4 +346,28 @@ t.section('סבב 2 — getCommands מחזיר ok');
   t.ok('מטמון ריק תקין (cmdCache !== null)', /cmdCache\s*!==\s*null/.test(snip));
 }
 
+t.section('סבב 3 — תור/מכסה בלי חיבור');
+{
+  const clr = slice('function clearQueue()', 'function onQueueUpdate(');
+  t.ok('clearQueue דורש חיבור לפני ניקוי', /sendQueueCmd\('queue_clear'\)/.test(clr) && /toast\(/.test(clr));
+  t.ok('limitCancel עם toast בלי WS', /limitCancel[\s\S]{0,200}אין חיבור לשרת/.test(app));
+  const rq = slice('function renderQueue()', '// ---------- פעולות על הודעה');
+  t.ok('הסרת פריט מהתור מדווחת בלי חיבור', /queue_remove[\s\S]{0,120}toast\(/.test(rq));
+}
+
+t.section('סבב 3 — toast נגיש');
+{
+  t.ok('#toasts עם aria-live', /id="toasts"[^>]*aria-live=/.test(html));
+}
+
+t.section('סבב 3 — שיתוף / cwd / rewind / ייצוא');
+{
+  t.ok('כשל שיתוף → toast', /share\.fail[\s\S]{0,120}toast\(/.test(app));
+  t.ok('checkCwd catch מעדכן hint', /לא הצלחתי לבדוק את התיקייה/.test(app));
+  const rw = slice('async function rewindToMessage(', '// ----------');
+  t.ok('rewind Claude דורש confirm', /confirm\(/.test(rw) && /לחתוך את השיחה/.test(rw));
+  const ex = slice('async function exportActiveConv(', '// ---------- חיפוש בתוך השיחה');
+  t.ok('ייצוא שיחה ריקה → toast', /אין מה לייצא/.test(ex));
+}
+
 t.done();

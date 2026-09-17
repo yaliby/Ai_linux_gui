@@ -17,6 +17,7 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 08:35 | COMMIT | 4542bda stop-offline/resync | 53 asserts; **STOP 33.B** (premature) |
 | 08:45 | RESUME | User: continue full ~8h until ~16:08 | Round 2 implement |
 | 08:50 | COMMIT | Round 2 F45,F49–F60 | npm test 16/16 · 71 ux asserts · CACHE v25 |
+| 08:52 | COMMIT | Round 3 F61–F67 | queue/offline, toast a11y, rewind confirm · CACHE v26 |
 
 ## Decisions
 

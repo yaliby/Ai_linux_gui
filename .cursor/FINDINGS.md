@@ -181,3 +181,24 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F60 cmdCache=[] treated as miss → FIXED (Round 2)
 [FRICTION] cmdCache !== null · Source: [חקירה עצמאית]
+
+### F61 limitCancel offline silent → FIXED (Round 3)
+[FEEDBACK] toast «אין חיבור לשרת» · Source: [חקירה עצמאית]
+
+### F62 clearQueue / queue_remove offline → FIXED (Round 3)
+[FEEDBACK] no optimistic clear; toast · Source: [חקירה עצמאית]
+
+### F63 toasts not announced to SR → FIXED (Round 3)
+[ACCESSIBILITY] #toasts aria-live polite · Source: [חקירה עצמאית]
+
+### F64 share intake fail silent → FIXED (Round 3)
+[FEEDBACK] toast on catch · Source: [חקירה עצמאית]
+
+### F65 checkCwd network fail silent → FIXED (Round 3)
+[FEEDBACK] hint bad text · Source: [חקירה עצמאית]
+
+### F66 Claude rewind no confirm → FIXED (Round 3)
+[RECOVERY] confirm before fork/slice · Source: [חקירה עצמאית]
+
+### F67 empty export silent success → FIXED (Round 3)
+[FEEDBACK] toast when empty / no duet body · Source: [חקירה עצמאית]
