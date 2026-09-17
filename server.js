@@ -1967,7 +1967,6 @@ function readCookie(header, name) {
 }
 
 /* ---------- אחסון המכשירים ----------
-   TODO: להחליף בעבודת הפירוק הבאה ב-lib/device-store.js
    שומרים רק את ה-hash של הטוקן: הקובץ בדיסק אינו מפתח כניסה בפני עצמו. */
 const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 
