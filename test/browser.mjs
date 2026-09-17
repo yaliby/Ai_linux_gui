@@ -107,6 +107,11 @@ export async function newPage(br) {
   });
   await send('Page.enable');
   await send('Runtime.enable');
+  /* בלי זה ‎:focus‎ לעולם אינו מתקיים בדפדפן ללא ראש — החלון עצמו אינו
+     ממוקד, ולכן ‎el.focus()‎ מעדכן את ‎document.activeElement‎ אבל *לא* מפעיל
+     את הפסבדו-קלאס. בדיקת חיווי פוקוס בלי השורה הזאת מדווחת שאין טבעת מיקוד
+     בשום מקום, וזה מסקנה שגויה שנראית מדאיגה מאוד. */
+  try { await send('Emulation.setFocusEmulationEnabled', { enabled: true }); } catch {}
 
   return {
     send, logs,
@@ -138,6 +143,25 @@ export async function newPage(br) {
         if (Date.now() - t0 > ms) throw new Error('תנאי לא התקיים בזמן: ' + expr);
         await new Promise((r) => setTimeout(r, 100));
       }
+    },
+    /** מקש יחיד. ‎modifiers‎: 1=Alt 2=Ctrl 4=Meta 8=Shift (סכום). */
+    async key(k, modifiers = 0) {
+      const codes = { Tab: 9, Enter: 13, Escape: 27, ArrowUp: 38, ArrowDown: 40 };
+      const base = { key: k, code: k, windowsVirtualKeyCode: codes[k] || 0, modifiers };
+      await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
+      await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+      await new Promise((r) => setTimeout(r, 40));
+    },
+    /** קליק אמיתי במרכז האלמנט, ולא ‎el.click()‎ — עובר דרך hit-testing. */
+    async click(selector) {
+      const box = await this.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)});
+        if (!e) return null; const r = e.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+      if (!box) throw new Error('לא נמצא: ' + selector);
+      for (const type of ['mousePressed', 'mouseReleased']) {
+        await send('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left', clickCount: 1 });
+      }
+      await new Promise((r) => setTimeout(r, 60));
     },
     close() { try { ws.close(); } catch {} return fetch(`http://127.0.0.1:${br.port}/json/close/${t.id}`).catch(() => {}); },
   };
