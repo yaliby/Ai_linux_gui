@@ -454,3 +454,6 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F151 Modal/find open under usage overlay → FIXED (Round 31)
 [CONFUSION] openModal/openFind close usage · Source: Worker Round 31
+
+### F152 Find steals focus behind modal → FIXED (Round 32)
+[ACCESSIBILITY] openFind closes modal+modelPicker; openModal closes find · Source: Worker Round 32

@@ -6159,6 +6159,7 @@ function onModalKeydown(e) {
 function openModal(title, node) {
   if (!$('settings').classList.contains('hidden')) closeSettings();
   if (isUsageModalOpen()) setUsageModalOpen(false);
+  if (!$('findBar').classList.contains('hidden')) closeFind();
   modalReturnFocus = document.activeElement;
   $('modalTitle').textContent = title;
   const b = $('modalBody'); b.innerHTML = ''; b.appendChild(node);
@@ -7499,6 +7500,8 @@ function updateFindCount() {
 function openFind() {
   if (!$('settings').classList.contains('hidden')) closeSettings();
   if (isUsageModalOpen()) setUsageModalOpen(false);
+  if (!$('modal').classList.contains('hidden')) closeModal();
+  if (!$('modelPicker').classList.contains('hidden')) closeModelPicker();
   $('findBar').classList.remove('hidden');
   const i = $('findInput'); i.focus(); i.select();
 }

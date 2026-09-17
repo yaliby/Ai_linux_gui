@@ -57,7 +57,8 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 | 13:49 | COMMIT | Round 28 F148 | wideToggle a11y · CACHE v51 |
 | 14:05 | COMMIT | Round 29 F149 | find vs settings · CACHE v52 |
 | 14:21 | COMMIT | Round 30 F150 | settings vs modal · CACHE v53 |
-| 14:21 | HEARTBEAT | continue →16:08 | F01–F150 · diminishing |
+| 14:37 | COMMIT | Round 31 F151 | modal/find vs usage · CACHE v54 |
+| 14:37 | HEARTBEAT | continue →16:08 | F01–F151 · diminishing |
 ## Decisions
 
 - Parallel workers; serialize writers on same files.
@@ -68,7 +69,7 @@ Planned stop: ~16:08 (full ~8h window — user override of premature 33.B stop)
 
 ## Commits (local only)
 
-Rounds 1–30 on `ux-optimization-run` through `8b97919`
+Rounds 1–31 on `ux-optimization-run` through `b6e2617`
 
 ## Existing dirty (owner — do not commit)
 
