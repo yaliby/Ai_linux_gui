@@ -7204,6 +7204,7 @@ const SHORTCUTS = [
   ['/ בתחילת שורה', 'תפריט פקודות'],
   ['@', 'אזכור קובץ מתיקיית העבודה'],
   ['Esc', 'סגירת חלונית / תפריט'],
+  ['לחיצה ארוכה על שם שיחה', 'שינוי שם (בטלפון) · גם לחיצה על הכותרת'],
   ['?', 'המסך הזה'],
 ];
 function openShortcuts() {
@@ -7519,9 +7520,16 @@ function renderDuetSetup(conv, log) {
   const acts = el('div', 'dt-setup-acts');
   const go = el('button', 'dt-go', 'התחל את הריצה');
   const err = el('span', 'dt-setup-err');
+  err.setAttribute('aria-live', 'polite');
+  goal.setAttribute('aria-describedby', 'dtGoalErr');
+  err.id = 'dtGoalErr';
   go.onclick = () => {
     const g = goal.value.trim();
     if (!g) { err.textContent = 'צריך מטרה כדי להתחיל.'; goal.focus(); return; }
+    let maxTurns = Number(turns.value);
+    if (!Number.isFinite(maxTurns)) maxTurns = 8;
+    maxTurns = Math.max(2, Math.min(30, Math.round(maxTurns)));
+    turns.value = String(maxTurns);
     err.textContent = '';
     go.disabled = true; go.textContent = 'מתחיל…';
     duetSetupBusy = { reset: (why) => { go.disabled = false; go.textContent = 'התחל את הריצה'; err.textContent = why || ''; } };
@@ -7533,12 +7541,11 @@ function renderDuetSetup(conv, log) {
         A: { model: rowA._model.value, effort: rowA._effort.value },
         B: { model: rowB._model.value, effort: rowB._effort.value },
         S: { model: rowS._model.value, effort: rowS._effort.value },
-        maxTurns: Number(turns.value) || 8,
+        maxTurns,
         noteVisibility: vis.value,
         cwd: conv.cwd,
       },
     });
-    // אם השרת לא ענה תוך כמה שניות, מחזירים את הכפתור במקום להשאיר מסך תקוע
     setTimeout(() => { if (!duetRun && go.isConnected && duetSetupBusy) duetSetupBusy.reset('השרת לא הגיב — נסה שוב.'); }, 8000);
   };
   acts.appendChild(go); acts.appendChild(err);

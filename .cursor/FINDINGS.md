@@ -280,3 +280,9 @@ Legend: FIXED / DEFERRED / REJECTED · Source: checklist | Worker A/B | [חקי�
 
 ### F93 sideBackdrop skips closeDrawer focus → FIXED (Round 11)
 [ACCESSIBILITY] uses closeDrawer() · Source: [חקירה עצמאית]
+
+### F94 Duet maxTurns unclamped → FIXED (Round 12)
+[FRICTION] clamp 2–30 + aria-live err · Source: Worker B
+
+### F95 Rename missing from shortcuts help → FIXED (Round 12)
+[DISCOVERABILITY] SHORTCUTS row · Source: [חקירה עצמאית]
