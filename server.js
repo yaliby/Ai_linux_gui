@@ -2242,6 +2242,18 @@ for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { stopRemote(); r
 
 const DIALOG_TIMEOUT_MS = 5 * 60 * 1000;
 const STDOUT_MAX = 8 * 1024 * 1024;
+// כמה זמן תור יכול לשבת בלי שה-CLI אפילו קיבל את ההודעה. לפני שהוא מחזיר
+// אותה כ-replay הוא אוסף את מצב ה-git של התיקייה; בתיקייה על כונן שנתקע
+// (NTFS שתהליך עליו ישן במצב D) ה-git הזה לא חוזר לעולם, והתור נראה חי
+// דקות ארוכות עד שהתהליך יוצא בשקט עם קוד 0.
+const STALL_MS = Number(process.env.RTL_STALL_MS) || 25000;
+// result שהגיע לפני ה-replay שלנו שייך לפרומפט פנימי שעמד לפנינו בתור של
+// ה-CLI (task-notification של משימת רקע). אם אחריו לא בא דבר — זה בכל זאת
+// היה סוף התור שלנו, ואחרי ההמתנה הזו הוא נסגר עליו.
+const FOREIGN_RESULT_MS = Number(process.env.RTL_FOREIGN_RESULT_MS) || 15000;
+// תיקייה שה-git בה נתקע נשארת כזו עד שהכונן משתחרר — בדרך כלל אתחול.
+const GIT_STALL_TTL_MS = 6 * 60 * 60 * 1000;
+const gitStalled = new Map();   // workdir → מתי נתקע
 const LOG_MAX = 3000;                    // פריימים שנשמרים לצורך השלמה אחרי ניתוק
 const IDLE_KILL_MS = 20 * 60 * 1000;     // תהליך של שיחה בלי מנויים ובלי תור פעיל
 const MAX_LIVE_SESSIONS = 6;             // תקרת תהליכי claude חיים במקביל
@@ -2280,6 +2292,12 @@ function newSession(id) {
     anonSeen: 0,          // מתי נראה לאחרונה לקוח שמחזיק בצ'אט הזה (ראו sweepAnon)
     child: null, gen: 0, stdoutBuf: '', stderrBuf: '',
     lastRun: null,
+    // ---- תור שלא יצא לדרך (ראו armStallWatch / onForeignResult) ----
+    workdir: '',          // התיקייה שבה רץ התהליך הנוכחי
+    gitOff: false,        // התהליך הנוכחי הופעל בלי מצב git (תיקייה שה-git בה תקוע)
+    awaitReplay: null,    // { text } — ההודעה שלנו עוד לא חזרה מה-CLI כ-replay
+    stallTimer: null,
+    foreignTimer: null,
     pendingPerms: new Map(),    // request_id → request — כרטיסי הרשאה פתוחים
     pendingDialogs: new Map(),  // request_id → { req, timer }
     god: false,                 // מצב GOD — כל בקשת הרשאה נענית "אשר" בשרת
@@ -2691,6 +2709,7 @@ function killChild(s) {
   for (const d of s.pendingDialogs.values()) clearTimeout(d.timer);
   s.pendingDialogs.clear();
   s.pendingPerms.clear();
+  clearTurnWatch(s);
   if (s.child) {
     s.gen += 1;
     try { s.child.stdin.end(); } catch {}
@@ -2699,6 +2718,135 @@ function killChild(s) {
     s.stdoutBuf = '';
   }
   setRunning(s, false);
+}
+
+/* ==========================================================================
+   תור שלא יצא לדרך, ותור שנסגר על result של מישהו אחר
+   --------------------------------------------------------------------------
+   שתי התקלות נראות מבחוץ אותו דבר — "המודל לא עונה" — ושתיהן נתפסות לפי
+   אותו סימן: ה-replay של ההודעה שלנו (‎--replay-user-messages‎). עד שהוא
+   מגיע, ה-CLI עוד לא התחיל לעבוד על ההודעה הזו.
+   ========================================================================== */
+
+const gitStalledDir = (dir) => {
+  const t = gitStalled.get(dir);
+  if (t && Date.now() - t < GIT_STALL_TTL_MS) return true;
+  gitStalled.delete(dir);
+  return false;
+};
+
+function clearTurnWatch(s) {
+  clearTimeout(s.stallTimer);
+  clearTimeout(s.foreignTimer);
+  s.stallTimer = null;
+  s.foreignTimer = null;
+  s.awaitReplay = null;
+}
+
+/** הטקסט של הודעת user כפי שה-CLI החזיר אותה — מחרוזת או בלוקים. */
+function replayText(evt) {
+  const c = evt && evt.message && evt.message.content;
+  if (typeof c === 'string') return c;
+  return Array.isArray(c) ? c.filter((b) => b && b.type === 'text').map((b) => b.text || '').join('\n') : '';
+}
+
+/**
+ * נדרך ברגע שההודעה נכתבה ל-stdin. פקודת סלאש מקומית (‎/cost‎) לא חוזרת
+ * כ-replay בכלל — היא נענית ב-result מיידי — ולכן היא לא מחכה לו. Cursor
+ * לא מחזיר replay, ולכן אין לו מה לחכות.
+ */
+function armTurnWatch(s, text) {
+  clearTurnWatch(s);
+  if (s.cliAgent !== 'claude') return;
+  if (!/^\s*\//.test(text || '')) s.awaitReplay = { text: String(text || '').trim() };
+  const gen = s.gen;
+  s.stallTimer = setTimeout(() => onTurnStall(s, gen), STALL_MS);
+}
+
+/** כל פריים שאינו טקס פתיחה הוא הוכחה שה-CLI עובד. */
+function noteCliProgress(s, evt) {
+  if (evt.type === 'system' && (evt.subtype === 'init' || evt.subtype === 'status')) return;
+  if (evt.type === 'control_response') return;
+  if (s.stallTimer) { clearTimeout(s.stallTimer); s.stallTimer = null; }
+  if (s.foreignTimer) { clearTimeout(s.foreignTimer); s.foreignTimer = null; }
+  if (s.awaitReplay && evt.type === 'user' && evt.isReplay) {
+    const got = replayText(evt).trim();
+    const want = s.awaitReplay.text;
+    if (!want || got === want || got.includes(want)) s.awaitReplay = null;
+    else dbg('cli.replay.other', { convId: s.id, text: got.slice(0, 120) });
+  }
+}
+
+/**
+ * ה-CLI לא החזיר את ההודעה אחרי STALL_MS. בפעם הראשונה בתיקייה הזו: הורגים
+ * ומפעילים מחדש בלי מצב git, ושולחים שוב את אותה הודעה — זה מה שמשחרר את
+ * התור כשהכונן תקוע. בפעם השנייה אין עוד מה לעקוף, ורק אומרים את זה.
+ */
+function onTurnStall(s, gen) {
+  s.stallTimer = null;
+  if (gen !== s.gen || !s.child || !s.running) return;
+  const run = s.lastRun;
+  const canRetry = !s.gitOff && !s.anon && run && run.opts && run.payload;
+  dbg('cli.stall', { convId: s.id, cwd: s.workdir, ms: STALL_MS, gitOff: s.gitOff, retry: !!canRetry });
+  if (!canRetry) {
+    toastSession(s, `ה-CLI עדיין לא התחיל לעבוד אחרי ${Math.round(STALL_MS / 1000)} שניות — ייתכן שתיקיית העבודה על כונן שלא מגיב. אפשר לעצור ולבחור תיקייה אחרת`, true);
+    return;
+  }
+  gitStalled.set(s.workdir, Date.now());
+  toastSession(s, 'git לא מגיב בתיקייה הזו (כנראה כונן תקוע) — ממשיך בלי מצב git', true);
+  const old = s.child;
+  s.gen += 1;
+  s.child = null;
+  s.stdoutBuf = '';
+  try { old.stdin.end(); } catch {}
+  // SIGKILL: התהליך עצמו חי, אבל ה-git שהוא ממתין לו ישן במצב D ולא ישתחרר
+  try { old.kill('SIGKILL'); } catch {}
+  if (startChild(s, run.opts) && writeStdin(s, run.payload)) {
+    armTurnWatch(s, run.text);
+    return;
+  }
+  emitHalt(s, { reason: 'error', detail: 'הפעלה מחדש בלי מצב git נכשלה', from: 'stall' });
+  setRunning(s, false);
+}
+
+/** סוגר את התור על result שנדחה, אם אחריו ה-CLI שתק. ראו FOREIGN_RESULT_MS. */
+function onForeignResult(s, evt) {
+  const gen = s.gen;
+  clearTimeout(s.foreignTimer);
+  s.foreignTimer = setTimeout(() => {
+    s.foreignTimer = null;
+    if (gen !== s.gen || !s.running) return;
+    dbg('cli.result.adopted', { convId: s.id });
+    s.awaitReplay = null;
+    onCliResult(s, evt);
+  }, FOREIGN_RESULT_MS);
+}
+
+/** סוף תור לפי אירוע ה-result של ה-CLI. */
+function onCliResult(s, evt) {
+  clearTurnWatch(s);
+  const errText = evt.is_error || (evt.subtype && evt.subtype !== 'success')
+    ? [evt.result, evt.error, evt.message].filter((x) => typeof x === 'string').join(' ')
+    : '';
+  // הרמז מ-stderr נחשב רק כאן, בסוף התור: ה-CLI מדפיס אזהרת rate limit גם
+  // כשהוא מתאושש ממנה לבד, והריגת תהליך בריא באמצע עבודה על סמך שורת
+  // stderr הייתה גרועה בהרבה מהבעיה שהיא פותרת.
+  const hit = (errText && LIMIT_RE.test(errText)) ? errText : (s.limitHint || '');
+  const h = hit ? null : haltFromResult(evt);
+  if (h) emitHalt(s, { ...h, from: 'result' });
+
+  // סדר חשוב: קודם האירוע עצמו (הקליינט מסיים את התור עליו), ורק אחריו
+  // דגל הסיום. הפוך מזה, הקליינט היה מקבל "לא עסוק" לפני שהתור נסגר.
+  emit(s, { kind: 'event', evt });
+  const produced = s.turnProduced;
+  s.retry = null;
+  setRunning(s, false);
+  if (hit) {
+    onLimitHit(s, hit, produced).catch(() => {});
+  } else {
+    // setImmediate כדי שהעיבוד של הפריימים שנותרו במאגר יסתיים קודם
+    setImmediate(() => drainQueue(s));
+  }
 }
 
 /** סוגר תהליכים של שיחות שאיש כבר לא צופה בהן ושאין בהן תור פעיל. */
@@ -2956,6 +3104,11 @@ function startChild(s, opts) {
   // בצ'אט אנונימי גם מה שאינו השיחה עצמה נסגר: טלמטריה, דיווח שגיאות, וקריאות
   // מודל נלוות (כותרות, ניחושים) — כל אחת מהן היא בקשה נוספת שיוצאת בגלל
   // השיחה הזו ושלא ביקשת. מה שנשאר יוצא החוצה הוא התור עצמו, ותו לא.
+  // תיקייה שבה ה-git נתקע בתור קודם (ראו onTurnStall): בלי מצב git בהנחיית
+  // המערכת ה-CLI לא מריץ git status לפני כל בקשה, והשיחה עובדת.
+  s.workdir = workdir;
+  s.gitOff = !viaCursor && gitStalledDir(workdir);
+  if (s.gitOff) env = { ...env, CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS: '1' };
   if (s.anon) {
     env = {
       ...env,
@@ -2969,7 +3122,8 @@ function startChild(s, opts) {
   s.gen += 1;
   const gen = s.gen;
   s.stderrBuf = '';
-  s.lastRun = { opts, payload: s.lastRun && s.lastRun.opts === opts ? s.lastRun.payload : null };
+  const same = s.lastRun && s.lastRun.opts === opts;
+  s.lastRun = { opts, payload: same ? s.lastRun.payload : null, text: same ? s.lastRun.text : '' };
   // מכאן והלאה זה מה שהתהליך באמת מריץ — הבסיס להשוואה בכל החלפת מודל
   s.liveModel = opts.model || '';
   s.liveEffort = opts.effort || '';
@@ -3029,6 +3183,7 @@ function startChild(s, opts) {
       // בשיחה אנונימית אין קובץ סשן, ולכן גם המזהה חסר משמעות — ואין סיבה
       // להחזיק אותו בזיכרון או לשדר אותו הלאה.
       if (!s.anon && typeof evt.session_id === 'string' && evt.session_id) s.cliSessionId = evt.session_id;
+      noteCliProgress(s, evt);
 
       // ---- פרוטוקול בקרה (הרשאות) ----
       if (evt.type === 'control_request' && evt.request && evt.request.subtype === 'can_use_tool') {
@@ -3122,28 +3277,16 @@ function startChild(s, opts) {
           api_error_status: evt.api_error_status || null, turns: evt.num_turns || 0,
           dur: evt.duration_ms || 0, denials: (evt.permission_denials || []).length,
         });
-        const errText = evt.is_error || (evt.subtype && evt.subtype !== 'success')
-          ? [evt.result, evt.error, evt.message].filter((x) => typeof x === 'string').join(' ')
-          : '';
-        // הרמז מ-stderr נחשב רק כאן, בסוף התור: ה-CLI מדפיס אזהרת rate limit גם
-        // כשהוא מתאושש ממנה לבד, והריגת תהליך בריא באמצע עבודה על סמך שורת
-        // stderr הייתה גרועה בהרבה מהבעיה שהיא פותרת.
-        const hit = (errText && LIMIT_RE.test(errText)) ? errText : (s.limitHint || '');
-        const h = hit ? null : haltFromResult(evt);
-        if (h) emitHalt(s, { ...h, from: 'result' });
-
-        // סדר חשוב: קודם האירוע עצמו (הקליינט מסיים את התור עליו), ורק אחריו
-        // דגל הסיום. הפוך מזה, הקליינט היה מקבל "לא עסוק" לפני שהתור נסגר.
-        emit(s, { kind: 'event', evt });
-        const produced = s.turnProduced;
-        s.retry = null;
-        setRunning(s, false);
-        if (hit) {
-          onLimitHit(s, hit, produced).catch(() => {});
-        } else {
-          // setImmediate כדי שהעיבוד של הפריימים שנותרו במאגר יסתיים קודם
-          setImmediate(() => drainQueue(s));
+        // משימת רקע שהסתיימה משאירה ב-CLI הודעת task-notification בתור, והוא
+        // מטפל בה לפני ההודעה שלנו — עם result משלה. סגירת התור עליו השאירה
+        // את המודל עובד על ההודעה שלנו מאחורי מסך שכבר אמר "סיים".
+        // שגיאה לא נדחית: היא סוגרת את התור בכל מקרה.
+        if (s.running && s.awaitReplay && !evt.is_error && (!evt.subtype || evt.subtype === 'success')) {
+          dbg('cli.result.foreign', { convId: s.id, turns: evt.num_turns || 0 });
+          onForeignResult(s, evt);
+          continue;
         }
+        onCliResult(s, evt);
         continue;
       }
 
@@ -3167,6 +3310,7 @@ function startChild(s, opts) {
   child.on('exit', (code, signal) => {
     if (gen !== s.gen) return;
     const wasRunning = s.running;
+    clearTurnWatch(s);
     dbg('cli.exit', {
       convId: s.id, code, signal: signal || null, running: wasRunning,
       produced: !!s.turnProduced, model: s.liveModel || '(ברירת מחדל)',
@@ -3184,7 +3328,7 @@ function startChild(s, opts) {
     if (dropped) {
       const run = s.lastRun;
       if (run && run.opts && startChild(s, run.opts)) {
-        if (run.payload) writeStdin(s, run.payload);
+        if (run.payload && writeStdin(s, run.payload)) armTurnWatch(s, run.text);
         return;
       }
     }
@@ -3287,9 +3431,10 @@ function runTurn(s, msg, ws) {
     content = msg.text;
   }
   const payload = { type: 'user', message: { role: 'user', content } };
-  if (s.lastRun) s.lastRun.payload = payload;
+  if (s.lastRun) { s.lastRun.payload = payload; s.lastRun.text = msg.text || ''; }
   if (!writeStdin(s, payload)) return false;
   setRunning(s, true);
+  armTurnWatch(s, msg.text);
   s.turnProduced = false;
   s.haltSent = false;
   s.retry = null;
