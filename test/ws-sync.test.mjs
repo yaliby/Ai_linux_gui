@@ -33,7 +33,7 @@ const t = runner('סנכרון בין מכשירים (WebSocket)');
 
 const srv = spawn(process.execPath, ['server.js'], {
   cwd: ROOT,
-  env: { ...process.env, HOME, PORT: String(PORT), REMOTE_PORT: String(PORT + 1), OMNIROUTE_BASE_URL: '', LOCAL_BASE_URL: '', CCR_GATEWAY_URL: '', CURSOR_SESSION_TOKEN: '' },
+  env: { ...process.env, HOME, PORT: String(PORT), REMOTE_PORT: String(PORT + 1), OMNIROUTE_BASE_URL: '', LOCAL_BASE_URL: 'http://127.0.0.1:9999/v1', CCR_GATEWAY_URL: '', CURSOR_SESSION_TOKEN: '' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let srvOut = '';
@@ -105,6 +105,7 @@ t.section('מנוי ראשון — sync מלא');
   t.eq('אין תור רץ', sync.running, false);
   t.eq('אין כרטיסי הרשאה פתוחים', sync.perms, []);
   t.eq('אין תור המתנה', Array.isArray(sync.queue) ? sync.queue.length : sync.queue, 0);
+  t.eq('אין הודעות מתוזמנות', Array.isArray(sync.schedules) ? sync.schedules.length : 0, 0);
   t.eq('אין מכסה שנגמרה', sync.limit, null);
   t.eq('אין דואט', sync.duet, null);
 
@@ -157,6 +158,33 @@ t.section('שני מכשירים על אותה שיחה');
   const after = await mac.next('presence');
   t.eq('נשאר מכשיר אחד', after.count, 1);
   t.eq('והוא הכותב', after.primary, true);
+  await mac.close();
+}
+
+// ---------------------------------------------------------------------------
+t.section('קח שליטה ממכשיר משני');
+{
+  const mac = await device('Mozilla/5.0 (Macintosh)');
+  mac.send({ type: 'subscribe', conversationId: 'wsconvClaim' });
+  await mac.next('sync');
+  await mac.next('presence');
+
+  const phone = await device('Mozilla/5.0 (Linux; Android 14)');
+  phone.send({ type: 'subscribe', conversationId: 'wsconvClaim' });
+  await phone.next('sync');
+  const phonePres = await phone.next('presence');
+  t.eq('הטלפון נכנס כמשני', phonePres.primary, false);
+  await mac.next('presence');
+
+  mac.clear(); phone.clear();
+  phone.send({ type: 'claim_primary' });
+  const taken = await phone.next('presence');
+  t.eq('הטלפון הפך לכותב', taken.primary, true);
+  const demoted = await mac.next('presence');
+  t.eq('והמחשב ירד לתצוגה', demoted.primary, false);
+  t.eq('שניהם עדיין מחוברים', [taken.count, demoted.count], [2, 2]);
+
+  await phone.close();
   await mac.close();
 }
 
@@ -216,6 +244,84 @@ t.section('חיבור מחדש אחרי ניתוק');
   const pres = await again.next('presence');
   t.eq('המכשיר הישן כבר לא נספר', pres.count, 1);
   await again.close();
+}
+
+// ---------------------------------------------------------------------------
+t.section('הודעה מתוזמנת מסתנכרנת בין מכשירים');
+{
+  const mac = await device('Mozilla/5.0 (Macintosh)');
+  mac.send({ type: 'subscribe', conversationId: 'wsconvSched' });
+  await mac.next('sync');
+  await mac.next('presence');
+
+  const phone = await device('Mozilla/5.0 (Linux; Android 14)');
+  phone.send({ type: 'subscribe', conversationId: 'wsconvSched' });
+  await phone.next('sync');
+  await phone.next('presence');
+  await mac.next('presence');
+
+  mac.clear(); phone.clear();
+  const at = Date.now() + 60 * 60 * 1000;
+  mac.send({
+    type: 'schedule_add',
+    text: 'בדוק את הלוגים',
+    at,
+    model: '',
+    permissionMode: 'acceptEdits',
+  });
+  const listed = await mac.next('schedules');
+  t.eq('המחשב רואה פריט אחד', listed.items.length, 1);
+  t.eq('עם הטקסט', listed.items[0].text, 'בדוק את הלוגים');
+  t.eq('ועם השעה', listed.items[0].at, at);
+  const echoed = await phone.next('schedules');
+  t.eq('גם הטלפון קיבל', echoed.items[0].text, 'בדוק את הלוגים');
+
+  phone.clear(); mac.clear();
+  phone.send({ type: 'schedule_remove', id: listed.items[0].id });
+  const empty = await mac.next('schedules');
+  t.eq('ביטול בטלפון מנקה במחשב', empty.items.length, 0);
+
+  mac.clear();
+  mac.send({ type: 'schedule_add', text: 'מאוחר מדי', at: Date.now() - 1000 });
+  const err = await mac.next('toast');
+  t.eq('שעה שעברה נדחית', err.err, true);
+  t.ok('עם הסבר', /עברה|שעה/.test(err.text), err.text);
+
+  await phone.close();
+  await mac.close();
+}
+
+// ---------------------------------------------------------------------------
+t.section('שידור קונפיג ומודלים חיים (Live Config Broadcast)');
+{
+  const client = await device('Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
+  client.send({ type: 'subscribe', conversationId: 'wsconvLiveCfg' });
+  await client.next('sync');
+  await client.next('presence');
+  client.clear();
+
+  // נשנה הגדרות ספק מקומי ב-API כדי להפעיל שידור חי
+  const https = require('node:https');
+  const http = require('node:http');
+  const agent = BASE.startsWith('https') ? new https.Agent({ rejectUnauthorized: false }) : undefined;
+  const mod = BASE.startsWith('https') ? https : http;
+
+  const putReq = mod.request(new URL('/api/local', BASE), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    agent,
+  }, (res) => {
+    res.resume();
+  });
+  putReq.write(JSON.stringify({ baseUrl: 'http://127.0.0.1:1234/v1', temperature: 0.7 }));
+  putReq.end();
+
+  const cfgMsg = await client.next('config', 3000);
+  t.ok('הלקוח קיבל עדכון קונפיג ב-WebSocket', !!cfgMsg);
+  t.ok('קונפיג כולל רשימת מודלים', Array.isArray(cfgMsg && cfgMsg.models));
+  t.ok('קונפיג כולל סטטוס ספק מקומי', !!(cfgMsg && cfgMsg.local));
+
+  await client.close();
 }
 
 t.section('סיכום');

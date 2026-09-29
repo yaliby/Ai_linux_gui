@@ -7,7 +7,7 @@
 # לכן: (1) פרופיל נפרד + --app (2) ניסיון X11 עם XAUTHORITY, ואם נכשל — Wayland
 # (3) כלל KWin שמכריח desktopfile=rtl-claude לפי כותרת "ממשק עברית".
 set -u
-DIR="/home/yaliby/Downloads/Progects/rtl-claude"
+DIR="/home/yali/Downloads/Progects/rtl-claude"
 PORT="${PORT:-4173}"
 URL="http://localhost:${PORT}"
 APP_CLASS="rtl-claude"

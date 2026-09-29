@@ -128,6 +128,7 @@
         </button>
         <span id="saveDot" class="save-dot hidden" aria-live="polite"></span>
         <span id="presence" class="presence hidden" aria-live="polite" title="מכשירים שצופים בשיחה הזו"></span>
+        <!-- במצב תצוגה בלבד ה-JS הופך את התגית לכפתור «קח שליטה» (claim_primary) -->
         <!-- קרוס־צ'ק ידני. זמין תמיד, גם כשאין תור פעיל: זו הדרך לשאול "האם מה
              שמוצג כאן הוא מה שקיים בפועל", ולתקן אם לא. -->
         <button id="syncBtn" class="icon-btn" title="בדוק מול השרת וסנכרן את המסך" aria-label="בדוק מול השרת"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 4.6v5h-5"/><path d="M3.5 19.4v-5h5"/><path d="M4.7 9.3a8 8 0 0 1 13.2-3.1l2.6 2.4"/><path d="M19.3 14.7a8 8 0 0 1-13.2 3.1L3.5 15.4"/></svg></button>
@@ -233,6 +234,21 @@
         <span class="hint" id="notifyActionsHint"></span>
       </div>
 
+      <div class="set-row hidden" id="localRow">
+        <div class="set-label">מודלים מקומיים</div>
+        <span class="hint" id="localHint"></span>
+        <label>כתובת שרת
+          <input id="localUrl" type="url" dir="ltr" placeholder="http://192.168.1.253:1234/v1" autocomplete="off" spellcheck="false" />
+        </label>
+        <label>המתנה לתור
+          <select id="localTimeoutSet"></select>
+        </label>
+        <div class="set-actions">
+          <button type="button" class="mini" id="localProbe">בדוק עכשיו</button>
+          <button type="button" class="mini" id="localSave">שמור</button>
+        </div>
+      </div>
+
       <!-- התקנה על מסך הבית. הכפתור מופיע רק כשהדפדפן באמת מוכן להתקין —
            ראו renderInstallRow. -->
       <div class="set-row hidden" id="installRow">
@@ -248,14 +264,29 @@
 
     <button id="jumpBtn" class="jump hidden" title="לתחתית" aria-label="גלול לתחתית">↓</button>
 
-    <div id="working" class="working hidden" role="status" aria-live="polite" aria-atomic="true">
-      <span class="spinner"></span>
-      <span id="workingText">חושב…</span>
-      <!-- קרוס־צ'ק: מופיעים רק כשהתור נראה תקוע, כדי שהמצב "אין קשר" לא ייראה
-           זהה למצב "עדיין עובד" — ושתהיה דרך ידנית לתקן בלי לרענן את הדף. -->
-      <span id="staleNote" class="stale-note hidden"></span>
-      <button id="resyncBtn" class="resync hidden" title="בדוק מול השרת והשלם מה שהוחמץ">⟳ סנכרן</button>
-      <button id="stopBtn" class="stop">עצור</button>
+    <!-- work-dock: חיווי העבודה עצמו הוא מסגרת נעה סביב תיבת הכתיבה.
+         כאן נשארים רק GOD החי, והצ׳יפ של סנכרון כשהתור נראה תקוע. -->
+    <div class="work-dock">
+      <div id="godLivePanel" class="god-live-panel hidden" role="region" aria-labelledby="godLiveTitle">
+        <div class="god-live-head">
+          <strong id="godLiveTitle">מה GOD אישר</strong>
+          <button type="button" id="godLiveClose" class="god-live-x" title="סגור" aria-label="סגור">✕</button>
+        </div>
+        <div id="godLiveBody" class="god-live-body"></div>
+      </div>
+      <div id="working" class="working hidden" role="status" aria-live="polite" aria-atomic="true">
+        <span class="spinner"></span>
+        <span id="workingText">חושב…</span>
+        <!-- קרוס־צ'ק: מופיעים רק כשהתור נראה תקוע, כדי שהמצב "אין קשר" לא ייראה
+             זהה למצב "עדיין עובד" — ושתהיה דרך ידנית לתקן בלי לרענן את הדף. -->
+        <span id="staleNote" class="stale-note hidden"></span>
+        <button id="resyncBtn" class="resync hidden" title="בדוק מול השרת והשלם מה שהוחמץ">⟳ סנכרן</button>
+        <button type="button" id="godLiveBtn" class="god-live-btn hidden" aria-expanded="false" aria-controls="godLivePanel" title="מה מצב GOD אישר אוטומטית בתור הזה">
+          <span class="god-ic" aria-hidden="true">⚡</span>
+          <span class="god-live-txt">GOD</span>
+          <span class="god-chev" aria-hidden="true">▾</span>
+        </button>
+      </div>
     </div>
 
     <!-- הבזק "הסתיים" — סימן חיובי בולט בסיום תור -->
@@ -270,10 +301,16 @@
     <!-- ===== קלט ===== -->
     <footer class="composer">
       <div class="composer-card">
+        <svg class="composer-orbit" aria-hidden="true" focusable="false">
+          <rect class="orbit-bloom" />
+          <rect class="orbit-glow" />
+          <rect class="orbit-run" />
+        </svg>
         <!-- תפריט השלמה: פקודות סלאש (/) ואזכור קבצים (@) -->
         <div class="ac-menu hidden" id="acMenu"></div>
         <div class="att-strip hidden" id="attStrip"></div>
         <div class="queue-strip hidden" id="queueStrip" role="status" aria-live="polite" aria-atomic="true"></div>
+        <div class="queue-strip sched-strip hidden" id="schedStrip" role="status" aria-live="polite"></div>
         <!-- רצועת ההכתבה: המצב בלבד, בלי הטקסט עצמו — הטקסט נכנס לתיבה
              ונראה שם. רצועה שמשכפלת אותו הייתה גורמת לקרוא את אותו משפט
              פעמיים ולא לדעת מי משניהם ישלח. -->
@@ -291,27 +328,41 @@
           <button id="micBtn" class="attach mic hidden" title="הכתבה קולית" aria-label="הכתבה קולית" aria-pressed="false">
             <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><rect x="9" y="3" width="6" height="10.5" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3"/></svg>
           </button>
-          <!-- ב-RTL הילדים הראשונים יושבים מימין: צירוף + בוררים יחד בצד ימין,
-               spacer דוחף את "שלח" לשמאל. קודם הבוררים היו אחרי ה-spacer ונדבקו
-               לשליחה בצד שמאל — בדיוק ההפך ממה שממשק עברי מצפה. -->
-          <div class="pill-row">
-            <div class="pill-wrap">
-              <select id="perm" class="pill" title="מצב הרשאות"></select>
-            </div>
-            <div class="pill-wrap">
-              <select id="model" class="pill" title="מודל">
-                <option value="">מודל ברירת מחדל</option>
-              </select>
-            </div>
-            <div class="pill-wrap">
-              <select id="effort" class="pill" title="מאמץ חשיבה">
-                <option value="">מאמץ רגיל</option>
-              </select>
+          <button type="button" id="schedBtn" class="attach" title="תזמן הודעה לשעה מדויקת" aria-label="תזמן הודעה" aria-haspopup="dialog" aria-expanded="false" aria-controls="modal">
+            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.4 1.6"/><path d="M9 3.2h6"/></svg>
+          </button>
+          <!-- במחשב שלושת הבוררים פרוסים בשורה. בטלפון כפתור אחד פותח אותם
+               כתפריט, כדי שלא יישברו את שורת הכתיבה. -->
+          <div class="model-dock" id="modelDock">
+            <div class="pill-wrap model-dock-trigger">
+              <button type="button" id="modelDockBtn" class="pill mp-btn model-dock-btn" aria-haspopup="true" aria-expanded="false" aria-controls="modelDockPop" title="מודל והגדרות">מודל</button>
+              <div id="modelDockPop" class="model-dock-pop hidden" role="group" aria-label="הגדרות מודל">
+                <div class="pill-wrap">
+                  <select id="perm" class="pill" title="מצב הרשאות"></select>
+                </div>
+                <div class="pill-wrap">
+                  <select id="model" class="pill" title="מודל">
+                    <option value="">מודל ברירת מחדל</option>
+                  </select>
+                </div>
+                <div class="pill-wrap">
+                  <select id="effort" class="pill" title="מאמץ חשיבה">
+                    <option value="">מאמץ רגיל</option>
+                  </select>
+                </div>
+                <div class="pill-wrap hidden" id="localTempWrap">
+                  <select id="localTemp" class="pill" title="טמפרטורה"></select>
+                </div>
+                <div class="pill-wrap hidden" id="localMaxWrap">
+                  <select id="localMaxTokens" class="pill" title="תקרת תשובה"></select>
+                </div>
+              </div>
             </div>
           </div>
           <span class="bar-spacer"></span>
-          <button id="sendBtn" class="send" title="שלח" aria-label="שלח">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+          <button type="button" id="sendBtn" class="send" title="שלח" aria-label="שלח">
+            <svg class="send-go" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+            <svg class="send-stop" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect fill="currentColor" x="4" y="4" width="16" height="16" rx="3"/></svg>
           </button>
         </div>
       </div>

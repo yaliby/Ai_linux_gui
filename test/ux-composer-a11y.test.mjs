@@ -105,6 +105,16 @@ t.section('העתקת קוד במקלדת');
   t.ok('code-wrap:focus-within מציג copy-btn', /\.code-wrap:focus-within\s+\.copy-btn/.test(css));
 }
 
+t.section('כפתור העתק לא מכסה את הקוד');
+{
+  const btn = css.match(/\.copy-btn\s*\{([^}]+)\}/);
+  t.ok('כלל .copy-btn קיים', !!btn);
+  const body = btn ? btn[1] : '';
+  t.ok('copy-btn ממוקם ב-right פיזי', /\bright:\s*\d+px/.test(body));
+  t.ok('copy-btn לא נוחת ב-inset-inline-end (שמאל ב-RTL)', !/inset-inline-end/.test(body));
+  t.ok('code-wrap משאיר ריפוד עליון לכפתור', /\.code-wrap\s*>\s*pre[^}]*padding-top:\s*(3[6-9]|[4-9]\d)px/.test(css));
+}
+
 t.section('askBar — הכרזה');
 {
   t.ok('askBar עם aria-live', /id="askBar"[^>]*aria-live=/.test(html) || /id='askBar'[^>]*aria-live=/.test(html));
@@ -138,6 +148,18 @@ t.section('GOD — title על הבורר');
   t.ok('markGodPill מעדכן title לפי GOD', /GOD_HINT/.test(snip) && /sel\.title/.test(snip));
 }
 
+t.section('GOD — כפתור חי תוך כדי תור');
+{
+  t.ok('יש godLiveBtn בפס העבודה', /id="godLiveBtn"/.test(html));
+  t.ok('יש פאנל godLivePanel', /id="godLivePanel"/.test(html));
+  t.ok('onGodAllow קורא ל-renderWorking', /function onGodAllow\([\s\S]*?renderWorking\(\)/.test(app));
+  t.ok('renderWorking מרענן את הכפתור החי', /function renderWorking\([\s\S]*?renderGodLive\(\)/.test(app));
+  t.ok('לחיצה פותחת את הפאנל', /godLiveBtn[\s\S]{0,80}toggleGodLive/.test(app));
+  t.ok('Escape סוגר את פאנל GOD', /godLivePanel[\s\S]{0,200}closeGodLive/.test(app));
+  t.ok('GOD_HINT מזכיר כפתור תוך כדי ריצה', /תוך כדי הריצה/.test(app) && /GOD_HINT/.test(app));
+  t.ok('יעד מגע לכפתור החי', /\.god-live-btn\s*\{\s*min-height:\s*44px/.test(css));
+}
+
 t.section('שבב התרעות — aria-label');
 {
   const snip = slice('function renderNotifyChip()', 'function notifyBlockReason(');
@@ -160,7 +182,8 @@ t.section('Escape סוגר overlays');
 t.section('נוכחות — מכשיר משני');
 {
   const snip = slice('function renderPresence(', 'const UI_FIELDS');
-  t.ok('מכשיר משני מסומן תצוגה בלבד', /!isPrimary/.test(snip) && /תצוגה בלבד/.test(snip));
+  t.ok('מכשיר משני מציע לקחת שליטה', /!isPrimary/.test(snip) && /קח שליטה/.test(snip));
+  t.ok('claimPrimary שולח claim_primary', /function claimPrimary\(/.test(app) && /claim_primary/.test(app));
 }
 
 t.section('צירוף — ניסיון חוזר');
@@ -230,6 +253,26 @@ t.section('בורר מודל — aria');
   const snip = slice('function attachModelSearch(', 'function modelPickerItems(');
   t.ok('mp-btn עם aria-haspopup', /aria-haspopup/.test(snip));
   t.ok('open/close מעדכנים aria-expanded', /aria-expanded/.test(snip));
+}
+
+t.section('בורר מודל — שם ליד הסימן, לא plaintext');
+{
+  t.ok('.mp-name isolate', /\.mp-name\s*\{[\s\S]{0,280}unicode-bidi:\s*isolate/.test(css));
+  t.ok('.mp-name לא plaintext', !/\.mp-name\s*\{[\s\S]{0,280}unicode-bidi:\s*plaintext/.test(css));
+  t.ok('.mp-name מיושר ל-start', /\.mp-name\s*\{[\s\S]{0,500}text-align:\s*start/.test(css));
+  t.ok('במגע placeholder עברי בלבד', /inp\.placeholder = isTouch\(\)[\s\S]{0,120}חיפוש מודל…/.test(app));
+  t.ok('במגע כותרת בלי Enter/F', /isTouch\(\)\s*\n?\s*\? st\.items\.length \+ ' מודלים · ★ מועדף'/.test(app));
+  t.ok('בטלפון עמודה אחת', /\.mp-cols\s*\{\s*column-width:\s*auto;\s*columns:\s*1/.test(css));
+  t.ok('עמודה אחת לא נכפית בשכיבה רחבה', /@media \(max-width: 760px\)\s*\{[\s\S]{0,80}\.mp-cols\s*\{\s*column-width:\s*auto;\s*columns:\s*1/.test(css));
+}
+
+t.section('bidi — פס שאלה, placeholder, פקודות');
+{
+  t.ok('#askBarText isolate ולא plaintext', /\.ask-bar #askBarText[^}]*unicode-bidi:\s*isolate/.test(css)
+    && !/\.ask-bar #askBarText[^}]*unicode-bidi:\s*plaintext/.test(css));
+  t.ok('placeholder קצר מבודד את Claude', /הודעה ל\\u2066Claude\\u2069/.test(app));
+  t.ok('.ac-name הוא LTR מבודד', /\.ac-name\s*\{[^}]*direction:\s*ltr[^}]*unicode-bidi:\s*isolate/.test(css)
+    || /\.ac-name\s*\{[^}]*unicode-bidi:\s*isolate[^}]*direction:\s*ltr/.test(css));
 }
 
 t.section('moreBtn — גילוי');
@@ -515,6 +558,19 @@ t.section('סבב 21 — שליחה כפולה / working live');
   t.ok('working עם aria-live', /id="working"[^>]*aria-live="polite"/.test(html));
 }
 
+t.section('שליחה כפולה — socket כפול והד כפול');
+{
+  const conn = slice('function connect() {', 'function setStatus(');
+  t.ok('connect מבטל טיימר onclose קודם', /if \(reconnectTimer\) \{ clearTimeout\(reconnectTimer\)/.test(conn));
+  t.ok('connect סוגר את ה-socket הקודם', /prev\.onclose = null/.test(conn) && /prev\.close\(\)/.test(conn));
+  t.ok('מאזינים מתעלמים מ-socket ישן', /if \(ws !== sock\) return/.test(conn));
+  t.ok('onclose מתזמן דרך reconnectTimer', /reconnectTimer = setTimeout\(connect, 1500\)/.test(conn));
+  t.ok('הד user_msg לא מצויר פעמיים לאותו nonce', /seenUserNonces\.has\(m\.nonce\)/.test(app));
+  t.ok('כפתור שלח הוא type=button', /id="sendBtn"[^>]*type="button"|type="button"[^>]*id="sendBtn"/.test(html));
+  const srv = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
+  t.ok('user באמצע תור נכנס לתור ולא ל-stdin', /msg\.type === 'user'[\s\S]{0,280}s\.running[\s\S]{0,80}enqueueTurn/.test(srv));
+}
+
 t.section('סבב 22 — רגרסיות מגע / פוקוס חיפוש');
 {
   t.ok('q-rm לא יורד ל-30 במובייל', /\.q-chip \.q-rm \{ width: 36px; height: 36px/.test(css) && !/\.q-chip \.q-rm \{ width: 30px/.test(css));
@@ -562,6 +618,62 @@ t.section('סבב 30 — הגדרות מול מודאל');
 {
   t.ok('openModal סוגר הגדרות', /function openModal\([\s\S]{0,80}closeSettings/.test(app));
   t.ok('usage open סוגר הגדרות', /setUsageModalOpen[\s\S]{0,200}closeSettings/.test(app) || /if \(open\) \{[\s\S]{0,80}closeSettings/.test(app));
+}
+
+t.section('סרגל עליון — בלי כותרת ובלי נקודת מצב');
+{
+  t.ok('convTitle מוסתר בסרגל', /#convTitle,\s*\n?\s*\.title-wrap #statusDot|#convTitle[\s\S]{0,80}display:\s*none/.test(css)
+    || /\.title-wrap #convTitle[\s\S]{0,60}display:\s*none/.test(css));
+  t.ok('statusDot מוסתר בסרגל', /\.title-wrap #statusDot[\s\S]{0,80}display:\s*none/.test(css));
+  t.ok('שינוי שם נשאר בלוח פקודות', /שנה שם לשיחה הפעילה/.test(app));
+}
+
+t.section('כפתור מודל — שלושת הבוררים מעליו');
+{
+  t.ok('modelDockBtn ב-HTML', /id="modelDockBtn"/.test(html));
+  t.ok('modelDockPop מכיל את שלושת הבוררים',
+    /id="modelDockPop"[\s\S]*id="perm"[\s\S]*id="model"[\s\S]*id="effort"/.test(html));
+  t.ok('openModelDock קיים', /function openModelDock\(/.test(app));
+  t.ok('Escape סוגר את חלונית המודל', /isModelDockOpen\(\)[\s\S]{0,80}closeModelDock/.test(app));
+  t.ok('החלונית ממוקמת מעל הכפתור', /bottom:\s*calc\(100% \+ 8px\)/.test(css));
+}
+
+t.section('כתיבה רחבה — כפתור מודל ולא החלקה');
+{
+  const tall = css.slice(css.indexOf('body.compose-compact.compose-tall .model-dock'),
+    css.indexOf('body.compose-compact.compose-tall #sendBtn'));
+  t.ok('perm/effort לא מוסתרים ב-tall', !/\.pill-wrap:has\(#perm\)[\s\S]{0,80}display:\s*none/.test(css));
+  t.ok('אין החלקת snap ב-tall', !/scroll-snap-type:\s*x mandatory/.test(css));
+  t.ok('כפתור המודל חוזר ב-tall', /display:\s*flex\s*!important/.test(tall));
+  t.ok('snapTallPillsToModel הוסר', !/function snapTallPillsToModel\(/.test(app));
+}
+
+t.section('המתנה לשרת שנפל באמצע תור');
+{
+  t.ok('showAwaitServer קיים', /function showAwaitServer\(/.test(app));
+  t.ok('closeTurnAfterServerBack קיים', /function closeTurnAfterServerBack\(/.test(app));
+  t.ok('onclose מציג המתנה כשיש תור חי', /sock\.onclose[\s\S]{0,400}if \(busy\) showAwaitServer/.test(app));
+  t.ok('זרם שחזר מסיר את החיווי', /awaitingServer && \(evt\.type === 'stream_event'/.test(app));
+  t.ok('reset בלי תור חי סוגר עם כרטיס', /awaitingServer && m\.mode === 'reset'/.test(app) && /closeTurnAfterServerBack/.test(app));
+  t.ok('כרטיס server_restart עם המשך', /reason === 'server_restart'[\s\S]{0,200}המשך/.test(app));
+  t.ok('CSS ל-.await-server', /\.await-server\s*\{/.test(css));
+  t.ok('sanitize שומר awaiting', /m\.awaiting \? \{ awaiting: true \}/.test(fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8')));
+}
+
+t.section('מסגרת נעה + עצירה בכפתור שליחה');
+{
+  t.ok('composer-orbit ב-HTML', /class="composer-orbit"/.test(html));
+  t.ok('אין stopBtn בפס העבודה', !/id="stopBtn"/.test(html));
+  t.ok('אייקון עצירה בכפתור שליחה', /class="send-stop"/.test(html));
+  t.ok('אנימציית composerOrbit על הקו', /@keyframes composerOrbit/.test(css) && /stroke-dashoffset/.test(css));
+  t.ok('מסגרת אדומה ב-nosync/stale', /body\.nosync \.orbit-run/.test(css) && /var\(--danger\)/.test(css));
+  t.ok('זוהר על הקו ולא conic', /orbit-bloom/.test(html) && /orbit-glow/.test(html) && /stroke-dasharray/.test(css) && !/\.composer-orbit::before/.test(css));
+  t.ok('.send.stopping מחליף לריבוע', /\.send\.stopping \.send-stop/.test(css));
+  t.ok('עצירה נשארת באקצנט', /\.send\.stopping/.test(css) && !/\.send\.stopping\s*\{[^}]*background:\s*var\(--text\)/.test(css));
+  const snip = slice('function syncSendAffordance()', 'function setBusy(');
+  t.ok('syncSendAffordance מסמן stopping', /classList\.toggle\(\s*['"]stopping['"]/.test(snip));
+  t.ok('sendBtn עוצר כשאין טקסט בתור חי', /sendBtn'\)\.onclick[\s\S]{0,180}interruptTurn/.test(app));
+  t.ok('working לא כרטיס אקצנט ענק', !/\.working\s*\{[^}]*linear-gradient\(120deg,\s*var\(--accent\)/.test(css));
 }
 
 t.done();

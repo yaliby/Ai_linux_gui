@@ -28,12 +28,66 @@ const qrcode = require('qrcode');
   } catch { /* אין .env — התנהגות רגילה */ }
 })();
 
-const { loadProviders } = require('./openai-bridge');
+const {
+  loadProviders,
+  normalizeLocalUrl,
+} = require('./openai-bridge');
 const cursor = require('./cursor-bridge');
+const {
+  CLAUDE_PERM_MODES,
+  isGodMode, withGod, parsePermissionModes, claudeCliPerm,
+} = require('./lib/perm-mode');
+const {
+  MAX_SCHEDULES, buildItem: buildScheduleItem, scheduleView, persistShape: persistSchedules,
+} = require('./lib/schedule');
+
+// הגדרות הספק המקומי נשמרות בדיסק, נפרדות מ-.env — כדי שאפשר יהיה לשנות
+// כתובת/טמפרטורה מהממשק בלי לערוך קובץ ולהפעיל מחדש.
+const LOCAL_CFG_FILE = path.join(os.homedir(), '.claude', 'rtl-claude', 'local-provider.json');
+function readLocalCfg() {
+  try {
+    const j = JSON.parse(fs.readFileSync(LOCAL_CFG_FILE, 'utf8'));
+    return j && typeof j === 'object' ? j : {};
+  } catch { return {}; }
+}
+function writeLocalCfg(cfg) {
+  try {
+    fs.mkdirSync(path.dirname(LOCAL_CFG_FILE), { recursive: true });
+    fs.writeFileSync(LOCAL_CFG_FILE, JSON.stringify(cfg));
+  } catch (e) { console.warn('[local] שמירת ההגדרות נכשלה:', e.message); }
+}
+const localSaved = readLocalCfg();
 
 // ספקים תואמי-OpenAI (OmniRoute, שרת מודלים מקומי ברשת). נבנים מהסביבה אחרי
-// טעינת .env, כדי שכתובות הבסיס שבקובץ ייתפסו.
-const oaiProviders = loadProviders();
+// טעינת .env, כדי שכתובות הבסיס שבקובץ ייתפסו. קובץ ההגדרות של הספק המקומי
+// גובר על ברירת המחדל — זו בדיוק ההפרדה מהספקים האחרים.
+const oaiProviders = loadProviders({ local: localSaved });
+const localProvider = oaiProviders.find((p) => p.id === 'local') || null;
+if (localProvider && localSaved.extras) localProvider.setExtras(localSaved.extras);
+
+function localPublicStatus() {
+  if (!localProvider) return { enabled: false };
+  return { enabled: true, ...localProvider.getStatus() };
+}
+function persistLocalCfg(patch = {}) {
+  if (!localProvider) return;
+  const prev = readLocalCfg();
+  const st = localProvider.getStatus();
+  const next = { baseUrl: st.baseUrl, extras: st.extras };
+  if (patch.timeoutMs === null || patch.timeoutMs === '') { /* איפוס לברירת המחדל */ }
+  else if (patch.timeoutMs != null) next.timeoutMs = patch.timeoutMs;
+  else if (prev.timeoutMs != null) next.timeoutMs = prev.timeoutMs;
+  if (patch.apiKey != null && String(patch.apiKey).trim()) next.apiKey = String(patch.apiKey).trim();
+  else if (prev.apiKey) next.apiKey = prev.apiKey;
+  writeLocalCfg(next);
+}
+function applyLocalTurnExtras(msg) {
+  if (!localProvider || !msg) return;
+  if (!String(msg.model || '').startsWith(localProvider.PREFIX || 'local/')) return;
+  if (!msg.local || typeof msg.local !== 'object') return;
+  localProvider.setExtras({ ...localProvider.getExtras(), ...msg.local });
+  if (msg.local.timeoutMs != null) localProvider.reconfigure({ timeoutMs: msg.local.timeoutMs });
+}
 
 const PORT = process.env.PORT || 4173;
 const app = express();
@@ -158,6 +212,8 @@ function readOauthToken() {
 // אבל השמות עצמם חייבים להישאר בתפריט. בלי זה כשל רשת ל-/v1/models
 // משאיר רק את מודלי Gemini מהשער, או רק "מודל ברירת מחדל".
 const FALLBACK_MODELS = [
+  { id: 'claude-opus-5-5', name: 'Claude Opus 5.5', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
+  { id: 'claude-fable-5-1', name: 'Claude Fable 5.1', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
   { id: 'claude-opus-5', name: 'Claude Opus 5', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
   { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
   { id: 'claude-fable-5', name: 'Claude Fable 5', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
@@ -213,13 +269,7 @@ function fetchModels() {
 function fetchPermissionModes() {
   return new Promise((resolve) => {
     execFile('claude', ['--help'], { timeout: 8000 }, (err, stdout) => {
-      if (err || !stdout) return resolve(null);
-      const i = stdout.indexOf('--permission-mode');
-      if (i < 0) return resolve(null);
-      const m = stdout.slice(i, i + 500).match(/choices:([\s\S]*?)\)/);
-      if (!m) return resolve(null);
-      const modes = [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
-      resolve(modes.length ? modes : null);
+      resolve(parsePermissionModes(stdout) || null);
     });
   });
 }
@@ -227,22 +277,18 @@ function fetchPermissionModes() {
 /* ==========================================================================
    מצב GOD — אישור אוטומטי לכל בקשה, ויומן של מה שבאמת רץ
    --------------------------------------------------------------------------
-   ‎god‎ אינו מצב של ה-CLI אלא של הממשק. ה-CLI מופעל דווקא ב-‎default‎ — המצב
-   שבו *כל* כלי שאינו ברשימת ההיתר נעצר ושואל — והשרת עונה "אשר" מיד. זה מה
-   שמבדיל אותו מ-‎bypassPermissions‎: שם ה-CLI לא שואל בכלל, ולכן אין מה לרשום
-   ואין מה להראות. כאן כל בקשה עוברת דרכנו, נענית בתוך פריים אחד, ונרשמת —
-   וסוף התור מקבל כפתור שפותח את הרשימה המלאה.
+   ‎god‎ אינו מצב של ה-CLI אלא של הממשק. ה-CLI מופעל ב-‎manual‎ — המצב שבו
+   *כל* כלי נעצר ושואל — והשרת עונה "אשר" מיד. זה מה שמבדיל אותו מ-
+   ‎bypassPermissions‎: שם ה-CLI לא שואל בכלל, ולכן אין מה לרשום ואין מה
+   להראות. כאן כל בקשה עוברת דרכנו, נענית בתוך פריים אחד, ונרשמת — וסוף
+   התור מקבל כפתור שפותח את הרשימה המלאה. שמות ישנים (‎default‎, או ‎force‎
+   של Cursor) ממופים כאן ולא נשלחים כמו שהם: ה-CLI דוחה אותם ונופל מיד.
    ========================================================================== */
-const GOD_MODE = 'god';
-const GOD_CLI_MODE = 'default';
 // AskUserQuestion אינה בקשת רשות לעשות משהו אלא שאלה שהתשובה עליה היא התוכן.
 // "אישור" בלי תשובה היה מחזיר למודל שאלה ריקה, ולכן היא נשארת על המסך גם כאן.
 const GOD_KEEP_TOOLS = new Set(['AskUserQuestion']);
-const isGodMode = (m) => m === GOD_MODE;
-/** מה באמת נשלח ל---permission-mode: ‎god‎ הוא שלנו, ה-CLI לא מכיר אותו. */
-const cliPermMode = (m) => (isGodMode(m) ? GOD_CLI_MODE : m);
-/** ‎god‎ לא יכול להגיע מ---help של ה-CLI, ולכן הוא נוסף לרשימה כאן. */
-const withGod = (modes) => (modes.includes(GOD_MODE) ? modes : [...modes, GOD_MODE]);
+/** מה באמת נשלח ל---permission-mode: ‎god‎ הוא שלנו, וה-CLI כבר לא מכיר ‎default‎. */
+const cliPermMode = (m) => claudeCliPerm(m, cfgCache.perms);
 /** קלט מקוצר ליומן — מה שמוצג בכרטיס, בלי לגרור תוכן קובץ שלם לכל מכשיר. */
 function godInput(input) {
   if (!input || typeof input !== 'object') return {};
@@ -554,6 +600,7 @@ function categoryOf(m) {
   // מחדש לפי שם היה מפזר אותם בין מודלי Anthropic הישירים, ואת ההבחנה
   // היחידה שבאמת חשובה כאן — איזה סוכן ירוץ — אי אפשר היה לראות בבורר.
   if (String(m.group || '').startsWith(cursor.CURSOR_GROUP)) return m.group;
+  if (String(m.group || '').startsWith('OmniRoute')) return m.group;
   const id = String(m.id || '');
   for (const [re, group] of SOURCE_CATEGORIES) if (re.test(id)) return group;
   // רק החלק האחרון של המזהה: שם השער עצמו (`gemini/`, `aug/`) היה מטה כל מודל
@@ -620,14 +667,38 @@ async function getConfig() {
       ...grouped(cfgCache.gateway, 'Gemini · Google'),
       ...oaiProviders.flatMap((p) => p.getModels()),
     ]),
-    permissionModes: withGod(cfgCache.perms || ['acceptEdits', 'plan', 'bypassPermissions']),
+    permissionModes: withGod(cfgCache.perms || CLAUDE_PERM_MODES),
     // מצבי ההרשאה של Cursor אינם אותם מצבים, והבורר מחליף ביניהם לפי המודל
     // שנבחר. שליחת שתי הרשימות מראש חוסכת סיבוב נוסף בכל החלפת מודל.
     cursorPermissionModes: cursor.PERM_MODES,
     cursorPermissionDefault: cursor.PERM_DEFAULT,
     cursorPrefix: cursor.PREFIX,
+    local: localPublicStatus(),
   };
 }
+// כל החיבורים הפתוחים, בלי קשר לשיחה שהם צופים בה — לשידור שינויים ברמת
+// רשימת השיחות (שיחה חדשה, שינוי שם, מחיקה) ועדכוני קונפיג/מודלים חיים לכל המכשירים.
+const allClients = new Set();
+function broadcastAll(obj) {
+  const raw = JSON.stringify(obj);
+  for (const ws of allClients) {
+    if (ws.readyState === ws.OPEN) { try { ws.send(raw); } catch {} }
+  }
+}
+
+let broadcastConfigTimer = null;
+function broadcastConfig() {
+  if (broadcastConfigTimer) clearTimeout(broadcastConfigTimer);
+  broadcastConfigTimer = setTimeout(async () => {
+    broadcastConfigTimer = null;
+    try {
+      const cfg = await getConfig();
+      broadcastAll({ kind: 'config', ...cfg });
+    } catch {}
+  }, 100);
+  broadcastConfigTimer.unref?.();
+}
+
 // חימום מוקדם כדי ש-ccrModelIds יהיה מאוכלס גם אם מריצים לפני שה-UI ביקש /api/config
 getConfig().catch(() => {});
 // גשר לכל ספק תואם-OpenAI — עולה פעם אחת ומשרת את כל השיחות. ספק שגשרו לא
@@ -636,14 +707,16 @@ const oaiBridges = new Map();   // id של ספק → { url, token }
 for (const p of oaiProviders) {
   p.startBridge().then((b) => { if (b) oaiBridges.set(p.id, b); }).catch(() => {});
   // מעקב זמינות: הבדיקה הראשונה יוצאת מיד ולא חוסמת את העלייה. אם הספק עדיין
-  // עולה (docker compose, או מחשב שעוד לא דלוק), המודלים ייכנסו לתפריט מעצמם.
-  p.startModelWatcher(() => {});
+  // עולה (docker compose, או מחשב שעוד לא דלוק), המודלים ייכנסו לתפריט מעצמם ויוזרמו בלייב.
+  p.startModelWatcher(() => {
+    broadcastConfig();
+  });
 }
 app.get('/api/config', async (req, res) => {
   // anonymous: האם הכפתור "צ׳אט אנונימי" בכלל יכול לעבוד כאן. הבדיקה היא על
   // ה-CLI המותקן, ולכן היא שייכת לשרת — ראו anonCapable.
   try { res.json({ ...(await getConfig()), anonymous: anonCapable }); }
-  catch { res.json({ models: FALLBACK_MODELS, permissionModes: withGod(['acceptEdits', 'plan', 'bypassPermissions']), anonymous: anonCapable }); }
+  catch { res.json({ models: FALLBACK_MODELS, permissionModes: withGod(CLAUDE_PERM_MODES), anonymous: anonCapable }); }
 });
 
 // ---------- העלאת תמונות (נשמרות זמנית ב-temp ומנוקות אוטומטית) ----------
@@ -1161,7 +1234,8 @@ function sanitizeConv(c) {
     // המודל שכתב את התשובה נשמר בהודעה עצמה ולא נגזר מהבורר בזמן הצגה: שיחה
     // שעברה בין מודלים באמצע חייבת להראות ליד כל תשובה את מי שבאמת כתב אותה,
     // גם אחרי רענון. ראו brandOf ב-app.js.
-    return { role: 'assistant', blocks, ...(m.model ? { model: String(m.model).slice(0, 120) } : {}) };
+    // awaiting: התור נקטע כי השרת נפל — החיווי על ההודעה חייב לשרוד רענון.
+    return { role: 'assistant', blocks, ...(m.model ? { model: String(m.model).slice(0, 120) } : {}), ...(m.awaiting ? { awaiting: true } : {}) };
   }).filter(Boolean);
   const now = Date.now();
   return {
@@ -1327,7 +1401,7 @@ app.delete('/api/conversations/:id', (req, res) => {
   metaCache.delete(id);
   duet.dispose(id);
   const s = sessions.get(id);
-  if (s) { killChild(s); sessions.delete(id); }
+  if (s) { disarmSchedules(s); killChild(s); sessions.delete(id); saveResumeState(); }
   broadcastAll({ kind: 'conv_deleted', id });
   res.json({ ok: true });
 });
@@ -1342,6 +1416,45 @@ app.put('/api/settings', storeJson, (req, res) => {
     });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ ok: false, error: String(e.message || e) }); }
+});
+
+app.get('/api/local', (req, res) => {
+  res.json(localPublicStatus());
+});
+
+app.put('/api/local', storeJson, (req, res) => {
+  if (!localProvider) return res.status(404).json({ ok: false, error: 'הספק המקומי כבוי' });
+  const b = req.body && typeof req.body === 'object' ? req.body : {};
+  localProvider.setExtras({
+    ...localProvider.getExtras(),
+    ...(b.extras && typeof b.extras === 'object' ? b.extras : {}),
+    ...b,
+  });
+  const rec = {};
+  if (b.baseUrl != null) {
+    const url = normalizeLocalUrl(b.baseUrl);
+    if (!url) return res.status(400).json({ ok: false, error: 'כתובת שרת לא תקינה' });
+    rec.baseUrl = url;
+  }
+  if (b.apiKey != null) rec.apiKey = b.apiKey;
+  if ('timeoutMs' in b) rec.timeoutMs = b.timeoutMs;
+  else if (b.extras && typeof b.extras === 'object' && 'timeoutMs' in b.extras) rec.timeoutMs = b.extras.timeoutMs;
+  if (Object.keys(rec).length) localProvider.reconfigure(rec);
+  persistLocalCfg(rec);
+  broadcastConfig();
+  res.json({ ok: true, ...localPublicStatus() });
+});
+
+app.post('/api/local/probe', async (req, res) => {
+  if (!localProvider) return res.status(404).json({ ok: false, error: 'הספק המקומי כבוי' });
+  try {
+    const models = await localProvider.probeNow();
+    broadcastConfig();
+    res.json({ ok: true, found: !!(models && models.length), ...localPublicStatus() });
+  } catch (e) {
+    broadcastConfig();
+    res.status(502).json({ ok: false, error: String(e.message || e), ...localPublicStatus() });
+  }
 });
 
 // שמירה אחרונה בעת סגירת החלון — נשלח ב-sendBeacon, לכן POST יחיד לכל המידע.
@@ -1462,8 +1575,30 @@ app.get('/api/search', (req, res) => {
 const agentCaps = require('./lib/agent-capabilities')({
   execFile, cursor, home: os.homedir(),
 });
+const mcpAdmin = require('./lib/mcp-admin')({
+  execFile,
+  cursorConfigPath: path.join(os.homedir(), '.cursor', 'mcp.json'),
+});
 app.get('/api/mcp', (req, res) => {
   agentCaps.mcpList().then((data) => res.json(data)).catch(() => res.json({ servers: [], raw: '' }));
+});
+app.post('/api/mcp', express.json({ limit: '8kb' }), (req, res) => {
+  const body = req.body || {};
+  mcpAdmin.add(body).then((r) => {
+    // ביטול מטמון רק אם משהו באמת נכתב. שגיאת אימות לא צריכה להכריח
+    // את הפתיחה הבאה של הפאנל להריץ שוב את ‎claude mcp list‎.
+    if (r.ok || (r.results && Object.values(r.results).some((x) => x && x.ok))) agentCaps.forgetMcp();
+    dbg('mcp.add', { ok: r.ok, name: body.name, agents: body.agents, error: r.error || null });
+    res.status(r.ok ? 200 : 400).json(r);
+  }).catch((e) => res.status(500).json({ ok: false, error: e.message || 'שגיאה' }));
+});
+app.post('/api/mcp/remove', express.json({ limit: '4kb' }), (req, res) => {
+  const body = req.body || {};
+  mcpAdmin.remove(body).then((r) => {
+    if (r.ok) agentCaps.forgetMcp();
+    dbg('mcp.remove', { ok: r.ok, name: body.name, agent: body.agent, error: r.error || null });
+    res.status(r.ok ? 200 : 400).json(r);
+  }).catch((e) => res.status(500).json({ ok: false, error: e.message || 'שגיאה' }));
 });
 app.get('/api/commands', (req, res) => {
   res.json(agentCaps.listCommands(resolveDirGlobal(req.query.cwd), req.query.agent));
@@ -1529,7 +1664,7 @@ const RC_LOG_MAX = 40;
 const RC_MAX = 6;                        // כמה מופעים מותר להריץ במקביל
 const RC_SPAWN = ['same-dir', 'worktree', 'session'];
 // הרשימה של תת-הפקודה עצמה (claude remote-control --help), ולא של claude
-const RC_PERM = ['default', 'acceptEdits', 'auto', 'dontAsk', 'plan', 'bypassPermissions'];
+const RC_PERM = [...CLAUDE_PERM_MODES];
 // הפלט מצויר מחדש שוב ושוב עם רצפי ANSI (כולל קישורי OSC 8) — מנקים לפני הפענוח
 const stripAnsi = (s) => s
   .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
@@ -1634,13 +1769,16 @@ function rcStart(opts) {
   }
   const label = (opts.name || '').toString().trim().slice(0, 60);
   const spawnMode = RC_SPAWN.includes(opts.spawn) ? opts.spawn : '';
-  const perm = RC_PERM.includes(opts.permissionMode) ? opts.permissionMode : '';
+  const perm = RC_PERM.includes(opts.permissionMode)
+    ? opts.permissionMode
+    : (opts.permissionMode ? claudeCliPerm(opts.permissionMode) : '');
+  const permArg = RC_PERM.includes(perm) ? perm : '';
   const cap = Math.round(Number(opts.capacity));
   const args = ['remote-control'];
   if (label) args.push('--name', label);
   if (spawnMode) args.push('--spawn', spawnMode);
   if (cap >= 1 && cap <= 32) args.push('--capacity', String(cap));
-  if (perm) args.push('--permission-mode', perm);
+  if (permArg) args.push('--permission-mode', permArg);
   // -c מתחבר מחדש לסשן שהתיקייה הזו רשמה בשעות האחרונות במקום לפתוח חדש
   if (opts.continue) args.push('--continue');
   if (opts.createSessionInDir === false) args.push('--no-create-session-in-dir');
@@ -1652,7 +1790,7 @@ function rcStart(opts) {
   }
   const inst = {
     child, cwd: workdir, name: label, state: 'starting', url: null, capacity: null,
-    spawn: spawnMode || 'same-dir', permissionMode: perm, error: '', startedAt: Date.now(),
+    spawn: spawnMode || 'same-dir', permissionMode: permArg, error: '', startedAt: Date.now(),
     log: [], sessions: [], buf: '', sawFrame: false, needsTrust: false,
   };
   rcs.set(workdir, inst);
@@ -2160,6 +2298,7 @@ function newSession(id) {
     modelReq: null,       // request_id של set_model שממתין לתשובה
     // ---- שרשור פרומפטים ----
     queue: [],            // פרומפטים שממתינים; משוגרים אוטומטית בסיום כל תור
+    schedules: [],        // הודעות מתוזמנות לשעה מדויקת באותו סשן
     lastTurn: null,       // התור האחרון ששוגר — הבסיס להמשך אוטומטי אחרי חידוש מכסה
     turnProduced: false,  // האם התור הנוכחי הספיק להוציא פלט לפני שנעצר
     haltSent: false,      // כבר דווחה עצירה חריגה בתור הזה — לא מדווחים פעמיים
@@ -2372,6 +2511,8 @@ function destroyAnon(s) {
   killChild(s);
   s.log.length = 0;
   s.queue.length = 0;
+  disarmSchedules(s);
+  s.schedules = [];
   s.lastRun = null;
   s.lastTurn = null;
   s.limit = null;
@@ -2457,16 +2598,6 @@ app.post('/api/permission-answer', express.json({ limit: '4kb' }), (req, res) =>
   dbg('perm.notify', { convId, decision, by: deviceLabel(req), ok });
   res.json({ ok });
 });
-
-// כל החיבורים הפתוחים, בלי קשר לשיחה שהם צופים בה — לשידור שינויים ברמת
-// רשימת השיחות (שיחה חדשה, שינוי שם, מחיקה) לכל המכשירים.
-const allClients = new Set();
-function broadcastAll(obj) {
-  const raw = JSON.stringify(obj);
-  for (const ws of allClients) {
-    if (ws.readyState === ws.OPEN) { try { ws.send(raw); } catch {} }
-  }
-}
 
 function setRunning(s, running) {
   s.lastUsed = Date.now();
@@ -2581,11 +2712,12 @@ function reapIdle(force) {
     if (force && [...sessions.values()].filter((x) => x.child).length < MAX_LIVE_SESSIONS) break;
   }
   // סשן בלי תהליך, בלי מנויים ובלי מה להשלים — אין טעם להחזיק אותו בזיכרון.
-  // שיחה שממתינה לחידוש מכסה או שיש בה פרומפטים בתור *היא* משהו להשלים.
+  // שיחה שממתינה לחידוש מכסה, שיש בה פרומפטים בתור או הודעה מתוזמנת *היא*
+  // משהו להשלים — בלי זה הטיימר היה נמחק דקה אחרי שסגרת את החלון.
   for (const [id, s] of sessions) {
     // שחקן בדואט הוא בהגדרה בלי מנויים ובלי תור — הבעלות עליו היא של הרַכָּז,
     // והוא זה שסוגר אותו בסיום הריצה
-    if (s.limit || s.queue.length || s.duetRole) continue;
+    if (s.limit || s.queue.length || (s.schedules && s.schedules.length) || s.duetRole) continue;
     if (!s.child && !s.subs.size && now - s.lastUsed > IDLE_KILL_MS) sessions.delete(id);
   }
 }
@@ -2744,9 +2876,14 @@ function startChild(s, opts) {
   // התיקייה נוצרה על ידינו והיא ריקה; בלי סימון האמון ה-CLI היה עוצר בשאלה
   // שאין לה מסך בממשק הזה.
   if (noDir && !isTrustedDir(workdir)) { try { trustDir(workdir); } catch (e) { dbg('nodir.trust.fail', { msg: e.message }); } }
-  // מצב GOD חי בשרת ולא ב-CLI: לשם נשלח ‎default‎, שיאלץ אותו לשאול על הכול,
-  // והתשובה "אשר" נכתבת כאן (ראו godApprove).
+  // מצב GOD חי בשרת ולא ב-CLI: לשם נשלח ‎manual‎, שיאלץ אותו לשאול על הכול,
+  // והתשובה "אשר" נכתבת כאן (ראו godApprove). ערך זר (force של Cursor, default
+  // הישן) ממופה כאן — אחרת ה-CLI נופל עם "argument is invalid" לפני תור ראשון.
   s.god = isGodMode(opts.permissionMode);
+  const permArg = cliPermMode(opts.permissionMode) || 'acceptEdits';
+  if (opts.permissionMode && opts.permissionMode !== permArg && !isGodMode(opts.permissionMode)) {
+    dbg('perm.remap', { convId: s.id, from: opts.permissionMode, to: permArg });
+  }
   const args = [
     '--print',
     '--input-format', 'stream-json',
@@ -2754,7 +2891,7 @@ function startChild(s, opts) {
     '--include-partial-messages',
     '--replay-user-messages',
     '--verbose',
-    '--permission-mode', cliPermMode(opts.permissionMode) || 'acceptEdits',
+    '--permission-mode', permArg,
     // אישור הרשאות אינטראקטיבי בתוך ה-UI — ה-CLI מפנה בקשות הרשאה כ-control_request
     // מסוג can_use_tool דרך אותו ערוץ stream-json, ואנחנו עונים ב-control_response.
     '--permission-prompt-tool', 'stdio',
@@ -3089,6 +3226,7 @@ function startChild(s, opts) {
 
 /** משגר תור אחד ל-CLI. משותף לשליחה ידנית, לשיגור מהתור ולהמשך אחרי מכסה. */
 function runTurn(s, msg, ws) {
+  applyLocalTurnExtras(msg);
   // רשת ביטחון: כל הודעה נושאת את הבוררים הנוכחיים, כך שגם אם השינוי לא
   // הגיע כ-set_model (מכשיר שהיה מנותק, לקוח ישן) הוא נתפס כאן.
   if (s.child) applyModelChange(s, msg.model, msg.effort);
@@ -3183,6 +3321,116 @@ function broadcastQueue(s) {
   saveResumeState();
 }
 
+/* ==========================================================================
+   הודעות מתוזמנות
+   --------------------------------------------------------------------------
+   כמו התור, הן יושבות בשרת: אפשר לסגור את החלון, וההודעה תצא באותו סשן
+   בשעה שנקבעה. כל פריט נושא טיימר משלו (דיוק של שניות, לא דקה), ובנוסף
+   יש משיכה כל כמה שניות למקרה שהמכונה ישנה ו-setTimeout נסחף.
+   ========================================================================== */
+
+function broadcastSchedules(s) {
+  const raw = JSON.stringify({ kind: 'schedules', convId: s.id, items: scheduleView(s.schedules) });
+  for (const ws of s.subs) if (ws.readyState === ws.OPEN) { try { ws.send(raw); } catch {} }
+  saveResumeState();
+}
+
+function disarmSchedule(item) {
+  if (!item || !item.timer) return;
+  clearTimeout(item.timer);
+  item.timer = null;
+}
+
+function disarmSchedules(s) {
+  for (const item of (s.schedules || [])) disarmSchedule(item);
+}
+
+function armSchedule(s, item) {
+  disarmSchedule(item);
+  const delay = Math.max(0, item.at - Date.now());
+  item.timer = setTimeout(() => fireSchedule(s, item.id), delay);
+  item.timer.unref?.();
+}
+
+function armAllSchedules(s) {
+  for (const item of (s.schedules || [])) armSchedule(s, item);
+}
+
+function fireSchedule(s, id) {
+  if (!s || !Array.isArray(s.schedules)) return;
+  const idx = s.schedules.findIndex((x) => x.id === id);
+  if (idx < 0) return;
+  const item = s.schedules.splice(idx, 1)[0];
+  disarmSchedule(item);
+  broadcastSchedules(s);
+  const msg = {
+    ...(item.msg || {}),
+    resumeSessionId: s.cliSessionId || (item.msg && item.msg.resumeSessionId) || null,
+    nonce: 'sch-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+  };
+  // תור חי / המתנה למכסה: נכנס לתור וירוץ אחריו, לא נזרק
+  if (s.running || s.limit || s.limitChecking) {
+    if (s.queue.length >= MAX_QUEUE) {
+      emit(s, { kind: 'error', text: 'התור מלא — ההודעה המתוזמנת לא נשלחה' });
+      return;
+    }
+    enqueueTurn(s, msg, null);
+  } else if (!runTurn(s, msg, null)) emit(s, { kind: 'error', text: 'שיגור ההודעה המתוזמנת נכשל' });
+}
+
+function addSchedule(s, msg, ws) {
+  if (s.duetRole) {
+    sendTo(ws, { kind: 'toast', text: 'אי אפשר לתזמן הודעה בתוך דואט', err: true });
+    return;
+  }
+  if ((s.schedules || []).length >= MAX_SCHEDULES) {
+    sendTo(ws, { kind: 'toast', text: `יש כבר ${MAX_SCHEDULES} הודעות מתוזמנות בשיחה הזו`, err: true });
+    return;
+  }
+  const built = buildScheduleItem(msg, { by: ws ? ws._device : null });
+  if (!built.ok) {
+    sendTo(ws, { kind: 'toast', text: built.error, err: true });
+    return;
+  }
+  if (!s.schedules) s.schedules = [];
+  s.schedules.push(built.item);
+  s.schedules.sort((a, b) => a.at - b.at);
+  s.lastUsed = Date.now();
+  if (ws) setPrimary(s, ws);
+  armSchedule(s, built.item);
+  broadcastSchedules(s);
+}
+
+function removeSchedule(s, id) {
+  if (!id || !Array.isArray(s.schedules)) return;
+  const next = [];
+  for (const item of s.schedules) {
+    if (item.id === id) disarmSchedule(item);
+    else next.push(item);
+  }
+  if (next.length === s.schedules.length) return;
+  s.schedules = next;
+  broadcastSchedules(s);
+}
+
+function clearSchedules(s) {
+  if (!s.schedules || !s.schedules.length) return;
+  disarmSchedules(s);
+  s.schedules = [];
+  broadcastSchedules(s);
+}
+
+function sweepSchedules() {
+  const now = Date.now();
+  for (const s of sessions.values()) {
+    if (!s.schedules || !s.schedules.length) continue;
+    for (const item of s.schedules.slice()) {
+      if (item.at <= now) fireSchedule(s, item.id);
+    }
+  }
+}
+setInterval(sweepSchedules, 5000).unref?.();
+
 function enqueueTurn(s, msg, ws) {
   if (!(msg.text || '').trim() && !(msg.images || []).length) return;
   if (s.queue.length >= MAX_QUEUE) {
@@ -3195,6 +3443,8 @@ function enqueueTurn(s, msg, ws) {
   if (msgOk !== msg) sendTo(ws, { kind: 'toast', text: 'התמונות לא נכנסו לתור — נשלח הטקסט בלבד', err: true });
   s.queue.push({ id: 'q' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), msg: msgOk, by: ws ? ws._device : null });
   s.lastUsed = Date.now();
+  // גם הוספה לתור היא פעולה מהמכשיר הזה — מעבירים אליו את כתיבת הדיסק
+  if (ws) setPrimary(s, ws);
   broadcastQueue(s);
   // הגיע פרומפט לתור בזמן שהשיחה כבר פנויה (מירוץ בין סיום התור לשליחה) —
   // מנקזים מיד כדי שהוא לא ייתקע שם עד ההודעה הבאה.
@@ -3424,13 +3674,14 @@ function saveResumeState() {
     for (const s of sessions.values()) {
       // צ'אט אנונימי לא שורד הפעלה מחדש של השרת — זו התכונה, לא התקלה.
       if (s.anon) continue;
-      if (!s.limit && !s.queue.length) continue;
+      if (!s.limit && !s.queue.length && !(s.schedules && s.schedules.length)) continue;
       out.push({
         convId: s.id,
         cliSessionId: s.cliSessionId,
         limit: s.limit,
         lastTurn: s.lastTurn,
         queue: s.queue.map((q) => ({ id: q.id, by: q.by, msg: stripImages(q.msg) })),
+        schedules: persistSchedules(s.schedules),
       });
     }
     if (!out.length) { try { fs.unlinkSync(RESUME_FILE); } catch {} return; }
@@ -3450,7 +3701,11 @@ function loadResumeState() {
     s.limit = rec.limit || null;
     s.lastTurn = rec.lastTurn || null;
     s.queue = Array.isArray(rec.queue) ? rec.queue.filter((q) => q && q.msg) : [];
+    s.schedules = Array.isArray(rec.schedules)
+      ? rec.schedules.filter((x) => x && x.msg && x.msg.text && Number(x.at) > 0)
+      : [];
     s.lastUsed = Date.now();
+    armAllSchedules(s);
   }
 }
 
@@ -3520,6 +3775,7 @@ function subscribe(ws, convId, sinceSeq) {
     dialogs: [...s.pendingDialogs].map(([id, d]) => ({ id, req: d.req })),
     // התור וההמתנה למכסה חיים בשרת, ולכן מכשיר שנפתח עכשיו רואה אותם מיד
     queue: queueView(s),
+    schedules: scheduleView(s.schedules),
     limit: s.limit ? { kind: s.limit.kind, resetsAt: s.limit.resetsAt, at: s.limit.at, text: s.limit.text } : null,
     // ניסיון חוזר שנמצא באוויר עכשיו. בלעדיו טלפון שמתחבר באמצע ניסיון חוזר
     // רואה תור "עובד" ששותק דקה שלמה, בלי לדעת שיש סיבה ושהיא מוכרת.
@@ -3622,7 +3878,10 @@ function handleConnection(ws, req) {
     if (!s) return;
 
     if (msg.type === 'user') {
-      runTurn(s, msg, ws);
+      // תור שכבר רץ: הודעת user שנייה (לחיצה כפולה שעברה את השער, או שני
+      // sockets) לא נכתבת ל-stdin באמצע — היא נכנסת לתור ותרוץ אחרי הסיום.
+      if (s.running || s.limit || s.limitChecking) enqueueTurn(s, msg, ws);
+      else runTurn(s, msg, ws);
 
     } else if (msg.type === 'queue_add') {
       enqueueTurn(s, msg, ws);
@@ -3635,6 +3894,15 @@ function handleConnection(ws, req) {
       if (!s.queue.length) return;
       s.queue = [];
       broadcastQueue(s);
+
+    } else if (msg.type === 'schedule_add') {
+      addSchedule(s, msg, ws);
+
+    } else if (msg.type === 'schedule_remove') {
+      removeSchedule(s, msg.id);
+
+    } else if (msg.type === 'schedule_clear') {
+      clearSchedules(s);
 
     } else if (msg.type === 'limit_resume_now') {
       // "המשך עכשיו" — המשתמש לא רוצה לחכות לשעון (למשל אחרי שדרוג תוכנית)
@@ -3668,7 +3936,13 @@ function handleConnection(ws, req) {
       s.god = isGodMode(msg.mode);
       if (s.god) godFlushPending(s);
       if (!s.child) return;
-      writeStdin(s, { type: 'control_request', request_id: 'spm-' + Date.now().toString(36), request: { subtype: 'set_permission_mode', mode: cliPermMode(msg.mode) } });
+      // Cursor מקבל את השמות שלו (force/ask/…). Claude מקבל רק מה ש-‎--help‎
+      // מכיר — אחרת בקשת הבקרה נדחית והתור הבא נופל בשיגור.
+      const mode = s.cliAgent === 'cursor' ? msg.mode : cliPermMode(msg.mode);
+      if (s.cliAgent !== 'cursor' && msg.mode !== mode && !isGodMode(msg.mode)) {
+        dbg('perm.remap', { convId: s.id, from: msg.mode, to: mode });
+      }
+      writeStdin(s, { type: 'control_request', request_id: 'spm-' + Date.now().toString(36), request: { subtype: 'set_permission_mode', mode } });
       emit(s, { kind: 'ui', field: 'permissionMode', value: msg.mode, by: ws._device });
 
     } else if (msg.type === 'set_model') {
@@ -3682,6 +3956,11 @@ function handleConnection(ws, req) {
       // מצב שאינו חלק מהתמליל (טיוטה, כותרת, תיקיית עבודה, מודל) — נשלח
       // למכשירים האחרים כדי שהמסכים יישארו זהים. לא נכנס ליומן ההשלמה.
       relayUi(s, ws, msg.field, msg.value);
+
+    } else if (msg.type === 'claim_primary') {
+      // מכשיר משני לוקח את כתיבת הדיסק בלי לשלוח הודעה — אחרת עריכה מהטלפון
+      // נשארת "תצוגה בלבד" עד שהמשתמש שולח משהו, וזה מרגיש כמו נעילה.
+      setPrimary(s, ws);
 
     } else if (msg.type === 'interrupt') {
       // עצירה ידנית מבטלת גם את השרשרת: אחרת "עצור" היה משגר מיד את הפרומפט

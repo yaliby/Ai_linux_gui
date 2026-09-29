@@ -31,6 +31,11 @@ t.section('חישוב החריץ הצר');
   const noMic = env.api.composeNarrowSlotPx(env.els.input);
   t.eq('בלי מיקרופון החריץ רחב ב-34+6', Math.round(noMic - withMic), 40);
   t.eq('וגם אז תואם את הפריסה', Math.round(noMic), Math.round(env.els.input.getBoundingClientRect().width));
+
+  env.els.sched.classList.add('hidden');
+  env.relayout();
+  const noSched = env.api.composeNarrowSlotPx(env.els.input);
+  t.eq('תזמון לא תופס מקום בחריץ הצר', Math.round(noSched), Math.round(noMic));
 }
 
 // ---------------------------------------------------------------------------

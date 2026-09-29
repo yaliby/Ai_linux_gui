@@ -67,6 +67,7 @@ function build({ fetchImpl, wsState = 1, busy0 = false }) {
     let subId = 'c1', activeId = 'c1', streamOwnerId = null, subSeq = 5;
     let live = true;
     let ws = { readyState: ${wsState}, OPEN: 1, close() { this.readyState = 3; } };
+    let awaitingServer = false;
     const pendingPerms = new Set();
     const dlog = (tag, data) => calls.dlog.push({ tag, data });
     const toast = (msg, err) => calls.toast.push({ msg, err });
@@ -77,6 +78,9 @@ function build({ fetchImpl, wsState = 1, busy0 = false }) {
     const subscribeActive = (force) => calls.subscribe.push({ force: !!force, subSeq });
     const onRemoteBusy = (v) => { busy = !!v; };
     const abandonTurn = () => { calls.abandon++; busy = false; };
+    const showAwaitServer = () => { calls.awaitShow = (calls.awaitShow || 0) + 1; awaitingServer = true; };
+    const hideAwaitServer = () => { calls.awaitHide = (calls.awaitHide || 0) + 1; awaitingServer = false; };
+    const closeTurnAfterServerBack = () => { calls.abandon++; awaitingServer = false; busy = false; };
     const reconcileFromDisk = async () => null;
     const reconcileFromSession = async () => null;
     const endAnon = () => {};

@@ -47,7 +47,7 @@ const stream = (event, seq) => evt({ type: 'stream_event', event }, seq);
 const reset = () => page.eval(`(async () => {
   const c = store.convs[0];
   c.messages = [{ role: 'user', text: 'בקשה' }];
-  c.loaded = true; live = null; streamOwnerId = null; busy = false;
+  c.loaded = true; live = null; streamOwnerId = null; busy = false; awaitingServer = false;
   if (typeof pendingPerms !== 'undefined') pendingPerms.clear();
   activeId = c.id; subId = c.id; renderConversation();
   await new Promise((r) => setTimeout(r, 80));
@@ -150,10 +150,72 @@ try {
   }
 
   // -------------------------------------------------------------------------
+  /* ניתוק באמצע כתיבה היה משאיר משפט קטוע בלי הסבר. עכשיו ההודעה נושאת
+     חיווי המתנה, ואם השרת עלה בלי התור — היא נסגרת עם כרטיס «השרת עלה מחדש». */
+  t.section('ניתוק באמצע תור: חיווי המתנה ואז סגירה');
+  {
+    await reset();
+    await feed([
+      { kind: 'busy', convId: CONV.id, running: true, seq: 1 },
+      stream({ type: 'message_start' }, 2),
+      stream({ type: 'content_block_start', index: 0, content_block: { type: 'text' } }, 3),
+      stream({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'התשובה באמצע' } }, 4),
+    ]);
+    const waiting = await page.eval(`(() => {
+      showAwaitServer();
+      const bar = document.querySelector('#log .await-server');
+      return {
+        banner: bar ? bar.textContent.replace(/\\s+/g, ' ').trim() : '',
+        awaiting: !!awaitingServer,
+        flag: !!(activeConv().messages.at(-1) || {}).awaiting,
+        wt: (document.getElementById('workingText') || {}).textContent || '',
+      };
+    })()`);
+    t.ok('יש חיווי על ההודעה', waiting.banner.includes('מחכה שהשרת יעלה'), waiting);
+    t.eq('הדגל דולק', waiting.awaiting, true);
+    t.eq('וההודעה מסומנת', waiting.flag, true);
+    t.ok('וגם פס העבודה', waiting.wt.includes('מחכה שהשרת יעלה'), waiting.wt);
+
+    const resumed = await page.eval(`(() => {
+      hideAwaitServer();
+      return {
+        awaiting: !!awaitingServer,
+        banner: !!document.querySelector('#log .await-server'),
+        text: [...document.querySelectorAll('#log .md')].map((e) => e.textContent).join(''),
+      };
+    })()`);
+    t.eq('הזרם שחזר מסיר את החיווי', resumed.awaiting, false);
+    t.eq('בלי באנר', resumed.banner, false);
+    t.ok('והטקסט נשאר', resumed.text.includes('התשובה באמצע'), resumed.text);
+
+    await page.eval('showAwaitServer()');
+    const sealed = await page.eval(`(() => {
+      closeTurnAfterServerBack();
+      const h = document.querySelector('#log .halt');
+      const last = activeConv().messages.at(-1);
+      return {
+        busy,
+        awaiting: !!awaitingServer,
+        banner: !!document.querySelector('#log .await-server'),
+        halt: h ? h.textContent.replace(/\\s+/g, ' ') : '',
+        reason: ((last.blocks || []).find((b) => b.type === 'halt') || {}).reason,
+      };
+    })()`);
+    t.eq('אחרי שהשרת עלה המסך משוחרר', sealed.busy, false);
+    t.eq('החיווי ירד', sealed.awaiting, false);
+    t.eq('בלי באנר המתנה', sealed.banner, false);
+    t.ok('יש כרטיס שהשרת עלה', sealed.halt.includes('השרת עלה מחדש'), sealed.halt);
+    t.eq('והוא נשמר בתמליל', sealed.reason, 'server_restart');
+    t.ok('עם כפתור המשך', sealed.halt.includes('המשך'), sealed.halt);
+  }
+
+  // -------------------------------------------------------------------------
   /* המקום שהכי קל לטעות בו. ‎running:false‎ *מתעלמים* ממנו במכוון, ומה
      שמסיים תור הוא ‎result‎ או ‎exit‎. מי שיראה רק את הראשון יסיק שיש באג. */
   t.section('מה באמת מסיים את התור');
   {
+    await reset();
+    await feed([{ kind: 'busy', convId: CONV.id, running: true, seq: 1 }]);
     await feed([{ kind: 'busy', convId: CONV.id, running: false, seq: 13 }]);
     t.eq('busy:false לבדו אינו מסיים', await page.eval('busy'), true);
 
@@ -173,6 +235,85 @@ try {
             usage: { input_tokens: 10, output_tokens: 20 } }, 7),
     ]);
     t.eq('result מסיים', await page.eval('busy'), false);
+  }
+
+  // -------------------------------------------------------------------------
+  t.section('GOD — כפתור חי תוך כדי תור');
+  {
+    await reset();
+    await feed([
+      { kind: 'busy', convId: CONV.id, running: true, seq: 1 },
+      stream({ type: 'message_start' }, 2),
+      { kind: 'god_allow', convId: CONV.id, seq: 3, entry: {
+        id: 'g1', tool: 'Bash', input: { command: 'ls -la /tmp/secret' }, desc: '', at: Date.now(),
+      } },
+    ]);
+    const before = await page.eval(`(() => {
+      const btn = document.getElementById('godLiveBtn');
+      const panel = document.getElementById('godLivePanel');
+      return {
+        busy,
+        n: godTurn.length,
+        btn: !!(btn && !btn.classList.contains('hidden')),
+        txt: btn ? btn.textContent.replace(/\\s+/g, ' ') : '',
+        panelHidden: !panel || panel.classList.contains('hidden'),
+      };
+    })()`);
+    t.eq('הכפתור מופיע אחרי אישור', before.btn, true);
+    t.ok('עם מספר הבקשות', /אחת|1/.test(before.txt), before.txt);
+    t.eq('הפאנל סגור עד שלוחצים', before.panelHidden, true);
+
+    await page.eval(`document.getElementById('godLiveBtn').click()`);
+    const open = await page.eval(`(() => {
+      const panel = document.getElementById('godLivePanel');
+      const btn = document.getElementById('godLiveBtn');
+      return {
+        open: !!(panel && !panel.classList.contains('hidden')),
+        expanded: btn && btn.getAttribute('aria-expanded') === 'true',
+        text: panel ? panel.textContent.replace(/\\s+/g, ' ') : '',
+      };
+    })()`);
+    t.eq('לחיצה פותחת את הפאנל', open.open, true);
+    t.eq('aria-expanded=true', open.expanded, true);
+    t.ok('רואים את הכלי', open.text.includes('Bash'), open.text);
+    t.ok('ואת הפקודה שאושרה', open.text.includes('ls -la /tmp/secret'), open.text);
+
+    await feed([{ kind: 'god_allow', convId: CONV.id, seq: 4, entry: {
+      id: 'g2', tool: 'Read', input: { file_path: '/etc/passwd' }, desc: '', at: Date.now(),
+    } }]);
+    const liveUp = await page.eval(`(() => {
+      const panel = document.getElementById('godLivePanel');
+      const btn = document.getElementById('godLiveBtn');
+      return {
+        n: godTurn.length,
+        btn: (btn && btn.textContent || '').replace(/\\s+/g, ' '),
+        text: panel ? panel.textContent.replace(/\\s+/g, ' ') : '',
+        rows: panel ? panel.querySelectorAll('.god-row').length : 0,
+      };
+    })()`);
+    t.eq('אישור שני מתעדכן בלייב', liveUp.rows, 2);
+    t.ok('הכפתור סופר שתיים', /2/.test(liveUp.btn), liveUp.btn);
+    t.ok('גם Read מופיע עם הנתיב', liveUp.text.includes('Read') && liveUp.text.includes('/etc/passwd'), liveUp.text);
+
+    await feed([
+      stream({ type: 'message_stop' }, 5),
+      evt({ type: 'result', subtype: 'success', duration_ms: 100, total_cost_usd: 0,
+            usage: { input_tokens: 1, output_tokens: 1 } }, 6),
+    ]);
+    const after = await page.eval(`(() => {
+      const btn = document.getElementById('godLiveBtn');
+      const panel = document.getElementById('godLivePanel');
+      const card = document.querySelector('#log .godlog');
+      return {
+        busy,
+        btnHidden: !btn || btn.classList.contains('hidden'),
+        panelHidden: !panel || panel.classList.contains('hidden'),
+        card: card ? card.textContent.replace(/\\s+/g, ' ') : '',
+      };
+    })()`);
+    t.eq('בסיום התור הכפתור החי נעלם', after.btnHidden, true);
+    t.eq('והפאנל נסגר', after.panelHidden, true);
+    t.ok('והכרטיס נשאר בתמליל', after.card.includes('Bash') && /2/.test(after.card), after.card);
   }
 
   // -------------------------------------------------------------------------

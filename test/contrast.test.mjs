@@ -162,6 +162,47 @@ try {
     t.ok('comment אינו #6a737d', got.comment !== 'rgb(106, 115, 125)', got);
   }
 
+  /* הממשק RTL והקוד LTR. inset-inline-end שם את «העתק» משמאל, מעל התו
+     הראשון. הבדיקה מודדת תיבות אמיתיות, לא את ה-CSS. */
+  t.section('כפתור העתק לא מכסה את הקוד');
+  {
+    const r = await page.eval(`(() => {
+      const wrap = document.querySelector('.code-wrap');
+      const btn = wrap && wrap.querySelector('.copy-btn');
+      const code = wrap && wrap.querySelector('code');
+      if (!wrap || !btn || !code) return { missing: true };
+      const hit = (a, b) => !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+      const br = btn.getBoundingClientRect();
+      const wr = wrap.getBoundingClientRect();
+      const cr = code.getBoundingClientRect();
+      let first = null;
+      const tw = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
+      let tn;
+      while ((tn = tw.nextNode())) {
+        const s = tn.nodeValue.search(/\\S/);
+        if (s >= 0) {
+          const range = document.createRange();
+          range.setStart(tn, s);
+          range.setEnd(tn, s + 1);
+          first = range.getBoundingClientRect();
+          break;
+        }
+      }
+      return {
+        missing: false,
+        htmlDir: document.documentElement.dir,
+        btnRightOfCenter: br.left > wr.left + wr.width / 2,
+        aboveText: br.bottom <= cr.top + 0.5,
+        hitsFirstChar: first ? hit(br, first) : null,
+      };
+    })()`);
+    t.ok('יש בלוק קוד עם כפתור', !r.missing, r);
+    t.eq('המסמך RTL', r.htmlDir, 'rtl');
+    t.ok('הכפתור בצד ימין הפיזי', r.btnRightOfCenter, r);
+    t.ok('הכפתור מעל הטקסט ולא עליו', r.aboveText, r);
+    t.eq('לא מכסה את התו הראשון', r.hitsFirstChar, false);
+  }
+
   t.section('בלי שגיאות');
   t.eq('הקונסולה נקייה', page.errors().map((e) => String(e.text).slice(0, 120)), []);
 } catch (e) {

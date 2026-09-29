@@ -171,14 +171,18 @@ t.section('קריאה אחת ל-CLI, גם במקביל');
   t.eq('שלוש קריאות במקביל → תהליך אחד', calls, 1);
   t.eq('וכולן קיבלו את אותה תשובה', [a === b, b === c], [true, true]);
   t.eq('שני השרתים מוזגו', a.servers.map((s) => s.name), ['a', 'cur']);
+  t.eq('Claude מסומן', a.servers[0].agent, 'claude');
   t.eq('ושל Cursor מסומן', a.servers[1].agent, 'cursor');
   t.eq('הפלט הגולמי נשמר', a.raw, 'a: u - ✔ Connected');
 
   await caps.mcpList();
   t.eq('בתוך התוקף — מהמטמון', calls, 1);
+  caps.forgetMcp();
+  await caps.mcpList();
+  t.eq('אחרי רישום — המטמון נזרק', calls, 2);
   clock += 31000;
   await caps.mcpList();
-  t.eq('אחרי שפג — קריאה חדשה', calls, 2);
+  t.eq('אחרי שפג — קריאה חדשה', calls, 3);
 
   // ה-CLI שאינו מותקן: ‎err‎ מלא ו-stdout ריק. עדיין רוצים את שרתי Cursor.
   const noCli = createAgentCaps({

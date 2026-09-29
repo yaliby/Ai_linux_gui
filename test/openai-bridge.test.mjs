@@ -7,11 +7,12 @@
  * מלא, ולא רק השוואת שדות.
  */
 import { createRequire } from 'node:module';
+import http from 'node:http';
 import { runner } from './harness.mjs';
 
 const require = createRequire(import.meta.url);
-const { _internal } = require('../openai-bridge.js');
-const { translateRequest, translateResponse, createStreamTranslator, parseSse } = _internal;
+const { loadProviders, createProvider, _internal } = require('../openai-bridge.js');
+const { translateRequest, translateResponse, createStreamTranslator, parseSse, resolveModelAlias, classifyProbeFailure, modelProbePriority } = _internal;
 
 const t = runner('גשר OpenAI ⇄ Anthropic');
 
@@ -182,6 +183,14 @@ t.section('תשובה יחידה: OpenAI → Anthropic');
   const d = translateResponse({ choices: [{ message: { content: [{ type: 'text', text: 'א' }, { type: 'text', text: 'ב' }] } }] }, 'm', 0);
   t.eq('חלקי טקסט מחוברים', d.content[0].text, 'אב');
 
+  // content כמערך מחרוזות / אובייקטים ללא type (סגנון Gemini)
+  const d2 = translateResponse({ choices: [{ message: { content: [{ text: 'שלום ' }, 'עולם'] } }] }, 'm', 0);
+  t.eq('חלקי טקסט של Gemini מחוברים', d2.content[0].text, 'שלום עולם');
+
+  // תגובה עם חשיבה בלבד מבטיחה בלוק טקסט (עבור פרוטוקול Anthropic)
+  const d3 = translateResponse({ choices: [{ message: { reasoning_content: 'חושב' } }] }, 'm', 0);
+  t.eq('תשובה עם חשיבה בלבד כוללת בלוק טקסט', d3.content.some((b) => b.type === 'text'), true);
+
   t.eq('length → max_tokens', translateResponse({ choices: [{ finish_reason: 'length', message: { content: 'x' } }] }, 'm', 0).stop_reason, 'max_tokens');
 }
 
@@ -274,6 +283,48 @@ t.section('זרם — מקרי קצה');
   tr.chunk(null); tr.chunk({}); tr.chunk({ choices: [] }); tr.chunk({ choices: [{}] });
   tr.end();
   t.eq('חבילות ריקות לא מפילות', validate(s.events), []);
+
+  // זרם עם חשיבה בלבד (Gemini שסיים את כל הטוקנים על חשיבה)
+  s = sink();
+  tr = createStreamTranslator(s.res, 'gemini-3.8-flash', 0);
+  tr.chunk({ choices: [{ delta: { reasoning_content: 'רעיון' } }] });
+  tr.chunk({ choices: [{ delta: {}, finish_reason: 'stop' }] });
+  tr.end();
+  t.eq('זרם חשיבה בלבד מייצר רצף תקין', validate(s.events), []);
+  t.eq('ונכלל בלוק טקסט תקין', s.events.some((e) => e.ev === 'content_block_start' && e.data.content_block.type === 'text'), true);
+
+  // chunk עם תוכן במערך (סגנון Gemini)
+  s = sink();
+  tr = createStreamTranslator(s.res, 'gemini-3.8-flash', 0);
+  tr.chunk({ choices: [{ delta: { content: [{ text: 'שלום' }] } }] });
+  tr.end();
+  t.eq('תוכן מערך בזרם נפרס לטקסט', s.events.some((e) => e.ev === 'content_block_delta' && e.data.delta.text === 'שלום'), true);
+}
+
+// ---------------------------------------------------------------------------
+t.section('מיפוי מודלי Gemini שהוצאו משימוש (404)');
+{
+  t.eq('gemini-2.5-flash ממופה ל-3.8-flash', resolveModelAlias('gemini-2.5-flash'), 'gemini-3.8-flash');
+  t.eq('gemini/gemini-2.5-pro ממופה ל-3.1-pro-preview', resolveModelAlias('gemini/gemini-2.5-pro'), 'gemini/gemini-3.1-pro-preview');
+  t.eq('gemini-2.5-flash-lite ממופה ל-3.5-flash-lite', resolveModelAlias('gemini-2.5-flash-lite'), 'gemini-3.5-flash-lite');
+  t.eq('tllm/gemini_2_5_pro ממופה ל-tllm/gemini_3_pro', resolveModelAlias('tllm/gemini_2_5_pro'), 'tllm/gemini_3_pro');
+  t.eq('מודל פעיל לא משתנה', resolveModelAlias('gemini-3.8-flash'), 'gemini-3.8-flash');
+}
+
+// ---------------------------------------------------------------------------
+t.section('טעינת ספקים: GEMINI_API_KEY');
+{
+  const origKey = process.env.GEMINI_API_KEY;
+  try {
+    process.env.GEMINI_API_KEY = 'test-gemini-key';
+    const providers = loadProviders();
+    const gem = providers.find((p) => p.id === 'gemini');
+    t.ok('ספק Gemini נטען כשיש מפתח', !!gem);
+    t.eq('תחילית הספק', gem && gem.PREFIX, 'gemini/');
+  } finally {
+    if (origKey !== undefined) process.env.GEMINI_API_KEY = origKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -336,5 +387,256 @@ t.section('ריווח בדיקת זמינות של ספק');
   t.ok('ביממה מול ספק נעדר: לפחות פי 20 פחות בדיקות', before / after >= 20, { before, after });
   t.ok('ובכל זאת נבדק לפחות פעם ברבע שעה', 86400000 / after >= PROBE.ABSENT_MAX * 0.9, { after });
 }
+
+// ---------------------------------------------------------------------------
+t.section('סיווג כשל של בדיקת מודל');
+{
+  t.eq('404 הוא קשיח', classifyProbeFailure(404, 'no longer available to new users'), 'hard');
+  t.eq('כלי לא נתמך הוא קשיח', classifyProbeFailure(400, 'tools not supported'), 'hard');
+  t.eq('CLI חסר הוא קשיח גם על 502', classifyProbeFailure(502, 'Auggie CLI not found in container'), 'hard');
+  t.eq('נתיב לא מוחלט הוא קשיח', classifyProbeFailure(500, 'DEVIN_AGENTIC_HOME must be absolute path'), 'hard');
+  t.eq('ENOENT הוא קשיח', classifyProbeFailure(502, 'spawn zcode ENOENT'), 'hard');
+  t.eq('403 הוא קשיח', classifyProbeFailure(403, 'free tier only'), 'hard');
+  t.eq('429 הוא רך', classifyProbeFailure(429, 'quota exceeded'), 'soft');
+  t.eq('503 הוא רך', classifyProbeFailure(503, 'high demand'), 'soft');
+  t.eq('דחיית max_tokens היא רכה', classifyProbeFailure(400, 'Unsupported parameter: max_tokens'), 'soft');
+  t.eq('פסק זמן בלי סטטוס הוא רך', classifyProbeFailure(0, 'OmniRoute timeout'), 'soft');
+  t.eq('auto נבדק אחרון', modelProbePriority('auto/best-coding'), 2);
+  t.eq('תמונה אחרי מודלי שיחה', modelProbePriority('aihorde/Qwen-Image'), 1);
+  t.eq('מודל רגיל ראשון', modelProbePriority('gpt/gpt-5'), 0);
+}
+
+function readReq(req) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8');
+      try { resolve(raw ? JSON.parse(raw) : {}); } catch { resolve({}); }
+    });
+  });
+}
+function sendJson(res, code, obj) {
+  const body = JSON.stringify(obj);
+  res.writeHead(code, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) });
+  res.end(body);
+}
+const completion = (text) => ({ id: 'cmpl', choices: [{ finish_reason: 'stop', message: { content: text } }] });
+
+/**
+ * שרת OpenAI מזויף: רשימה מעורבת, ותשובת צ׳אט לפי מזהה.
+ * `delayMs` מעכב את התשובה כדי לוודא ששליפת הרשימה לא מחכה לבדיקות.
+ */
+function startFake() {
+  const state = { delayMs: 0, probes: [], override: new Map() };
+  const server = http.createServer(async (req, res) => {
+    const url = (req.url || '').split('?')[0];
+    if (req.method === 'GET' && url.endsWith('/models')) {
+      return sendJson(res, 200, { data: [
+        { id: 'good/m', capabilities: { tool_calling: true } },
+        { id: 'gone/m', capabilities: { tool_calling: true } },
+        { id: 'rate/m', capabilities: { tool_calling: true } },
+        { id: 'cli/m', capabilities: { tool_calling: true } },
+        { id: 'busy/m', capabilities: { tool_calling: true } },
+        { id: 'tools/m', capabilities: { tool_calling: true } },
+        { id: 'bare/m', capabilities: { tool_calling: true } },
+        { id: 'auto/fast', capabilities: { tool_calling: true } },
+        { id: 'embed/m', capabilities: { tool_calling: true } },
+        { id: 'notool/m', capabilities: { tool_calling: false } },
+      ] });
+    }
+    if (req.method === 'POST' && url.endsWith('/chat/completions')) {
+      const body = await readReq(req);
+      if (body.messages && body.messages[0] && body.messages[0].content === 'ping') state.probes.push(body);
+      if (state.delayMs) await new Promise((r) => setTimeout(r, state.delayMs));
+      const id = body.model;
+      const fail = (code, message) => sendJson(res, code, { error: { message } });
+      const over = state.override.get(id);
+      if (over === 200) return sendJson(res, 200, completion('pong'));
+      if (over && over.status) return fail(over.status, over.message || 'error');
+      if (id === 'gone/m') return fail(404, 'gemini-2.5 is no longer available to new users');
+      if (id === 'rate/m') return fail(429, 'quota exceeded');
+      if (id === 'cli/m') return fail(502, 'Auggie CLI not found in container');
+      if (id === 'busy/m') return fail(503, 'high demand');
+      if (id === 'tools/m') return fail(400, 'tools not supported');
+      if (id === 'bare/m' && body.max_tokens != null) return fail(400, 'Unsupported parameter: max_tokens');
+      if (id === 'good/m' || id === 'bare/m' || id === 'auto/fast') return sendJson(res, 200, completion('pong'));
+      return fail(500, 'unknown');
+    }
+    res.writeHead(404); res.end();
+  });
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      resolve({
+        state,
+        baseUrl: `http://127.0.0.1:${port}/v1`,
+        close: () => new Promise((r) => server.close(() => r())),
+      });
+    });
+  });
+}
+
+function sortedIds(p) {
+  return p.getModels().map((m) => m.id).sort();
+}
+
+await (async () => {
+  t.section('סינון מודלים לפי בריאות');
+  const fake = await startFake();
+  const bridges = [];
+  let clock = 5_000_000;
+  const healthOf = (extra) => ({
+    enabled: true,
+    auto: false,
+    now: () => clock,
+    graceMs: 0,
+    concurrency: 4,
+    probeTimeoutMs: 2000,
+    healthyTtlMs: 100000,
+    coolingTtlMs: 5000,
+    unhealthyTtlMs: 20000,
+    trustMs: 8000,
+    tickMs: 60 * 60 * 1000,
+    ...extra,
+  });
+  const make = (health) => createProvider({
+    id: 'omniroute', label: 'OmniRoute', baseUrl: fake.baseUrl, apiKey: 'test',
+    prefix: 'omniroute/', groupOf: () => 'OmniRoute', health,
+  });
+  try {
+    const offEnv = process.env.OMNIROUTE_HEALTH_PROBE;
+    process.env.OMNIROUTE_HEALTH_PROBE = '0';
+    try {
+      const off = make(undefined);
+      const listed = await off.fetchModels();
+      t.eq('בלי בדיקות הרשימה השמישה שלמה', listed && listed.length, 8);
+      t.eq('והתפריט מציג את כולה', off.getModels().length, 8);
+      t.eq('הטמעה לא נכנסת', off.hasModel('omniroute/embed/m'), false);
+      t.eq('בלי tool_calling לא נכנס', off.hasModel('omniroute/notool/m'), false);
+    } finally {
+      if (offEnv === undefined) delete process.env.OMNIROUTE_HEALTH_PROBE;
+      else process.env.OMNIROUTE_HEALTH_PROBE = offEnv;
+    }
+
+    const p = make(healthOf());
+    await p.fetchModels();
+    t.eq('בלי חלון חסד אין עדיין מה להציג', p.getModels().length, 0);
+    t.eq('אבל הניתוב עדיין מכיר מודל מהרשימה', p.hasModel('omniroute/gone/m'), true);
+    await p.probeHealth();
+    t.eq('בתפריט רק מי שענה', sortedIds(p), ['omniroute/auto/fast', 'omniroute/bare/m', 'omniroute/good/m']);
+    t.eq('מודל שנעלם לא מוצע', p.getModels().some((m) => m.id === 'omniroute/gone/m'), false);
+    t.eq('429 לא מוצע', p.getModels().some((m) => m.id === 'omniroute/rate/m'), false);
+    t.eq('503 לא מוצע', p.getModels().some((m) => m.id === 'omniroute/busy/m'), false);
+    t.eq('CLI חסר לא מוצע', p.getModels().some((m) => m.id === 'omniroute/cli/m'), false);
+    t.eq('כלים לא נתמכים לא מוצעים', p.getModels().some((m) => m.id === 'omniroute/tools/m'), false);
+    t.ok('הבדיקה קצרה ובלי סכמת כלים', fake.state.probes.length > 0 && fake.state.probes.every((b) => !b.tools && JSON.stringify(b).length < 400), fake.state.probes[0]);
+    t.ok('דחיית max_tokens נוסתה שוב בלי השדה', fake.state.probes.some((b) => b.model === 'bare/m' && b.max_tokens == null));
+
+    const rateAt = clock;
+    fake.state.override.set('rate/m', 200);
+    clock = rateAt + 4999;
+    await p.probeHealth();
+    t.eq('עוד בתוך ה-TTL הרך המודל לא חוזר', p.getModels().some((m) => m.id === 'omniroute/rate/m'), false);
+    clock = rateAt + 5001;
+    await p.probeHealth();
+    t.ok('אחרי התקררות מודל שהחלים חוזר', p.getModels().some((m) => m.id === 'omniroute/rate/m'));
+    fake.state.override.delete('rate/m');
+
+    fake.state.override.set('gone/m', 200);
+    clock = rateAt + 5001;
+    await p.probeHealth();
+    t.eq('כשל קשיח לא חוזר ב-TTL הקצר', p.getModels().some((m) => m.id === 'omniroute/gone/m'), false);
+    t.eq('CLI חסר גם הוא ממתין ל-TTL הארוך', p.getModels().some((m) => m.id === 'omniroute/cli/m'), false);
+    clock = rateAt + 20001;
+    await p.probeHealth();
+    t.ok('אחרי ה-TTL הארוך 404 שהחלים חוזר', p.getModels().some((m) => m.id === 'omniroute/gone/m'));
+    fake.state.override.delete('gone/m');
+
+    const grace = make(healthOf({ graceMs: 60000 }));
+    clock = 8_000_000;
+    await grace.fetchModels();
+    t.ok('בחלון החסד מוצג גם מי שטרם נבדק', grace.getModels().some((m) => m.id === 'omniroute/gone/m'));
+    await grace.probeHealth();
+    t.eq('תוצאה קשיחה מסירה אותו גם בתוך החלון', grace.getModels().some((m) => m.id === 'omniroute/gone/m'), false);
+    t.ok('ותקין נשאר', grace.getModels().some((m) => m.id === 'omniroute/good/m'));
+
+    const turn = make(healthOf());
+    clock = 9_000_000;
+    await turn.fetchModels();
+    await turn.probeHealth();
+    const bridge = await turn.startBridge();
+    bridges.push(bridge);
+    const postTurn = (model) => fetch(bridge.url + '/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': bridge.token },
+      body: JSON.stringify({ model, max_tokens: 8, messages: [{ role: 'user', content: 'hi' }] }),
+    });
+
+    const cooled = make(healthOf());
+    clock = 10_000_000;
+    await cooled.fetchModels();
+    await cooled.probeHealth();
+    t.eq('429 אחרי בדיקה לא בתפריט', cooled.getModels().some((m) => m.id === 'omniroute/rate/m'), false);
+    fake.state.override.set('rate/m', 200);
+    const bridge2 = await cooled.startBridge();
+    bridges.push(bridge2);
+    const okTurn = await fetch(bridge2.url + '/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': bridge2.token },
+      body: JSON.stringify({ model: 'omniroute/rate/m', max_tokens: 8, messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    t.eq('תור אמיתי שהצליח', okTurn.status, 200);
+    t.ok('מחזיר את המודל לתפריט בלי לחכות לבדיקה', cooled.getModels().some((m) => m.id === 'omniroute/rate/m'));
+    fake.state.override.delete('rate/m');
+
+    fake.state.override.set('good/m', { status: 404, message: 'no longer available to new users' });
+    const broken = await postTurn('omniroute/good/m');
+    t.eq('תור שנכשל ב-404', broken.status, 404);
+    t.eq('יורד מהתפריט בלי אתחול', turn.getModels().some((m) => m.id === 'omniroute/good/m'), false);
+    t.eq('אבל שיחה קיימת עדיין מנותבת אליו', turn.hasModel('omniroute/good/m'), true);
+    fake.state.override.delete('good/m');
+
+    const trusted = make(healthOf({ healthyTtlMs: 1000, trustMs: 8000 }));
+    clock = 11_000_000;
+    fake.state.override.set('busy/m', 200);
+    await trusted.fetchModels();
+    await trusted.probeHealth();
+    t.ok('אחרי הצלחה זמנית המודל בתפריט', trusted.getModels().some((m) => m.id === 'omniroute/busy/m'));
+    const bridge3 = await trusted.startBridge();
+    bridges.push(bridge3);
+    const trustRes = await fetch(bridge3.url + '/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': bridge3.token },
+      body: JSON.stringify({ model: 'omniroute/busy/m', max_tokens: 8, messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    t.eq('תור מוצלח לפני כשל רך', trustRes.status, 200);
+    fake.state.override.delete('busy/m');
+    clock = 11_000_000 + 1001;
+    await trusted.probeHealth();
+    t.ok('כשל רך של בדיקה לא מוחק תור שהצליח', trusted.getModels().some((m) => m.id === 'omniroute/busy/m'));
+    clock = 11_000_000 + 8001;
+    await trusted.probeHealth();
+    t.eq('אחרי חלון האמון בדיקה רכה כן מקררת', trusted.getModels().some((m) => m.id === 'omniroute/busy/m'), false);
+
+    fake.state.delayMs = 400;
+    const slow = make(healthOf({ auto: true, graceMs: 0 }));
+    const t0 = Date.now();
+    const listed = await slow.fetchModels();
+    const elapsed = Date.now() - t0;
+    t.ok('שליפת הרשימה לא ממתינה לבדיקות', elapsed < 300, elapsed);
+    t.eq('הרשימה עצמה מלאה', listed && listed.length, 8);
+    t.eq('בלי חסד ובלי תוצאה התפריט ריק', slow.getModels().length, 0);
+    await slow.probeHealth();
+    t.ok('אחרי שהבדיקות חוזרות מופיע מודל תקין', slow.getModels().some((m) => m.id === 'omniroute/good/m'));
+    fake.state.delayMs = 0;
+  } finally {
+    for (const b of bridges) { try { await new Promise((r) => b.server.close(r)); } catch {} }
+    await fake.close();
+  }
+})().catch((e) => {
+  console.error(e);
+  process.exitCode = 1;
+});
 
 t.done();
