@@ -10,7 +10,8 @@
     "omni:restart": "docker compose restart omniroute",
     "omni:logs": "docker compose logs -f omniroute",
     "omni:status": "docker compose ps",
-    "dev:all": "npm run omni:up || echo \"\\n  ⚠ OmniRoute לא עלה — הממשק ימשיך בלעדיו\\n\"; node server.js"
+    "dev:all": "npm run omni:up || echo \"\\n  ⚠ OmniRoute לא עלה — הממשק ימשיך בלעדיו\\n\"; node server.js",
+    "test": "node test/openai-bridge.test.mjs"
   },
   "dependencies": {
     "@highlightjs/cdn-assets": "^11.10.0",
