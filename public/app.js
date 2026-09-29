@@ -3404,6 +3404,7 @@ function attachModelSearch(sel) {
 
 function openModelPicker(sel) {
   mpState = { sel, cur: sel.value, items: [], idx: 0 };
+  refreshModelList();
   $('modelPicker').classList.remove('hidden');
   const inp = $('modelPickerInput');
   inp.value = '';
@@ -3540,6 +3541,10 @@ $('modelPicker').addEventListener('click', (e) => { if (e.target === $('modelPic
 
 async function loadConfig() {
   try { const r = await fetch('/api/config'); if (r.ok) CONFIG = await r.json(); } catch {}
+  modelListSig = modelListSignature(CONFIG.models);
+  if (!loadConfig._watch) {
+    loadConfig._watch = setInterval(() => { refreshModelList(); }, 12000);
+  }
   // הכפתור נדלק רק כשה-CLI שמותקן כאן באמת יודע לרוץ בלי לשמור סשן
   anonAvailable = !!(CONFIG && CONFIG.anonymous);
   const nav = $('newAnon');
@@ -3552,11 +3557,48 @@ async function loadConfig() {
   populateModels(); populatePerms(); updateEfforts(); updateStatusbar();
 }
 function populateModels() {
-  const sel = $('model'); const cur = store.settings.model || '';
+  const sel = $('model');
+  const cur = sel.value || store.settings.model || '';
   sel.innerHTML = ''; sel.appendChild(opt('', 'מודל ברירת מחדל'));
   fillModelOptions(sel);
   keepValue(sel, cur, '');
+  // מודל שכבר נבחר ויצא מהרשימה הבריאה נשאר מסומן — לא מחליפים שיחה פעילה
+  // בשקט — אבל הוא לא חוזר לרשימה לבחירה מחדש.
+  if (cur && sel.value !== cur) {
+    sel.appendChild(opt(cur, leafId(cur) || cur));
+    sel.value = cur;
+  }
   attachModelSearch(sel);   // גם משתיל את כפתור החיפוש וגם מרענן את התווית
+}
+let modelListSig = '';
+function modelListSignature(models) {
+  return (models || []).map((m) => m.id).join('\n');
+}
+/** הרשימה בשרת משתנה ברקע (בריאות, ספק שעלה). בלי הרענון הזה הבורר נשאר על מה שנטען בעלייה. */
+async function refreshModelList() {
+  try {
+    const r = await fetch('/api/config');
+    if (!r.ok) return;
+    const next = await r.json();
+    const sig = modelListSignature(next.models);
+    CONFIG = next;
+    if (sig === modelListSig) return;
+    modelListSig = sig;
+    populateModels();
+    document.querySelectorAll('select.dt-model-sel').forEach((sel) => {
+      const cur = sel.value;
+      sel.innerHTML = '';
+      sel.appendChild(opt('', 'מודל ברירת מחדל'));
+      fillModelOptions(sel);
+      keepValue(sel, cur, '');
+      if (cur && sel.value !== cur) {
+        sel.appendChild(opt(cur, leafId(cur) || cur));
+        sel.value = cur;
+      }
+      if (sel._mpSync) sel._mpSync();
+    });
+    if (mpState) buildModelPicker(($('modelPickerInput') && $('modelPickerInput').value) || '');
+  } catch { /* הרשת המקומית מהבהבת — הרשימה הקודמת נשארת */ }
 }
 function modelEfforts() {
   const m = CONFIG.models.find(x => x.id === $('model').value);
