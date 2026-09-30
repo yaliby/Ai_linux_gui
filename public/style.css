@@ -2889,6 +2889,20 @@ body.anon-mode .composer-card {
 /* ----- רשימת תזמונים מרכזית ----- */
 .sched-central { display: grid; gap: 8px; }
 .sched-central .modal-note { margin-bottom: 4px; }
+.sch-section { display: grid; gap: 8px; margin-top: 4px; }
+.sch-section + .sch-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-soft); }
+.sch-section-h {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  letter-spacing: 0.01em;
+}
+.sch-section-h-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sch-clear-hist {
+  font-family: inherit; font-size: 12px; font-weight: 550;
+  padding: 5px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--text-dim);
+}
+.sch-clear-hist:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.sch-row.sch-hist { opacity: 0.92; }
 .sch-row {
   display: flex; align-items: flex-start; gap: 12px;
   padding: 11px 12px; border: 1px solid var(--border-soft); border-radius: 12px;

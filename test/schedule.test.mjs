@@ -9,8 +9,10 @@ import { runner } from './harness.mjs';
 const require = createRequire(import.meta.url);
 const {
   MAX_SCHEDULES, MIN_LEAD_MS, MAX_LEAD_MS,
+  MAX_HISTORY_GLOBAL, MAX_HISTORY_PER_CONV,
   KIND_LIMIT_RESUME, LIMIT_RESUME_ID, isLimitResume, promptOnly,
   validateSchedule, buildItem, buildLimitResumeItem, scheduleView, persistShape, dueItems,
+  buildHistoryEntry, appendHistory, historyView,
 } = require('../lib/schedule.js');
 
 const t = runner('הודעות מתוזמנות');
@@ -85,6 +87,48 @@ t.section('limit_resume כתזמון');
   t.eq('שעה בעבר מותרת להמשך־מכסה', past.ok, true);
 }
 
+t.section('היסטוריית תזמונים');
+{
+  const now = Date.now();
+  const built = buildItem({ text: 'בדוק', at: now + 60_000 }, {}, now);
+  const entry = buildHistoryEntry(built.item, {
+    firedAt: now + 60_000, convId: 'c1', title: 'שיחה א', outcome: 'ok',
+  });
+  t.eq('רשומה עם outcome', entry.outcome, 'ok');
+  t.eq('שומרת convId', entry.convId, 'c1');
+  t.eq('שומרת kind', entry.kind, 'prompt');
+
+  let hist = [];
+  hist = appendHistory(hist, entry);
+  t.eq('נוסף לרשימה', hist.length, 1);
+
+  const queued = buildHistoryEntry(built.item, {
+    firedAt: now + 61_000, convId: 'c1', title: 'שיחה א', outcome: 'queued',
+  });
+  hist = appendHistory(hist, queued);
+  t.eq('חדש בראש', hist[0].outcome, 'queued');
+  t.eq('שניים באותה שיחה', hist.length, 2);
+
+  // תקרה לכל שיחה
+  for (let i = 0; i < MAX_HISTORY_PER_CONV + 5; i++) {
+    hist = appendHistory(hist, buildHistoryEntry(built.item, {
+      firedAt: now + i, convId: 'c1', title: 'א', outcome: 'ok', id: 'x' + i,
+    }));
+  }
+  t.ok('תקרה לשיחה', hist.filter((e) => e.convId === 'c1').length <= MAX_HISTORY_PER_CONV);
+
+  // תקרה גלובלית
+  hist = [];
+  for (let i = 0; i < MAX_HISTORY_GLOBAL + 10; i++) {
+    hist = appendHistory(hist, buildHistoryEntry(built.item, {
+      firedAt: now + i, convId: 'c' + i, title: 't', outcome: 'ok', id: 'g' + i,
+    }));
+  }
+  t.eq('תקרה גלובלית', hist.length, MAX_HISTORY_GLOBAL);
+  t.eq('historyView שומר שדות', Object.keys(historyView(hist)[0]).sort().join(),
+    'at,convId,firedAt,id,kind,outcome,text,title');
+}
+
 t.section('השרת משגר ומשמר');
 
 {
@@ -103,7 +147,12 @@ t.section('השרת משגר ומשמר');
   t.ok('API רשימה מרכזית', /app\.get\('\/api\/schedules'/.test(srv));
   t.ok('API ביטול', /app\.post\('\/api\/schedules\/cancel'/.test(srv));
   t.ok('API הרץ עכשיו', /app\.post\('\/api\/schedules\/run-now'/.test(srv));
+  t.ok('API מנקה היסטוריה', /app\.post\('\/api\/schedules\/clear-history'/.test(srv));
+  t.ok('תשובה עם pending+history', /schedulesPayload\(\)/.test(srv) && /pending/.test(srv) && /history/.test(srv));
+  t.ok('fireSchedule רושם היסטוריה', /recordScheduleFire\(s, item/.test(srv));
+  t.ok('קובץ היסטוריה', /schedules-history\.json/.test(srv));
   t.ok('שחזור לא מאבד תזמונים ליד מכסה ישנה', /התור והתזמונים האחרים כן/.test(srv));
+  t.ok('דדופ limit_resume', /seenLr|synthetic/.test(srv));
 }
 
 t.section('הממשק');
@@ -123,6 +172,11 @@ t.section('הממשק');
   t.ok('פאנל מרכזי', /function openAllSchedules\(/.test(app));
   t.ok('מסתיר limit_resume מהרצועה', /kind !== 'limit_resume'/.test(app));
   t.ok('פעולה בלוח הפקודות לרשימה', /משימות מתוזמנות — כל השיחות/.test(app));
+  t.ok('מחלק ממתינות/רצו', /ממתינות/.test(app) && /שכבר רצו/.test(app));
+  t.ok('normalizeSchedulesPayload', /function normalizeSchedulesPayload\(/.test(app));
+  t.ok('paint מקבל pending+history', /normalizeSchedulesPayload\(data\)/.test(app));
+  t.ok('ניקוי היסטוריה בממשק', /clear-history/.test(app));
+  t.ok('כותרות סעיפים ב-CSS', /sch-section-h/.test(css));
 }
 
 import { findBrowser, launch, newPage, startServer, freePort } from './browser.mjs';
