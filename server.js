@@ -40,7 +40,10 @@ const {
 const { inspectBash } = require('./lib/bash-guard');
 const { resetReplaySince } = require('./lib/subscribe-replay');
 const {
-  MAX_SCHEDULES, buildItem: buildScheduleItem, scheduleView, persistShape: persistSchedules,
+  MAX_SCHEDULES, buildItem: buildScheduleItem, buildLimitResumeItem,
+  scheduleView, persistShape: persistSchedules,
+  KIND_LIMIT_RESUME, LIMIT_RESUME_ID, isLimitResume, promptOnly,
+  buildHistoryEntry, appendHistory, historyView, persistHistory,
 } = require('./lib/schedule');
 
 // הגדרות הספק המקומי נשמרות בדיסק, נפרדות מ-.env — כדי שאפשר יהיה לשנות
@@ -3590,7 +3593,8 @@ function disarmSchedules(s) {
 
 function armSchedule(s, item) {
   disarmSchedule(item);
-  const delay = Math.max(0, item.at - Date.now());
+  // setTimeout נחתך מעל ~24.8 יום; משיכת sweepSchedules תתפוס את השאר.
+  const delay = Math.min(Math.max(0, item.at - Date.now()), 0x7fffffff);
   item.timer = setTimeout(() => fireSchedule(s, item.id), delay);
   item.timer.unref?.();
 }
@@ -3606,6 +3610,18 @@ function fireSchedule(s, id) {
   const item = s.schedules.splice(idx, 1)[0];
   disarmSchedule(item);
   broadcastSchedules(s);
+  // המשך אחרי מכסה: לא פרומפט חדש — אותה לוגיקה של resumeAfterLimit.
+  // חשוב לטפל בזה *לפני* בדיקת s.limit, אחרת הפריט היה נכנס לתור כהודעה.
+  if (isLimitResume(item)) {
+    let outcome = 'error';
+    if (s.limit) {
+      // skipHistory: כבר ספלסנו את הפריט — רושמים היסטוריה כאן
+      const ok = resumeAfterLimit(s, false, { skipHistory: true });
+      outcome = ok ? 'ok' : 'error';
+    }
+    recordScheduleFire(s, item, outcome);
+    return;
+  }
   const msg = {
     ...(item.msg || {}),
     resumeSessionId: s.cliSessionId || (item.msg && item.msg.resumeSessionId) || null,
@@ -3615,10 +3631,17 @@ function fireSchedule(s, id) {
   if (s.running || s.limit || s.limitChecking) {
     if (s.queue.length >= MAX_QUEUE) {
       emit(s, { kind: 'error', text: 'התור מלא — ההודעה המתוזמנת לא נשלחה' });
+      recordScheduleFire(s, item, 'error');
       return;
     }
     enqueueTurn(s, msg, null);
-  } else if (!runTurn(s, msg, null)) emit(s, { kind: 'error', text: 'שיגור ההודעה המתוזמנת נכשל' });
+    recordScheduleFire(s, item, 'queued');
+  } else if (!runTurn(s, msg, null)) {
+    emit(s, { kind: 'error', text: 'שיגור ההודעה המתוזמנת נכשל' });
+    recordScheduleFire(s, item, 'error');
+  } else {
+    recordScheduleFire(s, item, 'ok');
+  }
 }
 
 function addSchedule(s, msg, ws) {
@@ -3626,7 +3649,8 @@ function addSchedule(s, msg, ws) {
     sendTo(ws, { kind: 'toast', text: 'אי אפשר לתזמן הודעה בתוך דואט', err: true });
     return;
   }
-  if ((s.schedules || []).length >= MAX_SCHEDULES) {
+  // limit_resume לא נספר במכסת הפרומפטים שהמשתמש מתזמן
+  if (promptOnly(s.schedules).length >= MAX_SCHEDULES) {
     sendTo(ws, { kind: 'toast', text: `יש כבר ${MAX_SCHEDULES} הודעות מתוזמנות בשיחה הזו`, err: true });
     return;
   }
@@ -3647,20 +3671,118 @@ function addSchedule(s, msg, ws) {
 function removeSchedule(s, id) {
   if (!id || !Array.isArray(s.schedules)) return;
   const next = [];
+  let removed = null;
   for (const item of s.schedules) {
-    if (item.id === id) disarmSchedule(item);
+    if (item.id === id) { disarmSchedule(item); removed = item; }
     else next.push(item);
   }
-  if (next.length === s.schedules.length) return;
+  if (!removed) return;
   s.schedules = next;
+  // ביטול תזמון limit_resume מהממשק = ביטול ההמשך האוטומטי
+  if (isLimitResume(removed) && s.limit) {
+    s.limit = null;
+    broadcastLimit(s);
+  }
   broadcastSchedules(s);
 }
 
 function clearSchedules(s) {
   if (!s.schedules || !s.schedules.length) return;
-  disarmSchedules(s);
-  s.schedules = [];
+  // מבטל רק פרומפטים מתוזמנים — משימת limit_resume נשארת עד ביטול/המשך מפורש
+  const keep = [];
+  let removed = 0;
+  for (const item of s.schedules) {
+    if (isLimitResume(item)) keep.push(item);
+    else { disarmSchedule(item); removed++; }
+  }
+  if (!removed) return;
+  s.schedules = keep;
   broadcastSchedules(s);
+}
+
+// קבועי המשך־מכסה — לפני upsert/load שמשתמשים בהם בגוף הפונקציות
+const RESUME_GRACE_MS = 45 * 1000;          // רגע אחרי האיפוס, לא בדיוק עליו
+const RESUME_MAX_WAIT_MS = 6 * 60 * 60 * 1000; // חלון סשן ארוך מזה = לא סשן
+const RESUME_FILE = path.join(STORE_DIR, 'pending-resume.json');
+const SCHEDULES_HISTORY_FILE = path.join(STORE_DIR, 'schedules-history.json');
+let scheduleHistory = [];
+
+function loadScheduleHistory() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(SCHEDULES_HISTORY_FILE, 'utf8'));
+    scheduleHistory = historyView(Array.isArray(raw) ? raw : []);
+  } catch { scheduleHistory = []; }
+}
+
+function saveScheduleHistory() {
+  try {
+    if (!scheduleHistory.length) { try { fs.unlinkSync(SCHEDULES_HISTORY_FILE); } catch {} return; }
+    fs.writeFileSync(SCHEDULES_HISTORY_FILE, JSON.stringify(persistHistory(scheduleHistory)));
+  } catch {}
+}
+
+function recordScheduleFire(s, item, outcome) {
+  if (!s || !item) return;
+  const meta = convMetaCached(s.id);
+  const entry = buildHistoryEntry(item, {
+    firedAt: Date.now(),
+    convId: s.id,
+    title: (meta && meta.title) || 'שיחה ללא כותרת',
+    outcome: outcome || 'ok',
+  });
+  scheduleHistory = appendHistory(scheduleHistory, entry);
+  saveScheduleHistory();
+}
+
+function clearScheduleHistory() {
+  scheduleHistory = [];
+  saveScheduleHistory();
+}
+
+/** מסיר משימת limit_resume מהתזמונים (בלי לגעת בפרומפטים). */
+function removeLimitResumeSchedule(s) {
+  if (!s || !Array.isArray(s.schedules) || !s.schedules.length) return false;
+  const next = [];
+  let removed = false;
+  for (const item of s.schedules) {
+    if (isLimitResume(item)) { disarmSchedule(item); removed = true; }
+    else next.push(item);
+  }
+  if (!removed) return false;
+  s.schedules = next;
+  broadcastSchedules(s);
+  return true;
+}
+
+/**
+ * יוצר/מעדכן תזמון limit_resume שיוצא ב־resetsAt (+ חסד קצר).
+ * זה מה שהופך את ההמשך למשימה מתוזמנת אמיתית — אותו מנגנון setTimeout+sweep
+ * של הודעות מתוזמנות, ולא רק דופק דקה נפרד.
+ */
+function upsertLimitResumeSchedule(s, lim) {
+  if (!s || !lim) return false;
+  const resetsAt = Number(lim.resetsAt) || 0;
+  // בלי שעת איפוס ידועה — חמש שעות קדימה (חלון סשן טיפוסי), לא "מיידי"
+  const base = resetsAt > 0 ? resetsAt : (Date.now() + 5 * 3600 * 1000);
+  const at = base + RESUME_GRACE_MS;
+  const built = buildLimitResumeItem({
+    at, resetsAt: base, produced: lim.produced, text: lim.text,
+  }, { id: LIMIT_RESUME_ID });
+  if (!built.ok) return false;
+  if (!s.schedules) s.schedules = [];
+  // מחליפים פריט קיים באותו מזהה
+  const next = [];
+  for (const item of s.schedules) {
+    if (isLimitResume(item)) disarmSchedule(item);
+    else next.push(item);
+  }
+  next.push(built.item);
+  next.sort((a, b) => a.at - b.at);
+  s.schedules = next;
+  s.lastUsed = Date.now();
+  armSchedule(s, built.item);
+  broadcastSchedules(s);
+  return true;
 }
 
 function sweepSchedules() {
@@ -3698,9 +3820,11 @@ function enqueueTurn(s, msg, ws) {
 function cancelChain(s, why) {
   const n = s.queue.length;
   const hadLimit = !!s.limit;
-  if (!n && !hadLimit) return;
+  const hadLr = (s.schedules || []).some(isLimitResume);
+  if (!n && !hadLimit && !hadLr) return;
   s.queue = [];
   s.limit = null;
+  if (hadLimit || hadLr) removeLimitResumeSchedule(s);
   broadcastQueue(s);
   if (hadLimit) broadcastLimit(s);
   if (why && n) {
@@ -3758,9 +3882,6 @@ app.get('/api/duet/:id/version/:v', (req, res) => {
    ========================================================================== */
 
 const LIMIT_PCT = 95;                       // ממנו והלאה החלון נחשב "נגמר"
-const RESUME_GRACE_MS = 45 * 1000;          // רגע אחרי האיפוס, לא בדיוק עליו
-const RESUME_MAX_WAIT_MS = 6 * 60 * 60 * 1000; // חלון סשן ארוך מזה = לא סשן
-const RESUME_FILE = path.join(STORE_DIR, 'pending-resume.json');
 
 // הטקסטים שבהם ה-CLI וה-API מדווחים על מיצוי מכסה. נבדקים *רק* על ערוצי
 // שגיאה (stderr, result שנכשל) ולא על תשובת המודל — אחרת תשובה שמסבירה מה זה
@@ -3837,8 +3958,14 @@ async function onLimitHit(s, text, produced) {
   if (gen !== s.gen || s.limit) return;
 
   if (cls && cls.kind === 'session') {
-    s.limit = { kind: 'session', resetsAt: cls.resetsAt, at: Date.now(), produced: !!produced, text: String(text || '').slice(0, 300) };
+    // resetsAt=0 (סיווג בלי שעה) → חמש שעות קדימה, לא "מיידי" שיורה בטעות
+    const resetsAt = Number(cls.resetsAt) > 0
+      ? Number(cls.resetsAt)
+      : (Date.now() + 5 * 3600 * 1000);
+    s.limit = { kind: 'session', resetsAt, at: Date.now(), produced: !!produced, text: String(text || '').slice(0, 300) };
     killChild(s);   // אין טעם להחזיק תהליך שממתין חמש שעות; ה---resume יחזיר אותו
+    // תזמון אמיתי באותה מערכת של הודעות מתוזמנות — שורד הפעלה מחדש ונורה ב־resetsAt
+    upsertLimitResumeSchedule(s, s.limit);
     saveResumeState();
     broadcastLimit(s);
     return;
@@ -3863,11 +3990,13 @@ async function onLimitHit(s, text, produced) {
  * מבקשים "המשך" ולא שולחים את הפרומפט המקורי שוב, כדי שהעבודה שכבר בוצעה לפני
  * העצירה לא תיעשה פעמיים — היא נמצאת בהקשר שה---resume מחזיר.
  */
-function resumeAfterLimit(s, manual) {
+function resumeAfterLimit(s, manual, opts = {}) {
   const lim = s.limit;
-  if (!lim) return;
+  if (!lim) return false;
+  const existing = (s.schedules || []).find(isLimitResume) || null;
   const base = s.lastTurn || {};
   s.limit = null;
+  removeLimitResumeSchedule(s);
   saveResumeState();
   broadcastLimit(s);
 
@@ -3880,6 +4009,17 @@ function resumeAfterLimit(s, manual) {
   emit(s, { kind: 'limit_resumed', manual: !!manual });
   const ok = runTurn(s, { ...base, text, images: [], atts: [], resumeSessionId: s.cliSessionId || base.resumeSessionId }, null);
   if (!ok) emit(s, { kind: 'error', text: 'ההמשך האוטומטי נכשל — נסה לשלוח שוב' });
+  // היסטוריה: fireSchedule כבר רשם כשספלס; כאן רושמים run-now / limitTick
+  if (!opts.skipHistory) {
+    const item = existing || {
+      id: LIMIT_RESUME_ID,
+      kind: KIND_LIMIT_RESUME,
+      at: (Number(lim.resetsAt) || Date.now()) + RESUME_GRACE_MS,
+      msg: { text: 'המשך אחרי חידוש מכסת הסשן', resetsAt: lim.resetsAt },
+    };
+    recordScheduleFire(s, item, ok ? 'ok' : 'error');
+  }
+  return !!ok;
 }
 
 /**
@@ -3887,12 +4027,14 @@ function resumeAfterLimit(s, manual) {
  * שעת האיפוס המשוערת (או שהיא הייתה ניחוש), ממשיכים כבר עכשיו.
  */
 async function limitTick() {
+  // גיבוי ל־limit_resume כתזמון: אם הטיימר פספס (שינה/drift) או שהמכסה
+  // התחדשה מוקדם לפי ה־API — ממשיכים כאן. המסלול העיקרי הוא fireSchedule.
   const armed = [...sessions.values()].filter((s) => s.limit);
   if (!armed.length) return;
   const now = Date.now();
   // רוב ההמתנה היא שעות שבהן אין מה לבדוק — מושכים את המכסה בפועל רק כשמתקרבים
   // לשעת האיפוס. אחרת זו קריאת API כל דקה במשך חמש שעות, על לא דבר.
-  const near = armed.some((s) => now >= s.limit.resetsAt - 10 * 60 * 1000);
+  const near = armed.some((s) => now >= (s.limit.resetsAt || 0) - 10 * 60 * 1000);
   let sessionPct = null;
   if (near) {
     const u = (await fetchUsage()) || usageCache.data || null;
@@ -3901,7 +4043,9 @@ async function limitTick() {
   }
   for (const s of armed) {
     if (s.running || !s.limit) continue;
-    const due = now >= s.limit.resetsAt + RESUME_GRACE_MS;
+    // אין תזמון limit_resume (שחזור ישן / באג) — משחזרים אותו כדי שלא ייעלם
+    if (!(s.schedules || []).some(isLimitResume)) upsertLimitResumeSchedule(s, s.limit);
+    const due = now >= (s.limit.resetsAt || 0) + RESUME_GRACE_MS;
     const freed = sessionPct != null && sessionPct < 80;
     if (due || freed) resumeAfterLimit(s, false);
   }
@@ -3935,22 +4079,166 @@ function loadResumeState() {
   let saved;
   try { saved = JSON.parse(fs.readFileSync(RESUME_FILE, 'utf8')); } catch { return; }
   if (!Array.isArray(saved)) return;
+  const now = Date.now();
   for (const rec of saved) {
     if (!rec || !VALID_ID.test(String(rec.convId || '')) || isAnonId(rec.convId)) continue;
-    // המתנה שכבר איבדה את הטעם שלה (עבר יותר מחלון סשן שלם) לא מוחזרת
-    if (rec.limit && Date.now() > rec.limit.resetsAt + RESUME_MAX_WAIT_MS) continue;
+    let limit = rec.limit || null;
+    // המתנה שפג תוקפה לא מוחזרת — אבל התור והתזמונים האחרים כן (בעבר continue
+    // דילג על כל הרשומה ואיבד הודעות מתוזמנות ליד מכסה ישנה).
+    if (limit && now > (Number(limit.resetsAt) || 0) + RESUME_MAX_WAIT_MS) limit = null;
+    const schedules = Array.isArray(rec.schedules)
+      ? rec.schedules.filter((x) => x && x.msg && Number(x.at) > 0 && (
+          isLimitResume(x) ? !!limit : !!(x.msg.text)
+        ))
+      : [];
+    // בלי מכסה פעילה — לא משחזרים limit_resume יתום
+    if (!limit) {
+      for (let i = schedules.length - 1; i >= 0; i--) {
+        if (isLimitResume(schedules[i])) schedules.splice(i, 1);
+      }
+    }
+    if (!limit && !(rec.queue && rec.queue.length) && !schedules.length) continue;
     const s = getSession(rec.convId);
     s.cliSessionId = rec.cliSessionId || null;
-    s.limit = rec.limit || null;
+    s.limit = limit;
     s.lastTurn = rec.lastTurn || null;
     s.queue = Array.isArray(rec.queue) ? rec.queue.filter((q) => q && q.msg) : [];
-    s.schedules = Array.isArray(rec.schedules)
-      ? rec.schedules.filter((x) => x && x.msg && x.msg.text && Number(x.at) > 0)
-      : [];
+    s.schedules = schedules.map((x) => ({
+      id: x.id,
+      kind: isLimitResume(x) ? KIND_LIMIT_RESUME : (x.kind || 'prompt'),
+      at: Number(x.at),
+      by: x.by || null,
+      msg: x.msg || { text: '' },
+    }));
     s.lastUsed = Date.now();
+    // שדרוג לאחור: מכסה בלי תזמון limit_resume → יוצרים אחד
+    if (s.limit && !s.schedules.some(isLimitResume)) {
+      const resetsAt = Number(s.limit.resetsAt) > 0 ? Number(s.limit.resetsAt) : (now + 5 * 3600 * 1000);
+      s.limit.resetsAt = resetsAt;
+      const built = buildLimitResumeItem({
+        at: resetsAt + RESUME_GRACE_MS,
+        resetsAt,
+        produced: s.limit.produced,
+        text: s.limit.text,
+      }, { id: LIMIT_RESUME_ID });
+      if (built.ok) s.schedules.push(built.item);
+    }
     armAllSchedules(s);
   }
 }
+
+/* ---------- API: כל התזמונים ---------- */
+
+function listAllSchedules() {
+  const out = [];
+  const now = Date.now();
+  const seenLr = new Set(); // convId שכבר יש לו limit_resume אמיתי
+  for (const s of sessions.values()) {
+    if (s.anon) continue;
+    const meta = convMetaCached(s.id);
+    const title = (meta && meta.title) || 'שיחה ללא כותרת';
+    const items = Array.isArray(s.schedules) ? s.schedules : [];
+    let hasLiveLr = false;
+    for (const item of items) {
+      const view = scheduleView([item])[0];
+      if (isLimitResume(item)) {
+        hasLiveLr = true;
+        seenLr.add(s.id);
+      }
+      out.push({
+        ...view,
+        convId: s.id,
+        title,
+        status: item.at <= now ? 'due' : 'armed',
+        limit: isLimitResume(item) && s.limit
+          ? { kind: s.limit.kind, resetsAt: s.limit.resetsAt, at: s.limit.at }
+          : null,
+      });
+    }
+    // מכסה בלי תזמון חי — שורה סינתטית אחת בלבד (לא לצד limit_resume אמיתי)
+    if (s.limit && !hasLiveLr && !seenLr.has(s.id)) {
+      const at = (Number(s.limit.resetsAt) || now) + RESUME_GRACE_MS;
+      out.push({
+        id: LIMIT_RESUME_ID,
+        kind: KIND_LIMIT_RESUME,
+        at,
+        text: 'המשך אחרי חידוש מכסת הסשן',
+        model: '', permissionMode: '', effort: '', by: null,
+        resetsAt: s.limit.resetsAt,
+        convId: s.id, title,
+        status: at <= now ? 'due' : 'armed',
+        limit: { kind: s.limit.kind, resetsAt: s.limit.resetsAt, at: s.limit.at },
+        synthetic: true,
+      });
+      seenLr.add(s.id);
+    }
+  }
+  // הגנה נוספת: לא יותר משורת limit_resume אחת לכל שיחה
+  const lrOnce = new Set();
+  const deduped = [];
+  for (const row of out) {
+    if (row.kind === KIND_LIMIT_RESUME) {
+      if (lrOnce.has(row.convId)) continue;
+      lrOnce.add(row.convId);
+    }
+    deduped.push(row);
+  }
+  deduped.sort((a, b) => (a.at || 0) - (b.at || 0));
+  return deduped;
+}
+
+function schedulesPayload() {
+  const pending = listAllSchedules();
+  const history = historyView(scheduleHistory);
+  return { pending, history, schedules: pending };
+}
+
+app.get('/api/schedules', (req, res) => {
+  res.json(schedulesPayload());
+});
+
+app.post('/api/schedules/cancel', express.json({ limit: '32kb' }), (req, res) => {
+  const convId = String((req.body && req.body.convId) || '');
+  const id = String((req.body && req.body.id) || '');
+  if (!VALID_ID.test(convId) || !id) return res.status(400).json({ ok: false, error: 'חסר מזהה' });
+  const s = sessions.get(convId);
+  if (!s) return res.status(404).json({ ok: false, error: 'אין תזמון פעיל לשיחה הזו' });
+  const item = (s.schedules || []).find((x) => x.id === id);
+  if (!item && !(id === LIMIT_RESUME_ID && s.limit)) {
+    return res.status(404).json({ ok: false, error: 'התזמון לא נמצא' });
+  }
+  if ((item && isLimitResume(item)) || (id === LIMIT_RESUME_ID && s.limit)) {
+    s.limit = null;
+    removeLimitResumeSchedule(s);
+    saveResumeState();
+    broadcastLimit(s);
+  } else {
+    removeSchedule(s, id);
+  }
+  res.json({ ok: true, ...schedulesPayload() });
+});
+
+app.post('/api/schedules/run-now', express.json({ limit: '32kb' }), (req, res) => {
+  const convId = String((req.body && req.body.convId) || '');
+  const id = String((req.body && req.body.id) || '');
+  if (!VALID_ID.test(convId) || !id) return res.status(400).json({ ok: false, error: 'חסר מזהה' });
+  const s = sessions.get(convId);
+  if (!s) return res.status(404).json({ ok: false, error: 'אין תזמון פעיל לשיחה הזו' });
+  const item = (s.schedules || []).find((x) => x.id === id);
+  if (isLimitResume(item) || (id === LIMIT_RESUME_ID && s.limit)) {
+    if (!s.limit) return res.status(409).json({ ok: false, error: 'אין המתנה למכסה' });
+    resumeAfterLimit(s, true);
+    return res.json({ ok: true, ...schedulesPayload() });
+  }
+  if (!item) return res.status(404).json({ ok: false, error: 'התזמון לא נמצא' });
+  fireSchedule(s, id);
+  res.json({ ok: true, ...schedulesPayload() });
+});
+
+app.post('/api/schedules/clear-history', express.json({ limit: '8kb' }), (req, res) => {
+  clearScheduleHistory();
+  res.json({ ok: true, ...schedulesPayload() });
+});
 
 /* ---------- מנויים ---------- */
 
@@ -4156,8 +4444,9 @@ function handleConnection(ws, req) {
       if (s.limit) resumeAfterLimit(s, true);
 
     } else if (msg.type === 'limit_cancel') {
-      if (!s.limit) return;
+      if (!s.limit && !(s.schedules || []).some(isLimitResume)) return;
       s.limit = null;
+      removeLimitResumeSchedule(s);
       saveResumeState();
       broadcastLimit(s);
 
@@ -4272,6 +4561,7 @@ setInterval(() => {
 // המתנות להמשך ופרומפטים בתור ששרדו את ההפעלה הקודמת. אם שעת האיפוס כבר
 // עברה בזמן שהשרת היה כבוי — ממשיכים מיד ולא בעוד דקה.
 loadResumeState();
+loadScheduleHistory();
 setTimeout(() => { limitTick().catch(() => {}); }, 4000).unref?.();
 
 /* הפורט תפוס כמעט תמיד מסיבה אחת: האפליקציה כבר רצה. בלי הטיפול הזה
