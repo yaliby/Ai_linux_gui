@@ -1515,6 +1515,7 @@ function handleServer(m) {
     case 'ui': applyRemoteUi(m); break;
     case 'event': handleEvent(m.evt); break;
     case 'god_allow': onGodAllow(m.entry); break;
+    case 'god_deny': onGodDeny(m); break;
     case 'permission': showPermission(m.id, m.req); break;
     case 'permission_cancel': cancelPermission(m.id); break;
     case 'permission_resolved': onRemoteResolved(m); break;
@@ -6573,6 +6574,18 @@ function onGodAllow(entry) {
   godTurn.push(entry);
   dlog('god.allow', { tool: entry.tool, n: godTurn.length });
   renderWorking();   // הכפתור החי מתעדכן מיד, לא רק בסוף התור
+}
+
+/* GOD דחה פקודה שהייתה הורגת את Sol. הטוסט מגיע בנפרד; כאן נשארת שורה
+   בתמליל, כדי שהסיבה לא תיעלם אחרי ארבע שניות. */
+const godDenySeen = new Set();
+function onGodDeny(m) {
+  if (!m || !m.text) return;
+  if (m.id && godDenySeen.has(m.id)) return;
+  if (m.id) godDenySeen.add(m.id);
+  if (godDenySeen.size > 50) godDenySeen.delete(godDenySeen.values().next().value);
+  addNote(m.text, true);
+  dlog('god.deny', { tool: m.tool || '' });
 }
 
 function godLiveLabel(n) {
