@@ -37,6 +37,7 @@ const {
   CLAUDE_PERM_MODES,
   isGodMode, withGod, parsePermissionModes, claudeCliPerm,
 } = require('./lib/perm-mode');
+const { inspectBash } = require('./lib/bash-guard');
 const {
   MAX_SCHEDULES, buildItem: buildScheduleItem, scheduleView, persistShape: persistSchedules,
 } = require('./lib/schedule');
@@ -1955,6 +1956,33 @@ app.get('/api/rc/qr', async (req, res) => {
   } catch { res.status(500).end(); }
 });
 
+/* ממשקים וירטואליים שאסור להאזין עליהם: הם לא הדרך שבה מכשיר ברשת מגיע,
+   ו-docker0 בפרט היה חושף את הממשק לכל קונטיינר שרץ על המחשב.
+   מוגדר לפני טעינת ה-HTTPS: הודעת הנפילה (אין תעודה) קוראת ל-lanAddress,
+   וקריאה לפני האתחול הייתה מפילה את התהליך ב-TDZ עוד לפני שהאזין. */
+const VIRTUAL_IFACE = /^(docker|br-|veth|virbr|vmnet|vboxnet|tun|tap|zt|wg)/;
+
+const isPrivate = (a) =>
+  a[0] === 192 && a[1] === 168 ||
+  a[0] === 10 ||
+  a[0] === 172 && a[1] >= 16 && a[1] <= 31;
+
+/**
+ * כתובת ה-LAN שעליה עולה המאזין: RTL_HOST אם הוגדר, אחרת כתובת ה-IPv4
+ * הפרטית הראשונה על ממשק פיזי. null אם המחשב לא מחובר לשום רשת.
+ */
+function lanAddress() {
+  if (process.env.RTL_HOST) return process.env.RTL_HOST;
+  for (const [iface, list] of Object.entries(os.networkInterfaces())) {
+    if (VIRTUAL_IFACE.test(iface)) continue;
+    for (const ni of list || []) {
+      if (ni.family !== 'IPv4' || ni.internal) continue;
+      if (isPrivate(ni.address.split('.').map(Number))) return ni.address;
+    }
+  }
+  return null;
+}
+
 // HTTPS עם self-signed cert. מקבל מרחוק מוגבל ל-LAN בלבד, ולא צריך להסתעף
 // ל-localhost כדי להשתמש בתשתית מאובטחת כמו Notification API.
 const certPath = path.join(__dirname, 'certs', 'cert.pem');
@@ -1999,31 +2027,6 @@ const { prettyPair } = deviceAuth;
 const auth = deviceAuth({ file: DEVICES_FILE });
 
 let remoteSrv = null;   // המאזין על כתובת ה-LAN
-
-/* ממשקים וירטואליים שאסור להאזין עליהם: הם לא הדרך שבה מכשיר ברשת מגיע,
-   ו-docker0 בפרט היה חושף את הממשק לכל קונטיינר שרץ על המחשב. */
-const VIRTUAL_IFACE = /^(docker|br-|veth|virbr|vmnet|vboxnet|tun|tap|zt|wg)/;
-
-const isPrivate = (a) =>
-  a[0] === 192 && a[1] === 168 ||
-  a[0] === 10 ||
-  a[0] === 172 && a[1] >= 16 && a[1] <= 31;
-
-/**
- * כתובת ה-LAN שעליה עולה המאזין: RTL_HOST אם הוגדר, אחרת כתובת ה-IPv4
- * הפרטית הראשונה על ממשק פיזי. null אם המחשב לא מחובר לשום רשת.
- */
-function lanAddress() {
-  if (process.env.RTL_HOST) return process.env.RTL_HOST;
-  for (const [iface, list] of Object.entries(os.networkInterfaces())) {
-    if (VIRTUAL_IFACE.test(iface)) continue;
-    for (const ni of list || []) {
-      if (ni.family !== 'IPv4' || ni.internal) continue;
-      if (isPrivate(ni.address.split('.').map(Number))) return ni.address;
-    }
-  }
-  return null;
-}
 
 const isLocalReq = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress || '');
 
@@ -2456,21 +2459,93 @@ function sendTo(ws, obj) {
   if (ws && ws.readyState === ws.OPEN) { try { ws.send(JSON.stringify(obj)); } catch {} }
 }
 
+/** קבוצת התהליך של Sol — ‎kill -<pgid>‎ הורג את השרת גם בלי ה-PID עצמו. */
+function ownPgid() {
+  try {
+    const stat = fs.readFileSync('/proc/' + process.pid + '/stat', 'utf8');
+    const close = stat.lastIndexOf(')');
+    const rest = stat.slice(close + 1).trim().split(/\s+/);
+    const pgrp = Number(rest[2]);
+    if (pgrp > 0) return pgrp;
+  } catch { /* לא לינוקס — נופלים ל-PID */ }
+  return process.pid;
+}
+const SOL_PGID = ownPgid();
+
+/**
+ * האם הפקודה שה-CLI מבקש להריץ הורגת את Sol.
+ * נקרא גם מ-GOD וגם מאישור ידני: בשניהם אסור לכתוב ‎behavior: allow‎.
+ */
+function guardTool(toolName, input) {
+  const ports = [...new Set([Number(PORT), Number(REMOTE_PORT)].filter((n) => n > 0))];
+  return inspectBash({
+    toolName,
+    input,
+    solPid: process.pid,
+    solPgid: SOL_PGID,
+    solPorts: ports,
+    solRoot: __dirname,
+    solScript: __filename,
+    commandLine: process.argv.join(' '),
+    home: os.homedir(),
+    names: ['node', 'npm', 'server.js', 'rtl-claude', 'sol'],
+  });
+}
+
+/** הקלט שירוץ בפועל: עריכה של המשתמש אם יש פקודה, אחרת מה שה-CLI ביקש. */
+function effectiveToolInput(req, updatedInput) {
+  if (updatedInput && typeof updatedInput === 'object'
+      && (typeof updatedInput.command === 'string' || typeof updatedInput.cmd === 'string')) {
+    return updatedInput;
+  }
+  return (req && req.input) || {};
+}
+
+/**
+ * דחייה קשיחה: התשובה ל-CLI היא deny, והמסך שומע למה — לא שקט.
+ * ‎via: 'god'‎ גם נרשם ביומן התור; אישור ידני נסגר ב-permission_resolved אצל הקורא.
+ */
+function denySelfKill(s, requestId, req, guard, via) {
+  const tool = (req && req.tool_name) || 'כלי';
+  const message = guard.reason || 'Sol חסם פקודה שהייתה הורגת את שרת Sol';
+  const command = String((req && req.input && (req.input.command || req.input.cmd)) || '').slice(0, 180);
+  writeStdin(s, {
+    type: 'control_response',
+    response: { subtype: 'success', request_id: requestId, response: { behavior: 'deny', message } },
+  });
+  toastSession(s, message, true);
+  dbg('bash.guard', { convId: s.id, tool, via, command });
+  if (via === 'god') {
+    dbg('god.deny', { convId: s.id, tool });
+    emit(s, {
+      kind: 'god_deny', id: requestId, tool, text: message,
+      input: godInput(req && req.input), at: Date.now(),
+    });
+  }
+}
+
 /**
  * GOD: עונה "אשר" לבקשת הרשאה ומשדר שורה ליומן התור.
  * מחזיר false כשזו בקשה שלא מאשרים אוטומטית — ואז היא ממשיכה במסלול הרגיל
  * ומוצגת ככרטיס.
+ * פקודה שהורגת את Sol נדחית גם כאן ומחזירה 'deny' (אמת): אסור ליפול לכרטיס
+ * ש-GOD היה מאשר מיד אחר כך, ואסור לכתוב allow.
  */
 function godApprove(s, requestId, req) {
   const tool = (req && req.tool_name) || 'כלי';
   if (GOD_KEEP_TOOLS.has(tool)) return false;
+  const guard = guardTool(tool, req && req.input);
+  if (!guard.allow) {
+    denySelfKill(s, requestId, req, guard, 'god');
+    return 'deny';
+  }
   writeStdin(s, {
     type: 'control_response',
     response: { subtype: 'success', request_id: requestId, response: { behavior: 'allow', updatedInput: (req && req.input) || {} } },
   });
   emit(s, { kind: 'god_allow', entry: { id: requestId, tool, input: godInput(req && req.input), desc: (req && req.description) || '', at: Date.now() } });
   dbg('god.allow', { convId: s.id, tool });
-  return true;
+  return 'allow';
 }
 
 /**
@@ -2482,6 +2557,20 @@ function godApprove(s, requestId, req) {
  */
 function answerPermission(s, msg, by) {
   if (!s || !msg.requestId || !s.pendingPerms.has(msg.requestId)) return false;
+  const req = s.pendingPerms.get(msg.requestId);
+  // גם אישור ידני — מהמסך או מכפתור ההתראה — לא מעביר פקודה שהורגת את Sol.
+  if (msg.decision === 'allow') {
+    const guard = guardTool(req && req.tool_name, effectiveToolInput(req, msg.updatedInput));
+    if (!guard.allow) {
+      s.pendingPerms.delete(msg.requestId);
+      emit(s, {
+        kind: 'permission_resolved', id: msg.requestId, decision: 'deny',
+        label: 'deny', answers: null, response: null, by: by || 'Sol',
+      });
+      denySelfKill(s, msg.requestId, req, guard, 'user');
+      return true;
+    }
+  }
   s.pendingPerms.delete(msg.requestId);
   // label/answers נשלחים כדי שהכרטיס במכשיר השני ייסגר עם *אותה* תשובה
   // שנבחרה כאן, ולא רק עם "אושר/נדחה" גנרי.
@@ -2501,9 +2590,17 @@ function answerPermission(s, msg, by) {
 /** מעבר ל-GOD בזמן שכרטיסים כבר פתוחים — הם נענים כאן ולא נשארים תלויים. */
 function godFlushPending(s) {
   for (const [id, req] of [...s.pendingPerms]) {
-    if (!godApprove(s, id, req)) continue;
+    const how = godApprove(s, id, req);
+    if (!how) continue;
     s.pendingPerms.delete(id);
-    emit(s, { kind: 'permission_resolved', id, decision: 'allow', label: 'god', answers: null, response: null, by: 'GOD' });
+    const denied = how === 'deny';
+    emit(s, {
+      kind: 'permission_resolved', id,
+      decision: denied ? 'deny' : 'allow',
+      label: denied ? 'deny' : 'god',
+      answers: null, response: null,
+      by: denied ? 'Sol' : 'GOD',
+    });
   }
 }
 
