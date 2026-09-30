@@ -4,7 +4,11 @@
   "description": "ממשק גרפי RTL סביב Claude Code CLI",
   "type": "commonjs",
   "scripts": {
+    "launch": "node tools/launcher.mjs",
+    "install-app": "bash tools/install-sol-app.sh",
     "start": "node server.js",
+    "test": "node test/run-all.mjs",
+    "icons": "node tools/build-icons.mjs",
     "omni:up": "docker compose up -d --wait",
     "omni:down": "docker compose down",
     "omni:restart": "docker compose restart omniroute",

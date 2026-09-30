@@ -145,23 +145,328 @@ function legacyCopy(text) {
   return ok;
 }
 
-// ---------- לוגו השמש (בהשראת Claude) ----------
-function sunburst(size, n = 12) {
-  const c = size / 2, ri = size * 0.11, ro = size * 0.47, sw = Math.max(1.4, size * 0.072);
-  let lines = '';
+// ---------- שמש Claude ----------
+/**
+ * קרני השמש כ-path יחיד, בתוך ריבוע ‎size‎.
+ *
+ * ‎ro‎ הוא 0.442 ולא חצי: עם ‎stroke-linecap: round‎ הקצה המעוגל מוסיף עוד חצי
+ * עובי-קו לכל צד, ובלי המרווח הזה הקרניים היו נחתכות על גבול ה-viewBox.
+ * זהו הסימן של Claude ב-BRANDS, ולכן הוא חי כאן כגנרטור ולא כמחרוזת קפואה.
+ */
+function rayPath(size, n = 12, riR = 0.108, roR = 0.442) {
+  const c = size / 2, ri = size * riR, ro = size * roR;
+  let d = '';
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 - Math.PI / 2;
-    const x1 = c + Math.cos(a) * ri, y1 = c + Math.sin(a) * ri, x2 = c + Math.cos(a) * ro, y2 = c + Math.sin(a) * ro;
-    lines += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
+    const x1 = c + Math.cos(a) * ri, y1 = c + Math.sin(a) * ri;
+    const x2 = c + Math.cos(a) * ro, y2 = c + Math.sin(a) * ro;
+    d += `M${x1.toFixed(2)} ${y1.toFixed(2)}L${x2.toFixed(2)} ${y2.toFixed(2)}`;
   }
-  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw.toFixed(2)}" stroke-linecap="round">${lines}</svg>`;
+  return d;
 }
-const AVATAR = sunburst(22);
 const NAME = 'yali';
 function greeting() {
   const h = new Date().getHours();
   const g = h < 5 ? 'עוד ערים' : h < 12 ? 'בוקר טוב' : h < 17 ? 'צהריים טובים' : h < 21 ? 'ערב טוב' : 'לילה טוב';
   return `${g}, ${NAME}`;
+}
+
+/* ==========================================================================
+   לוגואים לפי מודל
+   --------------------------------------------------------------------------
+   עד כאן לכל תשובה היה אותו אייקון — השמש של Claude — גם כשהתשובה נכתבה על-ידי
+   Gemini, GPT או Grok. ברשימה של מאות מודלים משבעה שערים זה לא קישוט חסר: אחרי
+   חצי שעה בשיחה כבר אי אפשר לזכור עם מי מדברים, והשם לבדו ("‎gemini-3-pro‎")
+   נקרא בעין כמו עוד מחרוזת ולא כמו זהות.
+
+   כל משפחת מודלים מקבלת כאן סימן משלה בצבע המותג שלה. הסימנים מצוירים כולם
+   באותה שפה — ‎viewBox‎ אחיד של 24, קווים מעוגלים, משקל קו זהה — כדי שהם
+   ייראו כמו סדרה אחת ולא כמו אוסף לוגואים מודבקים. בגודל של 20‑24 פיקסלים
+   רק הצללית נקראת, ולכן כל סימן מצומצם לצורה המזהה שלו: הניצוץ של Gemini,
+   הפריחה של OpenAI, הסהר של Kimi, הקובייה של Cursor. שני סימנים שנקראים אותו
+   דבר בגודל הזה הם באג, לא עניין של טעם — לכן כמה מהם צוירו מחדש אחרי שראינו
+   אותם מרונדרים זה לצד זה.
+
+   הצבע מגיע כמשתנה CSS על האלמנט (‎--bm-l‎ בהיר, ‎--bm-d‎ כהה) ולא כערך קשיח
+   בתוך ה-SVG — כך אותו סימן עובד בשני המצבים בלי לצייר אותו פעמיים. ראו
+   ‎.bmark‎ ב-style.css.
+   ========================================================================== */
+
+const RAYS_24 = rayPath(24);
+
+const FILL = ' fill="currentColor" stroke="none"';
+
+/** מפתח → { label, fg, fgDark, sw, body }. ‎body‎ הוא תוכן ה-SVG בלבד. */
+const BRANDS = {
+  anthropic: {
+    label: 'Anthropic', fg: '#c2603a', fgDark: '#d97757', sw: 1.75,
+    body: `<path d="${RAYS_24}"/>`,
+  },
+  openai: {
+    label: 'OpenAI', fg: '#0f8f72', fgDark: '#4cc5a4', sw: 1.7,
+    // הקשר בעל שש-הקפלים. הניסיון הראשון היה משושה עם Y פנימי — והוא נקרא
+    // כקובייה, כלומר בדיוק כמו הסימן של Cursor. שש עלים סביב מרכז משאירים את
+    // הסימטריה השש-קפלית של הסימן המקורי ואי-אפשר לבלבל אותם עם גוף תלת-ממדי.
+    body: [0, 60, 120, 180, 240, 300].map((a) =>
+      `<ellipse cx="12" cy="7.9" rx="3" ry="5"${a ? ` transform="rotate(${a} 12 12)"` : ''}/>`).join(''),
+  },
+  gemini: {
+    label: 'Google', fg: '#3a72e8', fgDark: '#7fa8f8', sw: 1.7,
+    // הניצוץ ארבע-הקצוות — הסימן של Gemini עצמו
+    body: `<path d="M12 2.6C12.92 7.58 16.42 11.08 21.4 12 16.42 12.92 12.92 16.42 12 21.4 11.08 16.42 7.58 12.92 2.6 12 7.58 11.08 11.08 7.58 12 2.6Z"${FILL}/>`,
+  },
+  gemma: {
+    label: 'Gemma', fg: '#0f8f8a', fgDark: '#4fc9c3', sw: 1.7,
+    // אבן חן — ‎gemma‎ היא «אבן טובה» בלטינית, וזה גם מה שמפריד אותה מ-Gemini
+    body: '<path d="M7.2 4.2h9.6L21 9.6 12 20.4 3 9.6z"/>'
+      + '<path d="M3 9.6h18M7.2 4.2 9.6 9.6 12 20.4 14.4 9.6 16.8 4.2"/>',
+  },
+  xai: {
+    label: 'xAI', fg: '#1d1d1f', fgDark: '#e9e7e2', sw: 1.7,
+    // ה-X השבור של xAI: אלכסון יורד שלם, ואלכסון עולה חתוך בנקודת החיתוך
+    body: `<path d="M3.6 3h4.3l12.5 18h-4.3z"${FILL}/>`
+      + `<path d="M20.4 3h-4.3l-2.9 4.2 2.15 3.1z"${FILL}/>`
+      + `<path d="M3.6 21h4.3l2.9-4.2-2.15-3.1z"${FILL}/>`,
+  },
+  zai: {
+    label: 'Z.ai', fg: '#4b4ddb', fgDark: '#9698f2', sw: 1.7,
+    body: `<path d="M4.8 3.6h14.4v3.6L10.5 16.8h8.7v3.6H4.8v-3.6l8.7-9.6H4.8z"${FILL}/>`,
+  },
+  moonshot: {
+    label: 'Moonshot', fg: '#2f4f9e', fgDark: '#8fb2e8', sw: 1.7,
+    // סהר — הסימן של Kimi
+    body: `<path d="M13.9 2.3A9.7 9.7 0 1 0 21.7 15.2 7.9 7.9 0 0 1 13.9 2.3Z"${FILL}/>`,
+  },
+  deepseek: {
+    label: 'DeepSeek', fg: '#3c62f5', fgDark: '#8aa2fb', sw: 1.7,
+    // לווייתן: גוף בשתי קשתות, סנפיר משולש ומדף זנב מפוצל
+    body: `<path d="M3.6 13.4A12 12 0 0 1 17 10.6l4.6-3.8-2.2 4.8 2.2 4.8-4.6-3A11 11 0 0 1 3.6 13.4Z"${FILL}/>`
+      + `<path d="M9 15.2h4l-2.8 3.6z"${FILL}/>`,
+  },
+  qwen: {
+    label: 'Qwen', fg: '#7b3fd4', fgDark: '#b18bef', sw: 1.7,
+    // Q — עיגול וזנב. הגרסה הקודמת הייתה משושה, וברשימה כבר יש קובייה משושה
+    // (Cursor); באות אמיתית אין מה להתבלבל.
+    body: '<circle cx="11.6" cy="11.4" r="7.6"/><path d="M14.4 14.2 19.6 19.4"/>',
+  },
+  meta: {
+    label: 'Meta', fg: '#0a66f0', fgDark: '#6ba3fb', sw: 1.9,
+    // לולאת האינסוף
+    body: '<path d="M7.25 7.5c2.75 0 3.75 4.5 4.75 4.5s2-4.5 4.75-4.5c2.625 0 4.25 2 4.25 4.5s-1.625 4.5-4.25 4.5c-2.75 0-3.75-4.5-4.75-4.5s-2 4.5-4.75 4.5C4.625 16.5 3 14.5 3 12s1.625-4.5 4.25-4.5z"/>',
+  },
+  mistral: {
+    label: 'Mistral', fg: '#e8590c', fgDark: '#ff9147', sw: 1.7,
+    // M בנוי מרשת פיקסלים 5×5 — שפת הבלוקים של Mistral. הגרסה הקודמת הייתה
+    // קורה עליונה מעל שלוש עמודות, וזה נקרא כשער טוריאי ולא כאות.
+    body: [[3, 3, 3.6, 18], [17.4, 3, 3.6, 18], [6.6, 6.6, 3.6, 3.6],
+      [13.8, 6.6, 3.6, 3.6], [10.2, 10.2, 3.6, 3.6]]
+      .map(([x, y, w, h]) => `<rect x="${x}" y="${y}" width="${w}" height="${h}"${FILL}/>`).join(''),
+  },
+  nvidia: {
+    label: 'NVIDIA', fg: '#5f9400', fgDark: '#9ed13a', sw: 1.7,
+    // ה«עין» — ספירלה שנסגרת פנימה
+    body: '<path d="M3.2 12c3-3.8 6.2-5.7 9.8-5.7 4.6 0 7.8 2.6 7.8 6.1 0 3.2-2.6 5.3-6.2 5.3-2.9 0-4.8-1.5-4.8-3.6 0-1.8 1.4-3 3.4-3 1.6 0 2.7.9 2.7 2.1 0 1-.7 1.7-1.7 1.7-.7 0-1.2-.4-1.2-1"/>',
+  },
+  minimax: {
+    label: 'MiniMax', fg: '#d93b45', fgDark: '#f08a90', sw: 1.9,
+    // שני שברונים — מינימום ומקסימום
+    body: '<path d="M4 13.2 12 5.2l8 8M4 18.8 12 10.8l8 8"/>',
+  },
+  perplexity: {
+    label: 'Perplexity', fg: '#1c7a86', fgDark: '#57c2cd', sw: 1.7,
+    // מסך סונאר — על שם משפחת המודלים (Sonar). קשתות מדורגות היו נקראות כסמל
+    // ה-Wi-Fi, ומסגרת משושה (הניסיון שלפניה) כמו ה-Q של Qwen; טבעות סגורות עם
+    // אלומת סריקה אינן דומות לאף אחד משניהם.
+    body: '<circle cx="12" cy="12" r="8.8"/><circle cx="12" cy="12" r="4.6"/>'
+      + `<path d="M12 12 18.2 5.8 20.2 9.9Z"${FILL}/><circle cx="12" cy="12" r="1.5"${FILL}/>`,
+  },
+  cursor: {
+    label: 'Cursor', fg: '#1f6f8b', fgDark: '#6bb9d6', sw: 1.7,
+    // קובייה איזומטרית
+    body: '<path d="M12 2.6 21 7.8v8.4L12 21.4 3 16.2V7.8z"/><path d="M12 12 21 7.8M12 12v9.4M12 12 3 7.8"/>',
+  },
+  auto: {
+    label: 'ניתוב אוטומטי', fg: '#8256d0', fgDark: '#b596ea', sw: 1.7,
+    body: '<path d="M2.8 7.8h3.9c1.7 0 2.6.8 3.6 2.3l2.2 3.4c1 1.5 1.9 2.3 3.6 2.3h3.1"/>'
+      + '<path d="M2.8 16.2h3.9c1.7 0 2.6-.8 3.6-2.3l2.2-3.4c1-1.5 1.9-2.3 3.6-2.3h3.1"/>'
+      + '<path d="M17.6 5.4 20.8 8.2l-3.2 2.8M17.6 13 20.8 15.8l-3.2 2.8"/>',
+  },
+  horde: {
+    label: 'תמונות', fg: '#c07a1e', fgDark: '#e0b165', sw: 1.7,
+    body: '<rect x="3.4" y="4.8" width="17.2" height="14.4" rx="2.6"/>'
+      + '<path d="M4.6 17.4 10.2 11.4l3 3 3-3.6 3.2 3.8"/>'
+      + `<circle cx="8.4" cy="9.2" r="1.5"${FILL}/>`,
+  },
+  veo: {
+    label: 'וידאו', fg: '#c93b2c', fgDark: '#ef8f82', sw: 1.7,
+    body: '<rect x="3.4" y="5.4" width="17.2" height="13.2" rx="3"/>'
+      + `<path d="M10.4 9.2 15.6 12l-5.2 2.8z"${FILL}/>`,
+  },
+  felo: {
+    label: 'חיפוש ברשת', fg: '#2a8a5f', fgDark: '#6ec79b', sw: 1.8,
+    body: '<circle cx="10.6" cy="10.6" r="6.2"/><path d="M15.2 15.2 20.4 20.4"/>',
+  },
+  local: {
+    label: 'מקומי', fg: '#5f6b78', fgDark: '#a3b0bd', sw: 1.7,
+    body: '<rect x="6.6" y="6.6" width="10.8" height="10.8" rx="2"/>'
+      + '<rect x="10.2" y="10.2" width="3.6" height="3.6" rx="1"/>'
+      + '<path d="M9.6 6.6V3.4M14.4 6.6V3.4M9.6 17.4v3.2M14.4 17.4v3.2'
+      + 'M6.6 9.6H3.4M6.6 14.4H3.4M17.4 9.6h3.2M17.4 14.4h3.2"/>',
+  },
+  fallback: {
+    label: 'מודל', fg: '#7a7468', fgDark: '#a8a294', sw: 1.7,
+    body: '<rect x="3.4" y="3.4" width="17.2" height="17.2" rx="5.2"/>'
+      + `<circle cx="12" cy="12" r="2.6"${FILL}/>`,
+  },
+};
+
+/* קטגוריות השרת → מותג. הקבוצה שהשרת כבר חישב היא מקור האמת: היא בדיוק
+   אותה הכרעה שקבעה איפה המודל יושב בבורר, ולכן הסימן והקטגוריה לעולם לא
+   יסתרו זה את זה. */
+const GROUP_BRAND = {
+  'Claude · חיבור ישיר': 'anthropic',
+  'Claude · דרך שערים': 'anthropic',
+  'Gemini · Google': 'gemini',
+  'GPT · OpenAI': 'openai',
+  'Grok · xAI': 'xai',
+  'GLM · Z.ai': 'zai',
+  'Kimi · Moonshot': 'moonshot',
+  DeepSeek: 'deepseek',
+  'Qwen · Alibaba': 'qwen',
+  'Llama · Meta': 'meta',
+  'Gemma · Google': 'gemma',
+  Mistral: 'mistral',
+  'Nemotron · NVIDIA': 'nvidia',
+  MiniMax: 'minimax',
+  Perplexity: 'perplexity',
+  'ניתוב אוטומטי': 'auto',
+  'מודלים מקומיים': 'local',
+  'חיפוש ברשת · Felo': 'felo',
+  'תמונות · AI Horde': 'horde',
+  'וידאו · Veo': 'veo',
+};
+
+/* גיבוי לפי שם, לאותם מקרים שבהם אין קבוצה: מודל של Cursor (שם הקבוצה היא
+   הסוכן ולא המשפחה), ומודל ששמור בתמליל ישן וכבר לא ברשימה של היום. הסדר
+   זהה ל-MODEL_FAMILIES בשרת — קודם Gemini, כדי ש-«gemini-claude-judge» לא
+   ייחטף בדרך. */
+const BRAND_RULES = [
+  ['gemini', /gemini|nano-banana|lyria|imagen|antigravity/i],
+  ['anthropic', /claude|opus|sonnet|haiku|fable/i],
+  ['openai', /gpt|codex|(^|[-_/])o[1-4]($|[-_])/i],
+  ['xai', /grok/i],
+  ['zai', /glm|(^|[-_/])zai($|[-_])/i],
+  ['moonshot', /kimi|moonshot/i],
+  ['deepseek', /deepseek/i],
+  ['qwen', /qwen|qwq/i],
+  ['meta', /llama/i],
+  ['gemma', /gemma/i],
+  ['mistral', /mistral|mixtral|magistral|codestral|ministral/i],
+  ['nvidia', /nemotron/i],
+  ['minimax', /minimax/i],
+  ['perplexity', /sonar|perplexity/i],
+  ['cursor', /composer|cheetah/i],
+];
+
+/** רשומת המודל מהקטלוג של השרת, אם הוא עדיין שם. */
+const modelEntry = (id) => (CONFIG.models || []).find((x) => x.id === id) || null;
+
+/**
+ * המותג של מודל: ‎{ key, brand, via }‎.
+ *
+ * ‎via‎ הוא הסוכן שמריץ את המודל כשהוא אינו המותג עצמו — כלומר Cursor. מודל
+ * Claude שרץ דרך Cursor מקבל את הסימן של Claude ותג פינתי של Cursor: מה
+ * שעונה על השאלה *עם מי אני מדבר* הוא המשפחה, ומה שעונה על *מי מריץ* הוא
+ * התג. עד כה שתי התשובות היו מכווצות לקידומת טקסט אחת ("Cursor · ...").
+ */
+function brandOf(id) {
+  const sid = String(id || '');
+  // בלי מודל — ברירת המחדל של ה-CLI, שהיא תמיד Claude
+  if (!sid) return { key: 'anthropic', brand: BRANDS.anthropic, via: null };
+  const m = modelEntry(sid);
+  const group = (m && m.group) || '';
+  const viaCursor = isCursorModel(sid) || group.startsWith('Cursor');
+  if (!viaCursor && GROUP_BRAND[group]) {
+    return { key: GROUP_BRAND[group], brand: BRANDS[GROUP_BRAND[group]], via: null };
+  }
+  const hay = leafId(sid) + ' ' + ((m && (m.short || m.name)) || '');
+  let key = '';
+  for (const [k, re] of BRAND_RULES) if (re.test(hay)) { key = k; break; }
+  if (!key) key = viaCursor ? 'cursor' : (GROUP_BRAND[group] || 'fallback');
+  // תג Cursor מיותר כשהסימן עצמו כבר Cursor (Composer, וגם 'Auto' שלו)
+  return { key, brand: BRANDS[key] || BRANDS.fallback, via: viaCursor && key !== 'cursor' ? BRANDS.cursor : null };
+}
+
+/** השם שמוצג לצד הסימן — קצר ככל שהקטלוג מרשה, ובלי קידומת השער. */
+function modelShort(id) {
+  if (!id) return 'Claude';
+  const m = modelEntry(id);
+  return (m && (m.short || m.name)) || leafId(id);
+}
+
+/** ‎--bm-l/--bm-d‎ כמחרוזת style — גם לעטיפה שרוצה את צבע המותג בלי הסימן. */
+const brandVars = (id) => { const b = brandOf(id).brand; return `--bm-l:${b.fg};--bm-d:${b.fgDark}`; };
+
+const brandSvg = (b, size) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none"`
+  + ` stroke="currentColor" stroke-width="${b.sw}" stroke-linecap="round" stroke-linejoin="round"`
+  + ` aria-hidden="true">${b.body}</svg>`;
+
+/**
+ * ה-HTML של סימן המותג של מודל. הצבע עובר כמשתני CSS ולא כ-attribute, כדי
+ * שהמעבר בהיר/כהה יקרה בלי לצייר מחדש שום דבר.
+ */
+function brandMarkHtml(id, size = 22) {
+  const { key, brand, via } = brandOf(id);
+  const style = `--bm-l:${brand.fg};--bm-d:${brand.fgDark};--bm-size:${size}px`;
+  const badge = via
+    ? `<span class="bmark-via" style="--bm-l:${via.fg};--bm-d:${via.fgDark}">${brandSvg(via, Math.round(size * 0.52))}</span>`
+    : '';
+  // ‎bm-<key>‎ מאפשר ל-CSS לדבר על מותג מסוים: הסיבוב האיטי במסך הפתיחה נכון
+  // לשמש של Claude ולא לרשת של Mistral.
+  return `<span class="bmark bm-${key}" style="${style}">${brandSvg(brand, size)}${badge}</span>`;
+}
+
+/**
+ * אותו סימן כאלמנט, לשימוש בקוד שבונה DOM ולא מחרוזות.
+ *
+ * הסימן מפוענח פעם אחת לכל צירוף של מותג-תג-גודל ואז משוכפל. חלונית המודלים
+ * מציירת מחדש את כל התוצאות בכל הקלדה — מעל ארבע מאות שורות ברשימה מלאה —
+ * ופענוח ‎innerHTML‎ לכל שורה בכל תו היה הופך את החיפוש למקוטע.
+ */
+const bmarkProtos = new Map();
+function brandMarkEl(id, size = 22) {
+  const { key, via } = brandOf(id);
+  const ck = key + '|' + (via ? via.label : '') + '|' + size;
+  let proto = bmarkProtos.get(ck);
+  if (!proto) {
+    const span = el('span');
+    span.innerHTML = brandMarkHtml(id, size);
+    proto = span.firstElementChild;
+    bmarkProtos.set(ck, proto);
+  }
+  return proto.cloneNode(true);
+}
+
+/**
+ * כותרת התשובה: הסימן של המודל שכתב אותה ושמו לצידו.
+ *
+ * קודם היה כתוב כאן "Claude" בכל תשובה, בלי קשר למי ענה — גם ב-Gemini וגם
+ * ב-Grok. עכשיו זו השורה שעונה על "עם מי אני מדבר עכשיו" בלי לפתוח את הבורר.
+ */
+function assistantHeadHtml(model) {
+  return `<div class="role-tag" title="${escHtml(brandTitle(model))}">`
+    + brandMarkHtml(model, 22)
+    + `<span class="role-name">${escHtml(modelShort(model))}</span></div>`;
+}
+
+/** «Claude Opus 5 · דרך Cursor» — כותרת ה-tooltip לכל מקום שמציג סימן. */
+function brandTitle(id) {
+  const { brand, via } = brandOf(id);
+  const name = id ? (modelName(id) || leafId(id)) : 'ברירת המחדל של ה-CLI';
+  const bits = [name];
+  if (brand.label && !name.toLowerCase().includes(brand.label.toLowerCase())) bits.push(brand.label);
+  if (via) bits.push('דרך ' + via.label);
+  return bits.join(' · ');
 }
 
 // ---------- Markdown ----------
@@ -187,7 +492,7 @@ const renderMdLive = (t) => renderMd(stabilizeMd(t));
 // ---------- מצב ----------
 // כותרת החלון תמיד מכילה "ממשק עברית" — כלל ה-KWin ב-launch.sh מזהה לפיה את
 // החלון ומצמיד לו את האייקון הנכון בשורת המשימות.
-const BASE_TITLE = 'Claude · ממשק עברית';
+const BASE_TITLE = 'Sol · ממשק עברית';
 const LS = 'rtlclaude.v2';   // מפתח ישן — נשאר רק לצורך הגירה חד-פעמית
 const MAX_IMAGE_BYTES = 30 * 1024 * 1024;
 let store = { convs: [], activeId: null, settings: {}, history: [] };
@@ -195,6 +500,10 @@ let activeId = null;
 let storeReady = false;      // נהיה true רק אחרי טעינה מוצלחת מהשרת
 let storeDir = '';
 let ws = null, busy = false;
+/** טיימר להתחברות-מחדש אחרי onclose. בלי ביטול שלו, קרוס־צ'ק שרץ בתוך
+ *  1.5 שנ׳ מניתוק היה פותח socket שני — וכל פריים (הודעת משתמש + תשובה)
+ *  היה מצויר פעמיים באותו חלון. */
+let reconnectTimer = null;
 
 // ---------- מנוי על שיחה בשרת ----------
 // השרת מחזיק את התהליך ואת זרם האירועים; החלון הזה הוא צופה. subSeq הוא ה-seq
@@ -207,18 +516,25 @@ let syncing = false;
 const syncQueue = [];
 /** רק מכשיר אחד כותב את השיחה לדיסק בכל רגע — השרת קובע מי (ראו broadcastPresence) */
 let isPrimary = true;
+/** מחכים ל-presence אחרי claim_primary — כדי לדווח אם השרת לא הגיב */
+let claimPending = false;
 /** נשלח עם כל הודעה כדי שנזהה את ההד שלנו ונשמור את התצוגה המקדימה המקומית */
 const pendingSends = new Map();
+/** nonce שכבר רונדר — השלמה/socket כפול לא יוסיף את אותה הודעת משתמש שוב */
+const seenUserNonces = new Set();
 
 // מצב סטרימינג של התור הנוכחי
 let live = null; // { convId, msgObj, contentEl, blocks: Map(index->{type,el,ref}), tools: Map(id->{ref,el}) }
 /** שיחה שבבעלותה התור הפעיל — גם אם המשתמש מדפדף לשיחה אחרת */
 let streamOwnerId = null;
+/** התור היה חי כשהחיבור נפל — ההודעה ממתינה שהשרת יעלה, במקום להיראות קטועה בלי הסבר */
+let awaitingServer = false;
 /**
  * תור הפרומפטים המשורשרים. מקור האמת הוא השרת (הוא זה שמשגר את הבא בתור
  * בסיום כל תור, גם כשהדפדפן סגור); מה שמוחזק כאן הוא רק המראה שלו לתצוגה.
  */
 let msgQueue = []; // [{ id, text, atts, images, by }]
+let schedQueue = []; // [{ id, at, text, model, permissionMode, effort }]
 /** המתנה לחידוש מכסת הסשן — { kind, resetsAt, at } או null. מגיע מהשרת. */
 let limitState = null;
 const pendingPerms = new Map();
@@ -230,17 +546,35 @@ let turnTok = { out: 0, curOut: 0, think: 0 };
 function resetTurnTok() { turnTok = { out: 0, curOut: 0, think: 0 }; }
 // ניסיון חוזר של ה-CLI שנמצא באוויר עכשיו (מ-system/api_error), או null
 let turnRetry = null;
-// מה שמצב GOD אישר אוטומטית בתור הנוכחי. נאסף תוך כדי ריצה, ובסופה נכנס
-// לתמליל ככרטיס אחד מקופל בסוף ההודעה (ראו pushGodBlock).
+// מה שמצב GOD אישר אוטומטית בתור הנוכחי. נאסף תוך כדי ריצה — הכפתור החי
+// בפס «עובד…» פותח את הרשימה מיד, ובסוף התור היא נכנסת לתמליל (pushGodBlock).
 let godTurn = [];
 
 function renderWorking() {
+  renderGodLive();
   const t = $('workingText'); if (!t) return;
+  // הרשאה/שאלה ממתינה גוברת על «חושב…» — אחרת פריים סטרימינג דורס את
+  // permWaiting() והמשתמש רואה סתירה מול פס askBar.
+  if (pendingPerms.size) {
+    t.classList.remove('retrying', 'awaiting');
+    permWaiting();
+    return;
+  }
+  if (awaitingServer) {
+    t.classList.remove('retrying');
+    t.classList.add('awaiting');
+    t.textContent = 'מחכה שהשרת יעלה…';
+    return;
+  }
+  if (document.body.classList.contains('stale')) {
+    t.classList.remove('retrying', 'awaiting');
+    t.textContent = 'נראה תקוע — סנכרן מול השרת';
+    return;
+  }
   const parts = [];
   const out = turnTok.out + turnTok.curOut;
   if (out) parts.push(`פלט ${fmtTok(out)} טוקנים`);
   if (turnTok.think) parts.push(`חשיבה ~${fmtTok(turnTok.think)}`);
-  if (godTurn.length) parts.push(`⚡ GOD · ${godTurn.length} אושרו`);
   if (turnRetry) {
     // הסיבה לשקט מוצגת בזמן שהוא נמשך, ולא רק בדיעבד אחרי שהוא הפך לעצירה
     const n = turnRetry.max ? `${turnRetry.attempt}/${turnRetry.max}` : String(turnRetry.attempt || '');
@@ -248,7 +582,7 @@ function renderWorking() {
     t.classList.add('retrying');
     return;
   }
-  t.classList.remove('retrying');
+  t.classList.remove('retrying', 'awaiting');
   t.textContent = parts.length ? 'עובד… · ' + parts.join(' · ') : 'חושב…';
 }
 
@@ -300,12 +634,34 @@ function scheduleFlush() {
   flushTimer = setTimeout(flush, busy ? 2500 : 700);
 }
 
+/**
+ * כתיבה חלקית: כמה הודעות מההתחלה *לא* צריכות להישלח.
+ *
+ * בזמן תור חי משתנה אך ורק ההודעה האחרונה — הטקסט שנכתב עכשיו, כרטיסי הכלים
+ * שלו וכרטיסי ההרשאה שנולדים בתוכו. כל מה שלפניה כבר סגור. בלי זה כל שמירה
+ * (כל 2.5 שניות בזמן סטרימינג) סידרה, שלחה, פענחה וכתבה לדיסק את התמליל
+ * *כולו*, כלומר עלות שגדלה ליניארית עם אורך השיחה ומשולמת עשרות פעמים בתור.
+ *
+ * הבסיס לבטיחות הוא baseRev שכבר קיים: אם הגרסה בדיסק זהה לזו שבידינו, אז
+ * גם הקידומת שם זהה לשלנו, ואפשר להשאיר אותה במקומה. בסוף התור נשלחת שמירה
+ * מלאה אחת — היא גם המקום שבו כל תיקון להודעה ישנה (ראו mergeSessionTail)
+ * מגיע לדיסק.
+ */
+function deltaFrom(c) {
+  if (c._forceFull || !c.rev) return 0;          // מעולם לא נשמרה, או שנדרש מלא
+  if (!busy || streamOwnerId !== c.id) return 0;  // אין תור חי — שולחים הכל
+  return Math.max(0, (c.messages || []).length - 1);
+}
+
 /** מייצר את הגוף שנשלח לשרת — בלי שדות עזר פנימיים. */
-function serializeConv(c) {
+function serializeConv(c, fromIndex) {
+  const msgs = c.messages || [];
+  const from = Math.max(0, Math.min(Number(fromIndex) || 0, msgs.length));
   return {
     id: c.id, title: c.title, sessionId: c.sessionId, sessionAgent: c.sessionAgent || '', cwd: c.cwd || '', draft: c.draft || '',
     cost: c.cost || 0, ctx: c.ctx || null, createdAt: c.createdAt, updatedAt: c.updatedAt || c.createdAt,
-    messages: c.messages || [],
+    messages: from ? msgs.slice(from) : msgs,
+    ...(from ? { fromIndex: from } : {}),
     // הגרסה שראינו לאחרונה. אם בדיסק יש כבר גרסה חדשה יותר (מכשיר אחר כתב
     // בינתיים), השרת דוחה את הכתיבה במקום לתת לנו לדרוס — ואנחנו קוראים מחדש.
     baseRev: c.rev || 0,
@@ -335,16 +691,25 @@ async function flush() {
       // מכשיר שאינו הכותב הנוכחי מדלג: המצב שלו זהה ממילא, וכתיבה כפולה רק
       // הייתה נדחית ומאלצת טעינה מחדש באמצע סטרימינג.
       if (!isPrimary && id === subId) continue;
+      const from = deltaFrom(c);
       const r = await fetch('/api/conversations/' + encodeURIComponent(id), {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(serializeConv(c)),
+        body: JSON.stringify(serializeConv(c, from)),
       });
       if (r.ok) {
         const j = await r.json().catch(() => null);
         if (j && j.rev) c.rev = j.rev;
+        if (!from) c._forceFull = false;   // השמירה המלאה יצאה — החוב נסגר
       } else if (r.status === 409) {
-        // מכשיר אחר התקדם. הדיסק מנצח: קוראים משם ולא כותבים על גביו.
-        await reloadConv(id);
+        const j = await r.json().catch(() => null);
+        if (j && j.needFull) {
+          // השרת לא יכול להרכיב את הקידומת (קובץ קצר מהצפוי). זו אינה
+          // התנגשות בין מכשירים, ולכן אין מה לקרוא מחדש — רק לשלוח הכל.
+          c._forceFull = true; dirtyConvs.add(id); failed = true;
+        } else {
+          // מכשיר אחר התקדם. הדיסק מנצח: קוראים משם ולא כותבים על גביו.
+          await reloadConv(id);
+        }
       } else {
         failed = true; dirtyConvs.add(id);
       }
@@ -368,7 +733,9 @@ function flushBeacon() {
   stashDraft();   // חייב לקרות לפני קריאת dirtyConvs — אחרת טיוטה שלא נשלחה תאבד
   const convs = [...dirtyConvs].map(convById)
     .filter((c) => c && c.loaded && !c.anon && (isPrimary || c.id !== subId))
-    .map(serializeConv);
+    // ‎(c) =>‎ ולא ‎.map(serializeConv)‎: ‎map‎ מעביר את האינדקס כארגומנט שני,
+    // כלומר כל שיחה מהשנייה והלאה הייתה נשלחת כדלתא חתוכה באמצע.
+    .map((c) => serializeConv(c));
   if (!convs.length && !settingsDirty) return;
   const body = JSON.stringify({ conversations: convs, ...settingsBody() });
   try {
@@ -377,7 +744,7 @@ function flushBeacon() {
       return;
     }
   } catch {}
-  try { fetch('/api/flush', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }); } catch {}
+  try { fetch('/api/flush', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {}); } catch {}
 }
 addEventListener('pagehide', flushBeacon);
 addEventListener('beforeunload', flushBeacon);
@@ -387,6 +754,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 let saveState = 'idle';
 function setSaveState(s) {
   if (saveState === s) return;
+  const prev = saveState;
   saveState = s;
   const dot = $('saveDot');
   if (!dot) return;
@@ -394,7 +762,10 @@ function setSaveState(s) {
   dot.className = 'save-dot ' + s;
   dot.textContent = s === 'error' ? 'לא נשמר' : s === 'saving' || s === 'pending' ? 'שומר…' : s === 'saved' ? 'נשמר' : '';
   dot.title = storeDir ? label + ' · ' + storeDir : label;
+  dot.setAttribute('aria-label', label || 'מצב שמירה');
   dot.classList.toggle('hidden', s === 'idle');
+  // כשל שמירה שקט היה משאיר רק נקודה אדומה — בטלפון היא נראית, אבל בלי הסבר
+  if (s === 'error' && prev !== 'error') toast('השמירה נכשלה — מנסה שוב', true);
 }
 
 // ---------- טעינה מהשרת ----------
@@ -578,6 +949,9 @@ async function reconcileFromSession(id) {
   }
 
   if (!touched) return null;
+  // התיקון נוגע בהודעה *שאינה* האחרונה, ולכן שמירה חלקית הייתה משאירה את
+  // הגרסה הקטועה בדיסק. ראו deltaFrom.
+  c._forceFull = true;
   markDirty(c);
   if (activeId === id) {
     const keep = $('input').value;
@@ -664,7 +1038,10 @@ function startAnonChat() {
     toast('ה-CLI המותקן לא תומך בהרצה בלי שמירת סשן — צ׳אט אנונימי לא יכול לרוץ כאן', true);
     return;
   }
-  if (busy) { interruptTurn(); abandonTurn(); }
+  if (busy && streamOwnerId === activeId) {
+    if (!confirm('יש תשובה פעילה בשיחה הזו.\nלעצור אותה ולפתוח צ׳אט אנונימי?')) return;
+    interruptTurn(); abandonTurn();
+  } else if (busy) { interruptTurn(); abandonTurn(); }
   stashDraft();
   closeDrawer();
   const open = anonConv();
@@ -762,7 +1139,8 @@ function applyAnonMode() {
   const tools = $('anonTools');
   if (tools && c) {
     tools.classList.toggle('on', !!c.tools);
-    // הכפתור מחזיק שתי תוויות ו-CSS בוחר איזו מהן נראית; כתיבה ל-textContent
+    tools.setAttribute('aria-pressed', c.tools ? 'true' : 'false');
+    // הכפתון מחזיק שתי תוויות ו-CSS בוחר איזו מהן נראית; כתיבה ל-textContent
     // כאן הייתה מוחקת את שתיהן ומחזירה את הכיתוב הארוך למסך הצר.
     const tl = tools.querySelector('.t-long'), ts = tools.querySelector('.t-short');
     if (tl) tl.textContent = c.tools ? 'כלים: פעילים' : 'כלים: כבויים';
@@ -770,17 +1148,25 @@ function applyAnonMode() {
     tools.title = c.tools
       ? 'הכלים פעילים — פעולות על קבצים ובטרמינל משאירות עקבות משל עצמן, מחוץ לשיחה'
       : 'הכלים כבויים — שיחה בלבד, בלי קריאה/כתיבה של קבצים ובלי טרמינל';
+    tools.setAttribute('aria-label', tools.title);
   }
   // חיווי השמירה לא שייך כאן: אין מה לשמור, ו"נשמר" היה שקר על המסך
   if (on) setSaveState('idle');
 }
 
 function interruptTurn() {
-  if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'interrupt' }));
+  if (ws && ws.readyState === ws.OPEN) {
+    ws.send(JSON.stringify({ type: 'interrupt' }));
+    return;
+  }
+  // עצור נראה פעיל גם אחרי ניתוק (busy נשאר) — בלי משוב זה נראה שבור.
+  toast('אין חיבור — מנסה לסנכרן…', true);
+  manualCheck('stop');
 }
 function abandonTurn() {
   dlog('abandon', { activeId, streamOwnerId, busy, blocks: live ? (live.blocks || []).length : 0 });
   pushGodBlock();   // תור שנשבר — מה שכבר אושר ב-GOD עדיין מגיע לתמליל
+  hideAwaitServer();
   live = null;
   streamOwnerId = null;
   turnRetry = null;
@@ -792,16 +1178,50 @@ function abandonTurn() {
 
 // ---------- WebSocket ----------
 function connect() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  // חיבור חדש בלי לסגור את הקודם היה משאיר שני מנויים באותו חלון: השליחה
+  // יוצאת רק מהאחרון, אבל שניהם מקבלים את הזרם — והמסך מצייר כל תור פעמיים.
+  const prev = ws;
+  if (prev) {
+    prev.onopen = null; prev.onclose = null; prev.onerror = null; prev.onmessage = null;
+    try { if (prev.readyState === 0 || prev.readyState === 1) prev.close(); } catch {}
+  }
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${proto}://${location.host}`);
-  ws.onopen = () => { dlog('ws.open', { activeId, busy }); setStatus(busy ? 'busy' : 'on', 'מחובר'); subscribeActive(true); };
+  const sock = new WebSocket(`${proto}://${location.host}`);
+  ws = sock;
+  sock.onopen = () => {
+    if (ws !== sock) return;
+    dlog('ws.open', { activeId, busy }); setStatus(busy ? 'busy' : 'on', 'מחובר'); syncOrbitState(); subscribeActive(true);
+  };
   // ניתוק כבר לא מבטל את התור: התהליך רץ בשרת וממשיך גם כשהחלון סגור.
   // מסמנים "מנותק", מתחברים מחדש, וה-sync משלים בדיוק את מה שהוחמץ.
-  ws.onclose = (e) => { dlog('ws.close', { code: e && e.code, clean: !!(e && e.wasClean), busy }); setStatus('', 'מנותק'); setTimeout(connect, 1500); };
-  ws.onerror = () => { dlog('ws.error', { state: ws ? ws.readyState : -1 }); setStatus('', 'שגיאת חיבור'); };
-  ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } handleServer(m); };
+  sock.onclose = (e) => {
+    if (ws !== sock) return;
+    dlog('ws.close', { code: e && e.code, clean: !!(e && e.wasClean), busy });
+    setStatus('', 'מנותק');
+    // תור חי בזמן ניתוק: ההודעה עצמה אומרת שהיא מחכה, לא נשארת קטועה באמצע משפט.
+    if (busy) showAwaitServer();
+    reconnectTimer = setTimeout(connect, 1500);
+  };
+  sock.onerror = () => { if (ws !== sock) return; dlog('ws.error', { state: sock.readyState }); setStatus('', 'שגיאת חיבור'); };
+  sock.onmessage = (e) => {
+    if (ws !== sock) return;
+    let m; try { m = JSON.parse(e.data); } catch { return; } handleServer(m);
+  };
 }
-function setStatus(cls, title) { const d = $('statusDot'); d.className = 'dot' + (cls ? ' ' + cls : ''); d.title = title; }
+function setStatus(cls, title) {
+  const d = $('statusDot');
+  d.className = 'dot' + (cls ? ' ' + cls : '');
+  d.title = title;
+  // הפסיל והנקודה חייבים לומר אותו דבר. קודם הפסיל נשאר על «מוכן» גם אחרי
+  // onclose — רק הנקודה האפירה סימנה ניתוק, וזה נסתר בטלפון רחב יחסית.
+  const pill = $('statusPill');
+  if (!pill) return;
+  if (cls === 'busy') pill.textContent = 'מעבד…';
+  else if (cls === 'on') pill.textContent = 'מוכן';
+  else pill.textContent = title || 'מנותק';
+}
+function wsConnected() { return !!(ws && ws.readyState === 1); }
 
 /* ==========================================================================
    קרוס־צ'ק — השוואת מצב המסך למצב האמיתי בשרת
@@ -824,6 +1244,37 @@ const STALE_MS = 15000;         // תור פעיל בלי אף פריים = חש
 const PONG_DEAD_MS = 25000;     // בלי מענה ping כזמן הזה — ה-socket מת
 const RECHECK_MS = 10000;       // מרווח מינימלי בין בדיקות אוטומטיות
 
+/* ---------- בדיקה שנכשלה מנסה שוב ----------
+   הבדיקה עצמה הייתה החוליה החלשה בדיוק ברגע שבשבילו היא נבנתה. הרגעים שבהם
+   היא נורית — ‎visibilitychange‎, ‎online‎, ‎pageshow‎ — הם הרגעים שבהם המכשיר
+   *זה עתה* התעורר והרדיו עדיין לא עלה, ולכן ה-‎fetch‎ הראשון נופל על timeout.
+   ביומן אמיתי כאן: 26 כשלי ‎resume‎ ועוד 5 של ‎online‎.
+
+   ומה שקרה אז היה החמור מכול. כישלון הדפיס «השרת לא מגיב» וסיים — הלולאה
+   האוטומטית בודקת רק כש-‎busy‎, אז כשלא היה תור רץ שום דבר לא ניסה שוב. אם
+   במקביל ה-socket היה חצי-פתוח (‎readyState === OPEN‎ בלי שאף פריים מגיע —
+   התקלה שכל המנגנון הזה קיים בשבילה), אז ‎onclose‎ לא נורה, ההתחברות-מחדש לא
+   רצה, והמסך נשאר תקוע על «השרת לא מגיב» גם אחרי שהרשת חזרה.
+
+   כישלון הוא ראיה לתקלה, לא סיבה לוותר: מנסים שוב בריווח גדל, ועוצרים אחרי
+   שלושה ניסיונות כדי שמחשב שבאמת כבוי לא יזכה לתשאול אינסופי. */
+const CHECK_RETRY_MS = [1500, 4000, 10000];
+let checkRetryTimer = null, checkRetryStep = 0;
+
+function cancelCheckRetry() {
+  if (checkRetryTimer) clearTimeout(checkRetryTimer);
+  checkRetryTimer = null;
+  checkRetryStep = 0;
+}
+
+function scheduleCheckRetry(reason) {
+  if (checkRetryTimer || checkRetryStep >= CHECK_RETRY_MS.length) return;
+  const wait = CHECK_RETRY_MS[checkRetryStep++];
+  // ‎retry:‎ ולא ה-reason המקורי: בדיקה ידנית שנכשלה כבר הראתה toast, ואין
+  // טעם להקפיץ אותו שוב על כל ניסיון.
+  checkRetryTimer = setTimeout(() => { checkRetryTimer = null; crossCheck('retry:' + reason); }, wait);
+}
+
 /** כמה זמן אין עדכון. רלוונטי רק כשאמורים לקבל עדכונים. */
 function staleFor() { return busy ? Date.now() - lastFrameAt : 0; }
 
@@ -831,12 +1282,28 @@ function renderStale() {
   const ms = staleFor();
   const stale = ms > STALE_MS;
   document.body.classList.toggle('stale', stale);
-  const note = $('staleNote'), btn = $('resyncBtn');
+  syncOrbitState();
+  const note = $('staleNote'), btn = $('resyncBtn'), wt = $('workingText');
   if (btn) btn.classList.toggle('hidden', !stale);
   if (note) {
     note.classList.toggle('hidden', !stale);
-    if (stale) note.textContent = `אין עדכון כבר ${Math.round(ms / 1000)} שנ׳`;
+    if (stale) note.textContent = `אין עדכון כבר ${Math.round(ms / 1000)} שנ׳ · נסה סנכרן`;
   }
+  // לא משאירים «חושב…» ליד אזהרת stale — זה נשמע כמו המתנה רגילה.
+  // חיווי ההמתנה לשרת גובר: זה הסבר מדויק יותר מ«נראה תקוע».
+  if (awaitingServer) {
+    if (wt) { wt.classList.add('awaiting'); wt.textContent = 'מחכה שהשרת יעלה…'; }
+  } else if (stale && wt && !wt.classList.contains('retrying') && !(pendingPerms && pendingPerms.size)) {
+    wt.textContent = 'נראה תקוע — סנכרן מול השרת';
+  } else if (!stale && busy) {
+    renderWorking();
+  }
+}
+
+/** המסגרת הנעה הופכת לאדומה כשאין סנכרון — ניתוק, המתנה לשרת, או תור תקוע. */
+function syncOrbitState() {
+  const lost = !!busy && (awaitingServer || !wsConnected() || staleFor() > STALE_MS);
+  document.body.classList.toggle('nosync', lost);
 }
 
 function pingSocket() {
@@ -878,6 +1345,9 @@ function resync(full) {
 async function crossCheck(reason) {
   const manual = reason === 'manual';
   if (checking) { dlog('check.busy', { reason }); return null; }
+  // טריגר חדש (חזרה למסך, רשת שחזרה, לחיצה) פותח סולם ניסיונות חדש; רק
+  // המשך של סולם קיים ממשיך לספור.
+  if (!reason.startsWith('retry:')) cancelCheckRetry();
   // התור שייך לשיחה שהתחילה אותו, גם אם המשתמש דפדף בינתיים לשיחה אחרת
   const convId = streamOwnerId || subId || activeId;
   if (!convId) { if (manual) toast('אין שיחה לבדוק'); dlog('check.noconv', { reason }); return null; }
@@ -940,7 +1410,8 @@ async function crossCheck(reason) {
       fixed.push('התור כבר הסתיים בשרת');
       setTimeout(() => {
         if (busy && staleFor() > 2500) {
-          abandonTurn();
+          if (awaitingServer) closeTurnAfterServerBack();
+          else abandonTurn();
           toast('התור הסתיים בשרת — המסך שוחרר');
         }
       }, 2500);
@@ -949,7 +1420,7 @@ async function crossCheck(reason) {
     // השרת לא מכיר את השיחה: אין תור, אין יומן, אין ממה להשלים. מסך שעדיין
     // מציג "עובד" תקוע על תור שכבר לא קיים (שרת שעלה מחדש, סשן שפונה מהזיכרון).
     if (!st.known && busy) {
-      abandonTurn();
+      closeTurnAfterServerBack();
       fixed.push('אין תור פעיל בשרת — המסך שוחרר');
     }
 
@@ -969,6 +1440,11 @@ async function crossCheck(reason) {
       else if (st.running) toast('הכול מסונכרן — Claude עדיין עובד');
       else toast('הכול מסונכרן');
     }
+    // הבדיקה הצליחה — הסולם נסגר, והפסיל לא יישאר על «השרת לא מגיב» מבדיקה
+    // קודמת שנכשלה. רק כשה-socket באמת פתוח: אחרת ההתחברות-מחדש היא הבעלים
+    // של הכיתוב, ו-‎onopen‎ יעדכן אותו בעצמו.
+    cancelCheckRetry();
+    if (wsConnected()) setStatus(busy ? 'busy' : 'on', 'מחובר');
     dlog('check.done', { reason, fixed });
     renderStale();
     return fixed.length ? fixed.join(' · ') : null;
@@ -976,7 +1452,9 @@ async function crossCheck(reason) {
     // ה-HTTP עצמו נכשל: לא באג בסנכרון אלא שהשרת/הרשת לא זמינים
     dlog('check.fail', { reason, msg: String(e && e.message || e) });
     setStatus('', 'השרת לא מגיב');
+    if (busy) showAwaitServer();
     if (manual) toast('השרת לא מגיב (' + (e.message || e) + ')', true);
+    scheduleCheckRetry(reason.replace(/^retry:/, ''));
     return null;
   } finally {
     checking = false;
@@ -1037,6 +1515,7 @@ function handleServer(m) {
     case 'ui': applyRemoteUi(m); break;
     case 'event': handleEvent(m.evt); break;
     case 'god_allow': onGodAllow(m.entry); break;
+    case 'god_deny': onGodDeny(m); break;
     case 'permission': showPermission(m.id, m.req); break;
     case 'permission_cancel': cancelPermission(m.id); break;
     case 'permission_resolved': onRemoteResolved(m); break;
@@ -1045,6 +1524,7 @@ function handleServer(m) {
     case 'dialog_timeout': closePermission(m.id, 'cancelled'); toast('פג הזמן למענה על בקשת Claude', true); break;
     case 'conv_meta': onRemoteConvMeta(m.meta); break;
     case 'conv_deleted': onRemoteConvDeleted(m.id); break;
+    case 'config': onRemoteConfig(m); break;
     // השרת השמיד את הצ'אט האנונימי (יציאה ממכשיר אחר, או שהחלון נעלם למשך
     // מרווח החסד). התהליך כבר מת שם — מנקים גם כאן במקום להציג תמליל מת.
     case 'anon_wiped':
@@ -1052,6 +1532,7 @@ function handleServer(m) {
       break;
     case 'duet': onDuetFrame(m); break;
     case 'queue': onQueueUpdate(m.items); break;
+    case 'schedules': onScheduleUpdate(m.items); break;
     case 'toast':
       // ‎duet_start‎ שנדחה (מטרה חסרה, תוצר פתיחה גדול מדי) חוזר כ-toast. בלי
       // זה הכפתור בטופס ההגדרה היה נשאר "מתחיל…" על ריצה שלא קיימת.
@@ -1094,7 +1575,14 @@ async function onSync(m) {
   // קודם כל מצב הריצה: מסך הדואט נבנה ממנו, ולכן הוא חייב להיות במקום לפני
   // הציור של השיחה — גם בנתיב reset וגם בהתחברות מחדש באמצע תור.
   if (m.duet) duetAdopt(m.duet);
-  else if (duetRun) { duetRun = null; duetLive = null; duetDom = null; duetViewV = 0; duetVerCache.clear(); }
+  else {
+    if (duetRun) { duetRun = null; duetLive = null; duetDom = null; duetViewV = 0; duetVerCache.clear(); }
+    const waiting = convById(m.convId);
+    if (waiting && waiting._awaitDuetSync) {
+      waiting._awaitDuetSync = false;
+      if (activeId === m.convId) renderConversation();
+    }
+  }
   if (m.mode === 'reset') {
     syncing = true;
     try {
@@ -1103,6 +1591,7 @@ async function onSync(m) {
       // התור כולו עומד להתנגן מחדש מהיומן, כולל פריימי GOD שכבר נספרו כאן —
       // בלי האיפוס הזה הם היו נספרים פעמיים בכרטיס הסיכום.
       godTurn = [];
+      renderGodLive();
       const c = convById(m.convId);
       // שיחה שמעולם לא נכתבה לדיסק — ‎rev=0‎, בלי סשן ובלי הודעות — אין מה
       // לקרוא ממנו, והקריאה החזירה 404 בכל פתיחה של שיחה חדשה. ‎rev‎ מתעדכן
@@ -1124,16 +1613,40 @@ async function onSync(m) {
   if (modelDirty && ws && ws.readyState === ws.OPEN && subId) pushModel();
   else if (typeof m.model === 'string') adoptModel(m.model, m.effort);
   // כרטיסים שנפתחו בזמן שלא היינו מחוברים — כדי שאפשר יהיה לענות עליהם מכאן
-  for (const p of (m.perms || [])) if (!pendingPerms.has(p.id)) showPermission(p.id, p.req);
-  for (const d of (m.dialogs || [])) if (!pendingPerms.has(d.id)) showDialog(d.id, d.req);
+  let revived = 0;
+  for (const p of (m.perms || [])) if (!pendingPerms.has(p.id)) { showPermission(p.id, p.req, { silent: true }); revived++; }
+  for (const d of (m.dialogs || [])) if (!pendingPerms.has(d.id)) { showDialog(d.id, d.req); revived++; }
+  // כרטיס שנענה במכשיר אחר בזמן ניתוק — הסנכרון לא מביא אותו שוב, ולכן סוגרים
+  // מקומית כל id שאינו ברשימת השרת (אחרת askBar נשאר אחרי שהתור כבר המשיך).
+  {
+    const live = new Set([...(m.perms || []).map((p) => p.id), ...(m.dialogs || []).map((d) => d.id)]);
+    for (const id of [...pendingPerms.keys()]) {
+      if (!live.has(id)) closePermission(id, 'ended');
+    }
+  }
+  if (revived && streamOwnerId && activeId !== streamOwnerId) {
+    toast(revived === 1 ? 'Claude ממתין לתשובה בשיחה אחרת' : `Claude ממתין ל-${revived} תשובות בשיחה אחרת`);
+  }
   // התור וההמתנה למכסה שייכים לשיחה ולא למכשיר — נטענים מהשרת בכל התחברות
   onQueueUpdate(m.queue || []);
+  onScheduleUpdate(m.schedules || []);
   setLimitState(m.limit || null);
   // רק כאן מותר להוריד "עסוק" לפי השרת: זו התמונה המלאה של מצב השיחה ברגע
   // ההתחברות. בזרם הרגיל הורדת הדגל שייכת לאירוע result, כדי שלא נבטל בטעות
   // תור שכבר שוגר מהתור-הממתין בין שני הפריימים.
-  if (m.running) onRemoteBusy(true);
-  else if (busy) abandonTurn();
+  // וגם: מעבר לשיחה אחרת בזמן תור רץ — ה-sync של היעד (running:false) לא
+  // אמור לכבות busy של השיחה שנותרה בעלים של התור.
+  if (m.running) {
+    hideAwaitServer();
+    onRemoteBusy(true);
+  } else if (busy && streamOwnerId === subId) {
+    // reset בלי תור חי = השרת עלה מחדש ואיבד את התהליך. catchup אומר שהתור
+    // הסתיים כרגיל בזמן הניתוק — הפריימים שאחרי הסנכרון הם שמסיימים אותו.
+    if (awaitingServer && m.mode === 'reset') closeTurnAfterServerBack();
+    else { hideAwaitServer(); abandonTurn(); }
+  } else if (!m.running) {
+    sealStrandedAwaiting(m.convId);
+  }
 }
 
 /** מצב "עובד" נקבע בשרת, כך ששני המכשירים מראים את אותו דבר. */
@@ -1145,6 +1658,12 @@ function onRemoteBusy(running) {
 
 /** הודעת משתמש — מרונדרת מההד של השרת, כך שהיא מופיעה זהה בכל המכשירים. */
 function onRemoteUserMsg(m) {
+  // אותו nonce פעמיים = השלמת יומן או socket כפול, לא שליחה חדשה
+  if (m.nonce) {
+    if (seenUserNonces.has(m.nonce)) return;
+    seenUserNonces.add(m.nonce);
+    if (seenUserNonces.size > 80) seenUserNonces.delete(seenUserNonces.values().next().value);
+  }
   const local = m.nonce ? pendingSends.get(m.nonce) : null;
   if (m.nonce) pendingSends.delete(m.nonce);
   streamOwnerId = m.convId || subId;
@@ -1169,17 +1688,54 @@ function onRemoteResolved(m) {
 function renderPresence(m) {
   const wasPrimary = isPrimary;
   isPrimary = m.primary !== false;
-  // הפכנו לכותב (המכשיר השני נסגר, או ששלחנו מכאן) — משלימים כתיבה לדיסק
-  if (isPrimary && !wasPrimary) { const c = activeConv(); if (c) markDirty(c); }
+  // הפכנו לכותב (המכשיר השני נסגר, שלחנו מכאן, או שלקחנו שליטה) — משלימים כתיבה לדיסק
+  if (isPrimary && !wasPrimary) {
+    const c = activeConv(); if (c) markDirty(c);
+    if (claimPending) { claimPending = false; toast('השליטה עברה לכאן'); }
+  }
   const el2 = $('presence');
   if (!el2) return;
   const others = Math.max(0, (m.count || 1) - 1);
   el2.classList.toggle('hidden', others < 1);
-  if (others < 1) return;
+  if (others < 1) {
+    el2.removeAttribute('role');
+    el2.removeAttribute('tabindex');
+    el2.dataset.mode = '';
+    return;
+  }
   const names = (m.devices || []).slice(0, 3).join(' · ');
+  // מכשיר משני כותב לזיכרון אבל מדלג על flush לדיסק — בלי סימן זה נראה כמו
+  // סנכרון מלא, ואז "למה השיחה לא נשמרה מכאן" מגיע רק אחרי רענון.
+  // לחיצה מעבירה את השליטה לכאן בלי לחכות לשליחת הודעה.
+  if (!isPrimary) {
+    el2.textContent = '👁 קח שליטה';
+    el2.dataset.n = others;
+    el2.dataset.mode = 'view';
+    el2.title = 'לחיצה מעבירה לכאן את השמירה לדיסק. מחוברים: ' + names;
+    el2.setAttribute('role', 'button');
+    el2.tabIndex = 0;
+    return;
+  }
   el2.textContent = others === 1 ? '⛓ מכשיר נוסף' : `⛓ ${others} מכשירים`;
-  el2.dataset.n = others;   // במסך צר ה-CSS מציג רק "⛓N" במקום המשפט המלא
+  el2.dataset.n = others;   // במסך צר ה-CSS מציג רק "⛓N" / "👁N"
+  el2.dataset.mode = 'sync';
   el2.title = 'מחוברים לשיחה הזו: ' + names;
+  el2.removeAttribute('role');
+  el2.removeAttribute('tabindex');
+}
+
+/** מעביר את כתיבת הדיסק למכשיר הנוכחי (ממסך «תצוגה בלבד»). */
+function claimPrimary() {
+  if (isPrimary) { toast('השליטה כבר אצלך'); return; }
+  if (!ws || ws.readyState !== ws.OPEN) { toast('אין חיבור לשרת', true); return; }
+  claimPending = true;
+  ws.send(JSON.stringify({ type: 'claim_primary' }));
+  // אם השרת ישן / לא מכיר את ההודעה — לא יגיע presence, ונדווח אחרי רגע
+  setTimeout(() => {
+    if (!claimPending) return;
+    claimPending = false;
+    if (!isPrimary) toast('לא הצלחתי לקחת שליטה — רענן את הדף או הפעל מחדש את השרת', true);
+  }, 2500);
 }
 
 /* ---------- מצב שאינו בתמליל (בוררים, תיקייה, טיוטה) ----------
@@ -1205,6 +1761,7 @@ function adoptModel(model, effort) {
   // הרשימה עדיין לא נטענה מ-/api/config — עדיף לא לגעת מאשר ליפול לברירת מחדל
   if (model && ![...ms.options].some(o => o.value === model)) return;
   if (ms.value !== model) { ms.value = model; updateEfforts(); }
+  populatePerms();
   if (typeof effort === 'string') keepValue($('effort'), effort, '');
   store.settings.model = ms.value;
   store.settings.effort = $('effort').value;
@@ -1219,9 +1776,21 @@ function sendUi(field, value) {
 function applyRemoteUi(m) {
   const conv = convById(m.convId) || activeConv();
   if (m.field === 'draft') {
+    const prev = conv ? (conv.draft || '') : '';
     if (conv) conv.draft = m.value || '';
-    // לא דורסים טקסט שאתה מקליד ברגע זה — רק שדה ריק מתעדכן מרחוק
-    if (conv && conv.id === activeId && !$('input').value) { $('input').value = m.value || ''; autoGrow(); }
+    /* לא דורסים טקסט שאתה מקליד ברגע זה. שני מצבים כן מתעדכנים: שדה ריק,
+       ושדה שמכיל *בדיוק* את הטיוטה הקודמת שהגיעה מהסנכרון — כלומר מה שרואים
+       בו אינו שלך אלא הד של המכשיר השני. בלי המקרה השני הודעה שנשלחה מהמחשב
+       נשארה תלויה בתיבת הטלפון: השידור המנקה הגיע, אבל התיבה כבר לא הייתה
+       ריקה — ומי שהסתכל על הטלפון ראה טקסט שכבר נשלח וחיכה לשליחה. */
+    if (conv && conv.id === activeId) {
+      const box = $('input').value;
+      if (!box || box === prev) { $('input').value = m.value || ''; autoGrow(); }
+      else if (m.value && m.value !== box) {
+        // המכשיר השני שלח טיוטה — לא דורסים הקלדה מקומית, אבל אומרים שקרה משהו
+        toast('טיוטה עודכנה במכשיר אחר — לא דרסנו את מה שאתה מקליד');
+      }
+    }
     return;
   }
   if (m.field === 'title') {
@@ -1236,9 +1805,14 @@ function applyRemoteUi(m) {
   if (m.field === 'cwd') { if (conv) conv.cwd = m.value || ''; syncConvCwd(); }
   // בחירת מודל מהמכשיר השני כבר הוחלה בשרת; כאן רק מיישרים את המסך — כולל
   // רשימת רמות המאמץ, שתלויה במודל, וכולל שמירה כדי שהיא תשרוד רענון.
-  if (m.field === 'model') { updateEfforts(); store.settings.model = node.value; store.settings.effort = $('effort').value; markSettings(); }
+  // מצבי ההרשאה מתחלפים עם הסוכן: בלי populatePerms כאן, ‎force‎ של Cursor
+  // נשאר בבורר ונשלח ל-Claude בשיחה הבאה.
+  if (m.field === 'model') { updateEfforts(); populatePerms(); store.settings.model = node.value; store.settings.effort = $('effort').value; markSettings(); }
   if (m.field === 'effort') { store.settings.effort = node.value; markSettings(); }
-  if (m.field === 'permissionMode') markGodPill();
+  if (m.field === 'permissionMode') {
+    keepValue(node, m.value, node.options[0] ? node.options[0].value : '');
+    markGodPill();
+  }
   updateStatusbar();
 }
 
@@ -1272,11 +1846,13 @@ function onRemoteConvDeleted(id) {
   store.convs = store.convs.filter((c) => c.id !== id);
   dirtyConvs.delete(id);
   if (activeId === id) {
+    stick = true;
     activeId = store.convs[0] ? store.convs[0].id : null;
     if (!activeId) newConv(); else subscribeActive();
     const c = activeConv();
     if (c && !c.loaded) ensureLoaded(c.id).then(() => { if (activeId === c.id) { renderConversation(); restoreDraft(); syncConvCwd(); } });
     renderConversation();
+    if (c && c.loaded && activeId === c.id) { restoreDraft(); syncConvCwd(); renderQueue(); }
     toast('השיחה נמחקה ממכשיר אחר');
   }
   renderConvList();
@@ -1307,6 +1883,7 @@ function handleEvent(evt) {
 
   // הזרם התאושש — הפעם הבאה שיוצא ממנו תוכן מסירה את חיווי הניסיון החוזר
   if (turnRetry && (evt.type === 'stream_event' || evt.type === 'assistant')) { turnRetry = null; renderWorking(); }
+  if (awaitingServer && (evt.type === 'stream_event' || evt.type === 'assistant')) hideAwaitServer();
 
   if (evt.type === 'stream_event') { handleStream(evt.event); return; }
 
@@ -1382,7 +1959,7 @@ function mountLiveDom() {
   const row = el('div', 'row assistant');
   const wrap = el('div', 'wrap');
   const msgObj = live.msgObj;
-  wrap.innerHTML = `<div class="role-tag"><span class="avatar">${AVATAR}</span>Claude</div><div class="content"></div>`;
+  wrap.innerHTML = assistantHeadHtml(msgObj.model) + '<div class="content"></div>';
   row.appendChild(wrap); $('log').appendChild(row);
   // "העתק" נחשף רק כשיש טקסט להעתיק. תור שהוא כולו כרטיס כלי או כרטיס אישור
   // הציג כפתור העתקה שלחיצה עליו לא עושה כלום. (הרינדור מהתמליל השמור כבר
@@ -1391,6 +1968,7 @@ function mountLiveDom() {
   live.actionsEl.hidden = !assistantText(msgObj);
   live.contentEl = wrap.querySelector('.content');
   watchStickHeight(live.contentEl);
+  if (awaitingServer) syncAwaitBanner();
   autoScroll();
 }
 
@@ -1407,12 +1985,62 @@ function ensureLive() {
   }
 
   hideWelcome();
-  const msgObj = { role: 'assistant', blocks: [] };
+  // המודל נצרב בהודעה ברגע שהיא נולדת, ולא נקרא מהבורר בזמן הציור: שיחה
+  // שעברה בין מודלים באמצע צריכה להראות ליד כל תשובה את מי שבאמת כתב אותה.
+  const msgObj = { role: 'assistant', blocks: [], model: $('model').value || '' };
   conv.messages.push(msgObj);
   live = { convId: conv.id, msgObj, contentEl: null, blocks: new Map(), tools: new Map() };
   if (activeId === conv.id) mountLiveDom();
   persist();
   return live;
+}
+
+/* ==========================================================================
+   גוף של כרטיס נבנה רק כשפותחים אותו
+   --------------------------------------------------------------------------
+   כרטיס כלי וכרטיס חשיבה הם ‎<details>‎ סגורים, והכותרת שלהם (שם, תצוגה
+   מקדימה, סטטוס) היא כל מה שנראה עד שלוחצים. הגוף — הפרמטרים המלאים, ה-diff,
+   התוצאה, תמליל החשיבה — נבנה בכל זאת, בכל כרטיס, בכל ציור.
+
+   נמדד בדפדפן אמיתי על שלוש השיחות הגדולות כאן: מתוך 8,057 צמתי DOM בגדולה
+   שבהן, **4,932 (61%) יושבים בגופים של 352 כרטיסים — שכולם סגורים**. בשתי
+   האחרות: 52% ו-35%.
+
+   המדידה גם פסלה כיוון אחר. ‎markStatusSeparators‎ נראה בפרופיל כ-47% מזמן
+   הרינדור, אבל הוא רק ‎getComputedStyle‎ שמאלץ פריסה מיד אחרי בניית ה-DOM:
+   לנטרל אותו הוריד את ‎renderConversation‎ מ-95ms ל-42ms, ואת *סך* העבודה
+   (רינדור ועוד פריסה כפויה) מ-88.8ms ל-90.2ms. כלומר אפס — הפריסה רק זזה
+   מחוץ למדידה. מה שבאמת עולה זה צמתים, ולכן זה מה שנחסך כאן.
+
+   הגוף נרשם כסגירה שממתינה, והאירוע ‎toggle‎ בונה אותו בפתיחה הראשונה.
+   ‎toggle‎ אינו מבעבע, ולכן המאזין יושב על ‎#log‎ בשלב ה-*לכידה*.
+   ========================================================================== */
+const pendingBody = new WeakMap();   // <details> → הבונה שממתין
+
+/** רושם בונה לגוף הכרטיס: מיד אם הוא כבר פתוח, אחרת בפתיחה הראשונה. */
+function setBody(d, build) {
+  if (!d) return;
+  if (d.open) { pendingBody.delete(d); build(); return; }
+  // כתיבה חוזרת דורסת: בזמן סטרימינג אותו כרטיס מתעדכן עשרות פעמים, ומה
+  // שייבנה בפתיחה צריך להיות המצב האחרון ולא הראשון.
+  pendingBody.set(d, build);
+}
+
+/** בונה עכשיו גוף שהמתין. מחזיר אם היה מה לבנות. */
+function flushBody(d) {
+  const build = d && pendingBody.get(d);
+  if (!build) return false;
+  pendingBody.delete(d);
+  build();
+  return true;
+}
+
+/** כל מה שממתין תחת שורש. נדרש לפני חיפוש, שסורק טקסט מתוך ה-DOM עצמו. */
+function flushBodies(root) {
+  if (!root) return 0;
+  let n = 0;
+  for (const d of root.querySelectorAll('details')) if (flushBody(d)) n++;
+  return n;
 }
 
 // חשיבה מוצפנת: חלק מהמודלים (בהם Opus 5) מחזירים בלוק thinking עם signature בלבד
@@ -1421,13 +2049,26 @@ function fillThink(d, ref, streaming) {
   if (!d) return;
   const has = !!(ref.text && ref.text.trim());
   const tok = ref.tokens ? `~${Number(ref.tokens).toLocaleString('he-IL')} טוקנים` : '';
-  const think = d.querySelector('.think');
-  if (think) {
-    if (has) { think.innerHTML = streaming ? renderMdLive(ref.text) : renderMd(ref.text); if (!streaming) enhance(think); }
+  setBody(d, () => {
+    const think = d.querySelector('.think');
+    if (!think) return;
+    // ‎ref‎ נקרא כאן ולא למעלה: הוא מוטב במקום בזמן סטרימינג, ומי שפותח את
+    // הכרטיס אחר כך צריך לראות את הטקסט המלא ולא את מה שהיה בקריאה שרשמה.
+    const t = ref.text || '';
+    if (t.trim()) { think.innerHTML = streaming ? renderMdLive(t) : renderMd(t); if (!streaming) enhance(think); }
     else think.innerHTML = `<p class="think-empty">המודל הזה לא חושף את תוכן החשיבה${tok ? ' · ' + tok : ''}</p>`;
-  }
+  });
   const prev = d.querySelector('.tprev');
-  if (prev) prev.textContent = has ? clamp(ref.text.split('\n').pop(), 80) : (tok || 'ללא תוכן גלוי');
+  if (prev) prev.textContent = has ? clamp(lastLine(ref.text), 80) : (tok || 'ללא תוכן גלוי');
+}
+
+/* השורה האחרונה שיש בה משהו. תמליל חשיבה מסתיים כמעט תמיד ב-‎\n‎ (ולא פעם
+   בשניים), ולכן ‎split('\n').pop()‎ החזיר מחרוזת ריקה — ב-39% מכרטיסי החשיבה
+   שבשיחות כאן הכרטיס הוצג בלי שום רמז למה שבתוכו. */
+function lastLine(s) {
+  const lines = String(s || '').split('\n');
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  return lines.length ? lines[lines.length - 1].trim() : '';
 }
 
 function startBlock(index, cb) {
@@ -1565,8 +2206,12 @@ function updateToolCard(d, ref) {
   const st = d.querySelector('.tstatus');
   st.className = 'tstatus ' + ref.status;
   st.textContent = ref.status === 'ok' ? 'הושלם' : ref.status === 'rej' ? 'נדחה' : ref.status === 'err' ? 'שגיאה' : 'רץ…';
-  const body = d.querySelector('.tbody'); body.innerHTML = '';
-  renderToolBody(body, ref);
+  setBody(d, () => {
+    const body = d.querySelector('.tbody');
+    if (!body) return;
+    body.innerHTML = '';
+    renderToolBody(body, ref);
+  });
 }
 function renderToolBody(body, ref) {
   const i = ref.input || {};
@@ -1694,14 +2339,46 @@ function enhance(container) {
 }
 let mermaidMod = null, mermaidTry = false;
 async function renderMermaid(pre, code) {
-  const box = el('div', 'mermaid-box'); pre.replaceWith(box);
+  const box = el('div', 'mermaid-box');
+  box.dataset.mermaid = code;
+  const wrap = el('div', 'code-wrap mermaid-wrap');
+  pre.replaceWith(wrap);
+  wrap.appendChild(box);
+  const btn = el('button', 'copy-btn', 'העתק');
+  btn.onclick = async () => {
+    const ok = await copyText(code);
+    btn.textContent = ok ? 'הועתק ✓' : 'ההעתקה נכשלה';
+    btn.classList.toggle('done', ok);
+    setTimeout(() => { btn.textContent = 'העתק'; btn.classList.remove('done'); }, 1400);
+  };
+  wrap.appendChild(btn);
+  await paintMermaid(box, code);
+  autoScroll();
+}
+async function paintMermaid(box, code) {
   try {
-    if (!mermaidMod && !mermaidTry) { mermaidTry = true; mermaidMod = (await import('/vendor/mermaid/mermaid.esm.min.mjs')).default; mermaidMod.initialize({ startOnLoad: false, theme: isDark() ? 'dark' : 'default' }); }
-    if (!mermaidMod) throw 0;
+    if (!mermaidMod) {
+      if (!mermaidTry) {
+        mermaidTry = true;
+        try {
+          mermaidMod = (await import('/vendor/mermaid/mermaid.esm.min.mjs')).default;
+        } catch { mermaidMod = null; }
+      }
+      if (!mermaidMod) throw 0;
+      mermaidMod.initialize({ startOnLoad: false, securityLevel: 'strict', theme: isDark() ? 'dark' : 'default' });
+    }
     const { svg } = await mermaidMod.render('mm' + uid(), code);
     box.innerHTML = svg;
-  } catch { box.innerHTML = ''; const p = el('pre'); p.textContent = code; box.appendChild(p); }
-  autoScroll(); // גובה הדיאגרמה משתנה אחרי await — לשמור על מעקב אם stick פעיל
+  } catch {
+    box.innerHTML = '';
+    const p = el('pre'); p.textContent = code; box.appendChild(p);
+  }
+}
+async function rethemeMermaid() {
+  // אתחול מחדש עם ערכת הנושא הנוכחית — אחרת דיאגרמות נשארות בערכת הפעם הראשונה
+  mermaidMod = null; mermaidTry = false;
+  const boxes = [...document.querySelectorAll('.mermaid-box[data-mermaid]')];
+  for (const box of boxes) await paintMermaid(box, box.dataset.mermaid || '');
 }
 
 // ---------- סיום תור ----------
@@ -1709,6 +2386,7 @@ function finalizeTurn(result) {
   const conv = turnConv();
   // לפני ש-live מתאפס: מה ש-GOD אישר בתור הזה הופך לכרטיס בסוף ההודעה
   pushGodBlock();
+  hideAwaitServer();
   if (conv) {
     if (result.session_id) conv.sessionId = result.session_id;
     if (typeof result.total_cost_usd === 'number') conv.cost = (conv.cost || 0) + result.total_cost_usd;
@@ -1731,7 +2409,7 @@ function finalizeTurn(result) {
   if (!document.hasFocus() && !msgQueue.length) {
     const who = AGENT_LABEL[(conv && conv.sessionAgent) || activeAgent()] || 'Claude';
     setTitleBadge(who + ' סיים');
-    desktopNotify(who + ' סיים לעבוד', clamp((conv && conv.title) || '', 60));
+    desktopNotify(who + ' סיים לעבוד', clamp((conv && conv.title) || '', 60), { vibrate: HAPTIC_DONE });
   }
   // השיגור של הפריט הבא בתור נעשה בשרת — כאן רק מחכים לפריים user_msg שלו
 }
@@ -1746,9 +2424,10 @@ function sendQueueCmd(type, extra) {
 }
 function clearQueue() {
   if (!msgQueue.length) return;
+  // בלי חיבור השרת עדיין מחזיק את התור — ניקוי מקומי היה משקר עד הסנכרון הבא
+  if (!sendQueueCmd('queue_clear')) { toast('אין חיבור לשרת', true); return; }
   msgQueue = [];
   renderQueue();
-  sendQueueCmd('queue_clear');
 }
 /** עדכון מהשרת — התור השתנה (כאן, במכשיר אחר, או ששוגר הפריט הבא) */
 function onQueueUpdate(items) {
@@ -1780,10 +2459,188 @@ function renderQueue() {
     chip.appendChild(txt);
     const rm = el('button', 'q-rm', '×');
     rm.type = 'button'; rm.title = 'הסר מהתור'; rm.setAttribute('aria-label', 'הסר מהתור');
-    rm.onclick = () => sendQueueCmd('queue_remove', { id: q.id });
+    rm.onclick = () => {
+      if (!sendQueueCmd('queue_remove', { id: q.id })) toast('אין חיבור לשרת', true);
+    };
     chip.appendChild(rm);
     strip.appendChild(chip);
   });
+}
+
+// ---------- הודעות מתוזמנות ----------
+// פרומפט שיוצא באותו סשן בשעה שנקבעה. המודל וההרשאות נצרבים ברגע התזמון.
+function onScheduleUpdate(items) {
+  schedQueue = Array.isArray(items) ? items : [];
+  renderSchedules();
+}
+function fmtSchedAt(at) {
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  const hm = pad(d.getHours()) + ':' + pad(d.getMinutes());
+  const now = new Date();
+  const today = now.toDateString() === d.toDateString();
+  const tom = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  if (today) return hm;
+  if (tom.toDateString() === d.toDateString()) return 'מחר ' + hm;
+  return `${d.getDate()}.${d.getMonth() + 1} ${hm}`;
+}
+function clearSchedulesUi() {
+  if (!schedQueue.length) return;
+  if (!sendQueueCmd('schedule_clear')) { toast('אין חיבור לשרת', true); return; }
+}
+function renderSchedules() {
+  const strip = $('schedStrip');
+  if (!strip) return;
+  strip.innerHTML = '';
+  strip.classList.toggle('hidden', schedQueue.length === 0);
+  const btn = $('schedBtn');
+  if (btn) btn.classList.toggle('on', schedQueue.length > 0);
+  if (!schedQueue.length) return;
+  const head = el('div', 'q-head');
+  head.appendChild(el('span', 'q-count', schedQueue.length === 1 ? 'הודעה מתוזמנת' : `${schedQueue.length} מתוזמנות`));
+  const clr = el('button', 'q-clear', 'בטל הכול');
+  clr.type = 'button'; clr.title = 'בטל את כל ההודעות המתוזמנות';
+  clr.onclick = () => clearSchedulesUi();
+  head.appendChild(clr);
+  strip.appendChild(head);
+  schedQueue.forEach((q) => {
+    const chip = el('div', 'q-chip');
+    chip.appendChild(el('span', 'q-ic', fmtSchedAt(q.at) || '—'));
+    const label = q.text ? clamp(q.text, 60) : 'פרומפט';
+    const txt = el('span', 'q-text', label);
+    txt.title = q.text || label;
+    chip.appendChild(txt);
+    const rm = el('button', 'q-rm', '×');
+    rm.type = 'button'; rm.title = 'בטל תזמון'; rm.setAttribute('aria-label', 'בטל תזמון');
+    rm.onclick = () => {
+      if (!sendQueueCmd('schedule_remove', { id: q.id })) toast('אין חיבור לשרת', true);
+    };
+    chip.appendChild(rm);
+    strip.appendChild(chip);
+  });
+}
+function pad2(n) { return String(n).padStart(2, '0'); }
+function defaultSchedWhen() {
+  const d = new Date();
+  d.setHours(d.getHours() + 1, 0, 0, 0);
+  if (d.getTime() < Date.now() + 60 * 1000) d.setHours(d.getHours() + 1);
+  return d;
+}
+function fillSchedPerms(sel, modelId, want) {
+  const cursorMode = isCursorModel(modelId);
+  const modes = cursorMode
+    ? ((CONFIG.cursorPermissionModes || []).length ? CONFIG.cursorPermissionModes : ['force', 'default', 'plan', 'ask'])
+    : withGodMode((CONFIG.permissionModes || []).length
+      ? CONFIG.permissionModes
+      : ['acceptEdits', 'auto', 'bypassPermissions', 'manual', 'dontAsk', 'plan']);
+  const fallback = cursorMode
+    ? (CONFIG.cursorPermissionDefault || 'force')
+    : (modes.includes('acceptEdits') ? 'acceptEdits' : modes[0]);
+  sel.innerHTML = '';
+  for (const md of modes) {
+    const o = opt(md, (cursorMode && CURSOR_PERM_LABEL[md]) || PERM_LABEL[md] || md);
+    if (md === 'god') o.className = 'opt-god';
+    sel.appendChild(o);
+  }
+  keepValue(sel, want || fallback, fallback);
+  sel.classList.toggle('god-on', sel.value === 'god');
+}
+function fillSchedEfforts(sel, modelId, want) {
+  const m = CONFIG.models.find((x) => x.id === modelId);
+  const efforts = m ? (m.efforts || []) : modelEfforts();
+  const has = efforts.length > 0;
+  sel.innerHTML = '';
+  sel.appendChild(opt('', 'מאמץ רגיל'));
+  EFFORT_ORDER.filter((e) => efforts.includes(e)).forEach((e) => sel.appendChild(opt(e, EFFORT_LABEL[e] || e)));
+  sel.disabled = !has;
+  sel.parentElement && (sel.parentElement.style.display = has ? '' : 'none');
+  keepValue(sel, want || '', '');
+  if (!has) sel.value = '';
+}
+function openSchedule(prefill) {
+  if (isDuet(activeConv())) { toast('אי אפשר לתזמן הודעה בתוך דואט', true); return; }
+  if (!ws || ws.readyState !== ws.OPEN) { toast('אין חיבור לשרת', true); return; }
+  const when = defaultSchedWhen();
+  const wrap = el('div', 'sched-form');
+  const text = el('textarea');
+  text.id = 'schedText';
+  text.rows = 4;
+  text.placeholder = 'מה לשלוח באותו סשן…';
+  text.value = (prefill != null ? prefill : ($('input').value || '')).trim();
+  wrap.appendChild(text);
+
+  const whenRow = el('div', 'sched-when');
+  const dateField = el('label', 'sched-field');
+  dateField.appendChild(el('span', null, 'תאריך'));
+  const date = document.createElement('input');
+  date.type = 'date'; date.id = 'schedDate';
+  date.value = `${when.getFullYear()}-${pad2(when.getMonth() + 1)}-${pad2(when.getDate())}`;
+  dateField.appendChild(date);
+  const timeField = el('label', 'sched-field');
+  timeField.appendChild(el('span', null, 'שעה'));
+  const time = document.createElement('input');
+  time.type = 'time'; time.id = 'schedTime'; time.step = '60';
+  time.value = `${pad2(when.getHours())}:${pad2(when.getMinutes())}`;
+  timeField.appendChild(time);
+  whenRow.appendChild(dateField); whenRow.appendChild(timeField);
+  wrap.appendChild(whenRow);
+
+  const pills = el('div', 'sched-pills pill-row');
+  const permWrap = el('div', 'pill-wrap');
+  const perm = document.createElement('select');
+  perm.id = 'schedPerm'; perm.className = 'pill'; perm.title = 'מצב הרשאות';
+  permWrap.appendChild(perm);
+  const modelWrap = el('div', 'pill-wrap');
+  const model = document.createElement('select');
+  model.id = 'schedModel'; model.className = 'pill'; model.title = 'מודל';
+  model.appendChild(opt('', 'מודל ברירת מחדל'));
+  fillModelOptions(model);
+  keepValue(model, $('model').value, '');
+  modelWrap.appendChild(model);
+  const effortWrap = el('div', 'pill-wrap');
+  const effort = document.createElement('select');
+  effort.id = 'schedEffort'; effort.className = 'pill'; effort.title = 'מאמץ חשיבה';
+  effortWrap.appendChild(effort);
+  pills.appendChild(permWrap); pills.appendChild(modelWrap); pills.appendChild(effortWrap);
+  wrap.appendChild(pills);
+
+  const go = el('button', 'sched-go', 'תזמן');
+  go.type = 'button';
+  wrap.appendChild(go);
+
+  const syncPills = () => {
+    fillSchedPerms(perm, model.value, perm.value || permValue());
+    fillSchedEfforts(effort, model.value, effort.value || $('effort').value);
+  };
+  model.addEventListener('change', syncPills);
+  perm.addEventListener('change', () => perm.classList.toggle('god-on', perm.value === 'god'));
+  fillSchedPerms(perm, model.value, permValue());
+  fillSchedEfforts(effort, model.value, $('effort').value);
+  attachModelSearch(model);
+
+  go.onclick = () => {
+    const prompt = text.value.trim();
+    if (!prompt) { toast('כתוב פרומפט לתזמון'); text.focus(); return; }
+    if (!date.value || !time.value) { toast('בחרו תאריך ושעה'); return; }
+    const at = new Date(date.value + 'T' + time.value).getTime();
+    if (!Number.isFinite(at)) { toast('שעה לא תקינה', true); return; }
+    const conv = activeConv() || newConv();
+    const ok = sendQueueCmd('schedule_add', {
+      text: prompt, at,
+      cwd: $('cwd').value, model: model.value, effort: effort.value,
+      permissionMode: perm.value, resumeSessionId: resumeIdFor(conv),
+      tools: !!conv.tools,
+      ...(isLocalModel(model.value) ? { local: localExtrasPayload() } : {}),
+    });
+    if (!ok) { toast('אין חיבור לשרת', true); return; }
+    if (($('input').value || '').trim() === prompt) clearComposer();
+    closeModal();
+    toast('תוזמן ל־' + fmtSchedAt(at));
+  };
+
+  openModal('תזמון הודעה', wrap);
+  setTimeout(() => { try { text.focus(); } catch {} }, 0);
 }
 
 // ---------- פעולות על הודעה (העתקה / עריכה) ----------
@@ -1846,6 +2703,11 @@ async function rewindToMessage(msg, getText) {
   // סדר ההודעה בין הודעות המשתמש = ה-ordinal שהשרת סופר בקובץ הסשן
   let idx = msg ? conv.messages.indexOf(msg) : -1;
   if (idx < 0) { toast('לא נמצאה ההודעה', true); return; }
+  const after = conv.messages.length - idx;
+  if (!confirm(
+    after > 1
+      ? `לחתוך את השיחה כאן?\n${after} הודעות (כולל זו) יימחקו מהתמליל, והסשן ימשיך מהנקודה הזו.`
+      : 'לחתוך את השיחה כאן?\nההודעה הזו תימחק מהתמליל, והסשן ימשיך מהנקודה שלפניה.')) return;
   const ordinal = conv.messages.slice(0, idx).filter((m) => m.role === 'user').length;
   const text = (getText && getText()) || (msg && msg.text) || '';
   let res;
@@ -1862,11 +2724,14 @@ async function rewindToMessage(msg, getText) {
   conv.ctx = null;
   // משחררים את התהליך הנוכחי — השליחה הבאה תפעיל --resume על הסשן החתוך
   if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'end' }));
+  const queued = msgQueue.length;
   clearQueue();
   conv.draft = text;
   save(); renderConversation(); renderConvList();
   const i = $('input'); i.value = text; autoGrow(); i.focus(); i.setSelectionRange(i.value.length, i.value.length);
-  toast('חזרת לנקודה זו — ערוך ושלח מחדש');
+  toast(queued
+    ? `חזרת לנקודה זו — ${queued} פרומפטים בתור בוטלו · ערוך ושלח מחדש`
+    : 'חזרת לנקודה זו — ערוך ושלח מחדש');
 }
 
 // ---------- הודעות משתמש / הערות ----------
@@ -1893,6 +2758,113 @@ function addNote(text, err) {
 }
 
 /* ==========================================================================
+   המתנה לשרת שנפל באמצע תור
+   --------------------------------------------------------------------------
+   כשה-WebSocket נסגר בזמן שהמודל עוד כותב, ההודעה הייתה נשארת קטועה באמצע
+   משפט בלי מילה. עכשיו היא נושאת חיווי «מחכה שהשרת יעלה». כשהשרת חוזר:
+   אם התהליך עוד חי — הזרם ממשיך והחיווי יורד; אם הזיכרון אופס (הפעלה מחדש)
+   — נכתב לתמליל שהשרת עלה, וההודעה נסגרת עם כפתור «המשך».
+   ========================================================================== */
+function renderAwaitBanner() {
+  const bar = el('div', 'await-server');
+  bar.setAttribute('role', 'status');
+  bar.setAttribute('aria-live', 'polite');
+  bar.appendChild(el('span', 'spinner sm'));
+  bar.appendChild(el('span', 'await-server-text', 'מחכה שהשרת יעלה…'));
+  return bar;
+}
+
+function syncAwaitBanner() {
+  if (!awaitingServer || !live || !live.contentEl || !document.body.contains(live.contentEl)) return;
+  if (live.contentEl.querySelector('.await-server')) return;
+  live.contentEl.appendChild(renderAwaitBanner());
+  autoScroll();
+}
+
+function showAwaitServer() {
+  if (!busy && !live) return;
+  awaitingServer = true;
+  if (live && live.msgObj) {
+    live.msgObj.awaiting = true;
+    persist();
+    // השמירה הרגילה ממתינה 2.5 שנ׳ בזמן תור — כאן רוצים שהדגל יגיע לדיסק
+    // לפני שהשרת באמת מת, כדי שרענון באמצע הניתוק עדיין יציג את החיווי.
+    clearTimeout(flushTimer);
+    flushTimer = setTimeout(flush, 0);
+    syncAwaitBanner();
+  }
+  renderWorking();
+  syncOrbitState();
+  dlog('await.server', { convId: streamOwnerId || activeId, hasLive: !!live });
+}
+
+function hideAwaitServer() {
+  const msg = live && live.msgObj;
+  if (msg && msg.awaiting) { delete msg.awaiting; persist(); }
+  awaitingServer = false;
+  document.querySelectorAll('#log .await-server').forEach((n) => n.remove());
+  const t = $('workingText');
+  if (t) t.classList.remove('awaiting');
+  if (busy) renderWorking();
+  syncOrbitState();
+}
+
+function sealRestartedMessage(msg) {
+  if (!msg || msg.role !== 'assistant') return false;
+  delete msg.awaiting;
+  if ((msg.blocks || []).some((b) => b && b.type === 'halt')) return false;
+  msg.blocks = msg.blocks || [];
+  msg.blocks.push({
+    type: 'halt', reason: 'server_restart', title: 'השרת עלה מחדש',
+    detail: '', soft: true, at: Date.now(),
+  });
+  return true;
+}
+
+/** הודעות שסומנו כממתינות אחרי רענון — השרת כבר למעלה ואין תור להמשיך. */
+function sealStrandedAwaiting(convId) {
+  if (busy) return;
+  const conv = convById(convId) || activeConv();
+  if (!conv || !Array.isArray(conv.messages)) {
+    if (awaitingServer) hideAwaitServer();
+    return;
+  }
+  if (!awaitingServer && !conv.messages.some((m) => m && m.awaiting)) return;
+  closeTurnAfterServerBack();
+}
+
+function closeTurnAfterServerBack() {
+  const conv = turnConv() || convById(streamOwnerId) || activeConv();
+  const seen = new Set();
+  const candidates = [];
+  const add = (msg) => { if (msg && !seen.has(msg)) { seen.add(msg); candidates.push(msg); } };
+  if (live && live.msgObj) add(live.msgObj);
+  if (conv && Array.isArray(conv.messages)) {
+    const last = conv.messages[conv.messages.length - 1];
+    if (last && last.role === 'assistant' && (last.awaiting || awaitingServer)) add(last);
+    for (const m of conv.messages) if (m && m.awaiting) add(m);
+  }
+  let sealed = 0;
+  for (const msg of candidates) if (sealRestartedMessage(msg)) sealed++;
+  awaitingServer = false;
+  document.querySelectorAll('#log .await-server').forEach((n) => n.remove());
+  if (sealed) {
+    persist();
+    if (live && live.contentEl && document.body.contains(live.contentEl)) {
+      const ref = (live.msgObj.blocks || []).find((b) => b && b.type === 'halt' && b.reason === 'server_restart');
+      if (ref) live.contentEl.appendChild(renderHaltCard(ref));
+      autoScroll();
+    } else if (conv && conv.id === activeId) {
+      renderConversation();
+    }
+    toast('השרת עלה מחדש — התשובה נקטעה');
+  }
+  dlog('await.sealed', { sealed, busy, convId: conv && conv.id });
+  if (busy) abandonTurn();
+  else hideAwaitServer();
+}
+
+/* ==========================================================================
    כרטיס עצירה
    --------------------------------------------------------------------------
    התשובה שנקטעת באמצע משפט בלי מילה אחת של הסבר הייתה התקלה הכי מבלבלת
@@ -1911,6 +2883,7 @@ const HALT_HINT = {
   permission_denied: 'כלי נדחה, והמודל לא יכול היה להמשיך בלעדיו.',
   interrupted: 'התור הופסק — כאן, ממכשיר אחר, או בסגירת התהליך.',
   cancelled: 'התור בוטל לפני שהסתיים.',
+  server_restart: 'התשובה נקטעה כי השרת נסגר באמצע. מה שנכתב עד כאן נשמר — «המשך» משלים אותה.',
 };
 
 function renderHaltCard(ref) {
@@ -1935,6 +2908,34 @@ function renderHaltCard(ref) {
   const meta = [ref.reason, ref.model || null, ref.at ? new Date(ref.at).toLocaleTimeString('he-IL') : null]
     .filter(Boolean).join(' · ');
   foot.appendChild(el('span', 'halt-meta', meta));
+  const recoverable = /^(api_error|interrupted|cancelled|max_tokens|stalled)$/.test(ref.reason || '');
+  if (ref.reason === 'server_restart') {
+    const cont = el('button', 'halt-btn', 'המשך');
+    cont.type = 'button';
+    cont.title = 'שולח בקשה להשלים את התשובה שנקטעה';
+    cont.onclick = () => sendMessage('המשך');
+    foot.appendChild(cont);
+  } else if (recoverable) {
+    const retry = el('button', 'halt-btn', 'נסה שוב');
+    retry.type = 'button';
+    retry.title = 'מחזיר את הפרומפט האחרון לתיבה';
+    retry.onclick = () => {
+      // באנונימי ההיסטוריה הגלובלית לא מתעדכנת — לוקחים את הודעת המשתמש האחרונה בשיחה
+      let last = '';
+      const conv = activeConv();
+      if (conv && Array.isArray(conv.messages)) {
+        for (let i = conv.messages.length - 1; i >= 0; i--) {
+          const m = conv.messages[i];
+          if (m && m.role === 'user' && m.text) { last = m.text; break; }
+        }
+      }
+      if (!last) last = (store.history && store.history[0]) || '';
+      if (last) { $('input').value = last; autoGrow(); }
+      else toast('אין פרומפט לשחזור', true);
+      $('input').focus();
+    };
+    foot.appendChild(retry);
+  }
   const logs = el('button', 'halt-btn', 'פתח יומן');
   logs.type = 'button';
   logs.title = 'היומן המלא של הרגע שבו התור נעצר';
@@ -1964,19 +2965,41 @@ function onHalt(m) {
 
 // ---------- שליחה ----------
 // שיגור מהתור נעשה בשרת, ולכן כאן נשארה רק הדרך האחת: מה שהוקלד בתיבה
+let sendGate = false;
 async function sendMessage(text) {
+  // לחיצה כפולה / Enter חוזר לפני setBusy — בלי שער היו נכנסים שני תורים לאותו טקסט
+  if (sendGate) return;
+  sendGate = true;
+  try {
+  // ההודעה יוצאת — אין למי להכתיב. חשוב שזה יקרה *לפני* קריאת התיבה, כדי
+  // שתוצאת ביניים שעדיין לא נסגרה תיכנס לטקסט הנשלח ולא תיזרק.
+  if (dictOn) dictStop();
   text = (text != null ? text : $('input').value).trim();
   const atts = pendingAtts.slice();
-  if (!text && !atts.length) return;
+  if (!text && !atts.length) { toast('כתוב הודעה או צרף תמונה'); return; }
+  // כרטיס שאלה/אישור פתוח — גם לחיצה על שלח (לא רק Enter) לא אמורה לשרשר במקום לענות
+  if (pendingPerms && pendingPerms.size > 0) {
+    const asks = pendingAskCount();
+    toast(asks
+      ? 'יש שאלה שממתינה לתשובה — ענה בכרטיס או לחץ על הפס למעלה'
+      : 'יש בקשת אישור שממתינה — אשר או דחה בכרטיס או בפס למעלה');
+    jumpToPendingAsk();
+    return;
+  }
   // פקודת-לקוח שנכתבה ביד (בלי תפריט ההשלמה) נתפסת גם כאן, אחרת היא הייתה
   // נשלחת למודל כטקסט
   const cc = !atts.length && text.match(/^(\/[\w-]+)(?:\s+([\s\S]*))?$/);
   if (cc && CLIENT_CMDS[cc[1]]) {
-    $('input').value = ''; autoGrow();
+    clearComposer();
     CLIENT_CMDS[cc[1]]((cc[2] || '').trim());
     return;
   }
-  if (!ws || ws.readyState !== ws.OPEN) { toast('אין חיבור לשרת', true); return; }
+  if (!ws || ws.readyState !== ws.OPEN) {
+    toast(busy || limitState
+      ? 'אין חיבור — לא ניתן לשרשר הודעה לתור כרגע'
+      : 'אין חיבור לשרת', true);
+    return;
+  }
   let conv = activeConv(); if (!conv) conv = newConv();
   // אם גוף השיחה עדיין נקרא מהדיסק, הטעינה שתסתיים אחר כך תדרוס את ההודעה
   // שנוסיף כאן — לכן מחכים לה קודם.
@@ -2000,16 +3023,16 @@ async function sendMessage(text) {
       text, images,
       atts: atts.map((a) => ({ kind: a.kind, name: a.name, path: a.path })),
       cwd: $('cwd').value, model: $('model').value, effort: $('effort').value,
-      permissionMode: $('perm').value, resumeSessionId: resumeIdFor(conv),
+      permissionMode: permValue(), resumeSessionId: resumeIdFor(conv),
       tools: !!conv.tools,   // בצ'אט אנונימי: האם הכלים הופעלו במפורש
+      ...turnPayloadExtras(),
     });
     if (!ok) { toast('אין חיבור לשרת', true); return; }
     // היסטוריית הפרומפטים (חץ למעלה) נשמרת בקובץ ההגדרות שבדיסק — כלומר היא
     // עקבה לכל דבר. מה שנכתב בצ'אט אנונימי לא נכנס אליה.
     if (text && !conv.anon) { if (!Array.isArray(store.history)) store.history = []; store.history.unshift(text); store.history = store.history.slice(0, 50); histIdx = -1; }
     clearPendingAtts();
-    $('input').value = ''; autoGrow();
-    conv.draft = ''; markDirty(conv);
+    clearComposer();
     return;
   }
   // כותרת נגזרת מההודעה הראשונה. בצ'אט אנונימי היא הייתה מציגה את תוכן השיחה
@@ -2045,43 +3068,109 @@ async function sendMessage(text) {
     type: 'user', text, images, nonce,
     atts: atts.map((a) => ({ kind: a.kind, name: a.name, path: a.path })),
     conversationId: conv.id, resumeSessionId: resumeIdFor(conv),
-    cwd: $('cwd').value, model: $('model').value, effort: $('effort').value, permissionMode: $('perm').value,
+    cwd: $('cwd').value, model: $('model').value, effort: $('effort').value, permissionMode: permValue(),
     tools: !!conv.tools,   // בצ'אט אנונימי: האם הכלים הופעלו במפורש
+    ...turnPayloadExtras(),
   }));
   if (text && !conv.anon) {
     if (!Array.isArray(store.history)) store.history = [];
     store.history.unshift(text); store.history = store.history.slice(0, 50); histIdx = -1;
   }
-  $('input').value = ''; autoGrow();
+  clearComposer();
   clearPendingAtts();
   ensureNotifyPermission();
   setBusy(true); save(); renderConvList();
+  } finally {
+    sendGate = false;
+  }
 }
 
 /**
- * כפתור השליחה נשאר פעיל גם בזמן עבודה — אז לחיצה מוסיפה לשרשרת במקום לשגר.
+ * כפתור השליחה נושא שני תפקידים בזמן תור חי:
+ *   תיבה ריקה → ריבוע עצירה (interrupt)
+ *   יש טקסט/תמונה → חץ שמוסיף לתור הסשן
  * אותו דבר בזמן המתנה לחידוש מכסה: מה שתשלח ירוץ כשהעבודה תתחדש.
  */
+function composerHasPayload() {
+  const i = $('input');
+  return !!(i && i.value.trim()) || (typeof pendingAtts !== 'undefined' && pendingAtts.length > 0);
+}
 function syncSendAffordance() {
-  const chaining = busy || !!limitState;
   const btn = $('sendBtn');
+  if (!btn) return;
+  const hasPayload = composerHasPayload();
+  const stopping = !!busy && !hasPayload && !limitState;
+  const chaining = (busy || !!limitState) && hasPayload;
+  btn.classList.toggle('stopping', stopping);
   btn.classList.toggle('queueing', chaining);
-  btn.title = limitState ? 'הוסף לתור — ירוץ כשהמכסה תתחדש' : chaining ? 'הוסף לתור' : 'שלח';
+  // title ו-aria-label יחד: בטלפון אין hover, וקורא מסך חייב לשמוע את מצב התור
+  // ולא להישאר על «שלח» הסטטי מ-index.html.
+  btn.title = stopping ? 'עצור'
+    : limitState ? 'הוסף לתור — ירוץ כשהמכסה תתחדש'
+    : chaining ? 'הוסף לתור'
+    : 'שלח';
+  btn.setAttribute('aria-label', btn.title);
 }
 
 function setBusy(state) {
   const was = busy;
   busy = state;
   syncSendAffordance();
+  syncOrbitState();
   $('working').classList.toggle('hidden', !state);
   // מחלקה גלובלית שמפעילה את כל האינדיקטורים הבולטים (פס עליון, זוהר, תווית)
   document.body.classList.toggle('busy', state);
-  $('statusPill').textContent = state ? 'מעבד…' : 'מוכן';
-  setStatus(state ? 'busy' : 'on', state ? 'עובד…' : 'מחובר');
+  if (typeof layoutComposerOrbit === 'function') layoutComposerOrbit();
+  // הפסיל עובר דרך setStatus — כך סיום תור בזמן ניתוק לא יכתוב «מוכן»/«מחובר» בשקר
+  if (state) setStatus('busy', 'עובד…');
+  else if (wsConnected()) setStatus('on', 'מחובר');
+  else setStatus('', 'מנותק');
   if (state) { resetTurnTok(); godTurn = []; renderWorking(); }
   // מעבר busy→פנוי = התור הסתיים: הבזק "הסתיים" בולט
-  if (was && !state) flashDone();
+  if (was && !state) { flashDone(); haptic(HAPTIC_DONE); }
+  syncWakeLock();
 }
+
+/* ==========================================================================
+   נעילת מסך בזמן תור
+   --------------------------------------------------------------------------
+   בטלפון, תור ארוך פירושו לרוב לשים את המכשיר בצד ולחכות. המסך נכבה, ובאנדרואיד
+   ואייפון זה גם הרגע שבו הדף מושהה: ה-WebSocket נסגר, ומה שחוזר אליו כשפותחים
+   שוב הוא מסלול ההתחברות-מחדש וההשלמה — שעובד, אבל הצפייה החיה בעבודה פשוט
+   אבדה באמצע. הנעילה מבקשת מהמערכת לא לכבות את המסך כל עוד יש תור *וכל עוד
+   מסתכלים*: הדפדפן משחרר אותה מעצמו ברגע שהלשונית מוסתרת, ולכן אין כאן שום
+   סכנה של מסך שנשאר דלוק בכיס. היא נלקחת שוב בחזרה ללשונית, אם התור עוד רץ.
+
+   רק במגע: במחשב כיבוי המסך אינו משהה את הדף, ואין שום תקלה שהנעילה פותרת —
+   רק שומר מסך שמפסיק לעבוד בלי שביקשו.
+   ========================================================================== */
+let wakeLock = null;
+const wakeLockWanted = () => busy && !document.hidden
+  && 'wakeLock' in navigator && matchMedia('(pointer: coarse)').matches;
+
+async function syncWakeLock() {
+  if (!wakeLockWanted()) {
+    if (wakeLock) { const w = wakeLock; wakeLock = null; try { await w.release(); } catch {} }
+    return;
+  }
+  if (wakeLock) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    // המערכת משחררת בעצמה (מסך שנכבה בכל זאת, סוללה חלשה) — בלי הניקוי הזה
+    // ‎wakeLock‎ היה נשאר מלא ומונע כל ניסיון לקחת אותה שוב.
+    wakeLock.addEventListener('release', () => {
+      wakeLock = null;
+      // שחרור מערכת באמצע תור — מנסים שוב כל עוד עדיין עובדים ומסתכלים
+      if (wakeLockWanted()) syncWakeLock();
+    }, { once: true });
+    dlog('wakelock', { on: true });
+  } catch (e) {
+    // סירוב אינו תקלה: אין הרשאה, הסוללה נמוכה, או שהמשתמש כיבה את זה במערכת
+    wakeLock = null;
+    dlog('wakelock.fail', { err: String((e && e.message) || e) });
+  }
+}
+document.addEventListener('visibilitychange', syncWakeLock);
 
 /** הבזק ירוק גדול "✓ הסתיים" כשהמודל מסיים תור — סימן חיובי חד־משמעי */
 let doneFlashT = null;
@@ -2099,13 +3188,21 @@ function persist() { save(); }
 
 function renderConversation() {
   stickRo.disconnect();
-  findState = { q: '', marks: [], idx: -1 };   // ה-DOM נבנה מחדש — הסימונים כבר לא תקפים
+  // הסימונים ב-DOM נמחקים עם innerHTML — שומרים את השאילתה מהשדה כדי לשחזר
+  // אחרי הרינדור אם פס החיפוש עדיין פתוח (אחרת נשאר טקסט ישן עם ספירה ריקה).
+  const findQ = (!$('findBar').classList.contains('hidden') && $('findInput'))
+    ? $('findInput').value.trim() : '';
+  findState = { q: '', marks: [], idx: -1 };
   updateFindCount();
   const keepLive = !!(busy && live && streamOwnerId);
   if (keepLive) detachLiveDom();
   else live = null;
 
-  const log = $('log'); log.innerHTML = '';
+  const log = $('log');
+  // מי שגלל למעלה לקרוא היסטוריה לא צריך להיזרק לתחתית בכל sync/render.
+  const preserveScroll = !stick;
+  const savedTop = preserveScroll ? log.scrollTop : 0;
+  log.innerHTML = '';
   const conv = activeConv();
   applyAnonMode();   // הפס והסימון הגלובלי נגזרים מהשיחה שמצוירת עכשיו
   $('convTitle').textContent = conv ? conv.title : 'שיחה חדשה';
@@ -2114,7 +3211,13 @@ function renderConversation() {
   // מה שנשלח שם נשלח בכפתורים של הריצה ולא כהודעה חופשית.
   log.classList.toggle('duet', isDuet(conv));
   document.body.classList.toggle('duet-mode', isDuet(conv));
-  if (isDuet(conv)) { renderDuet(conv, log); updateStatusbar(); return; }
+  if (isDuet(conv)) {
+    renderDuet(conv, log); updateStatusbar();
+    if (findQ.length >= 2) runFind(findQ);
+    if (preserveScroll) requestAnimationFrame(() => { log.scrollTop = savedTop; syncJumpBtn(); });
+    else requestAnimationFrame(() => autoScroll(true));
+    return;
+  }
   if (conv && !conv.loaded) {
     // גוף השיחה עדיין נקרא מהדיסק — שלד קצר במקום קפיצה לברכת הפתיחה
     const sk = el('div', 'conv-loading');
@@ -2126,7 +3229,10 @@ function renderConversation() {
   }
   if (!conv || conv.messages.length === 0) {
     showWelcome();
-    if (keepLive && activeId === streamOwnerId && live) rebindLiveDom();
+    if (keepLive && activeId === streamOwnerId && live) {
+      rebindLiveDom();
+      if (awaitingServer) syncAwaitBanner();
+    }
     updateStatusbar();
     return;
   }
@@ -2140,7 +3246,7 @@ function renderConversation() {
       wrap.appendChild(col); row.appendChild(wrap); log.appendChild(row);
     } else if (m.role === 'assistant') {
       const row = el('div', 'row assistant'); const wrap = el('div', 'wrap');
-      wrap.innerHTML = `<div class="role-tag"><span class="avatar">${AVATAR}</span>Claude</div><div class="content"></div>`;
+      wrap.innerHTML = assistantHeadHtml(m.model) + '<div class="content"></div>';
       const content = wrap.querySelector('.content');
       for (const b of (m.blocks || [])) {
         if (b.type === 'text') { const box = el('div', 'md'); box.innerHTML = renderMd(b.text); content.appendChild(box); enhance(box); }
@@ -2150,13 +3256,20 @@ function renderConversation() {
         else if (b.type === 'halt') { content.appendChild(renderHaltCard(b)); }
         else if (b.type === 'god') { content.appendChild(renderGodCard(b)); }
       }
+      if (m.awaiting) content.appendChild(renderAwaitBanner());
       if (assistantText(m)) attachMsgActions(wrap, 'assistant', () => assistantText(m));
       row.appendChild(wrap); log.appendChild(row);
     }
   }
   hideWelcome();
-  if (keepLive && activeId === streamOwnerId && live) rebindLiveDom();
-  updateStatusbar(); requestAnimationFrame(() => autoScroll(true));
+  if (keepLive && activeId === streamOwnerId && live) {
+    rebindLiveDom();
+    if (awaitingServer) syncAwaitBanner();
+  }
+  updateStatusbar();
+  if (findQ.length >= 2) runFind(findQ);
+  if (preserveScroll) requestAnimationFrame(() => { log.scrollTop = savedTop; syncJumpBtn(); });
+  else requestAnimationFrame(() => autoScroll(true));
 }
 
 // ---------- סרגל שיחות: חיפוש · קיבוץ לפי זמן · חותמת זמן · שינוי-שם ----------
@@ -2191,7 +3304,10 @@ const runServerSearch = debounce(async (q) => {
     const d = await r.json();
     if (convQuery.trim().toLowerCase() !== q) return;   // התוצאה כבר לא רלוונטית
     searchHits = new Map((d.results || []).map((x) => [x.id, x.snippet || '']));
-  } catch { searchHits = null; }
+  } catch {
+    searchHits = null;
+    toast('חיפוש בגוף השיחות נכשל', true);
+  }
   renderConvList();
 }, 220);
 function onConvSearch() {
@@ -2209,10 +3325,72 @@ function startRename(c, item, titleEl) {
   const inp = el('input', 'c-rename'); inp.value = c.title || '';
   item.replaceChild(inp, titleEl); inp.focus(); inp.select();
   let done = false;
-  const commit = () => { if (done) return; done = true; const v = inp.value.trim(); if (v) c.title = v; markDirty(c); renderConvList(); if (c.id === activeId) $('convTitle').textContent = c.title; };
-  inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } else if (e.key === 'Escape') { done = true; renderConvList(); } };
+  const commit = () => {
+    if (done) return; done = true;
+    const v = inp.value.trim();
+    // כותרת של 400 תווים הופכת את הסרגל העליון ל־2–3 גליפים ב־360px.
+    // השרת גוזר ל־200; כאן גוזרים קודם כדי שהמסך והדיסק לא יסתרו.
+    if (v) c.title = clamp(v, 80);
+    markDirty(c); renderConvList();
+    if (c.id === activeId) $('convTitle').textContent = c.title;
+  };
+  inp.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') {
+      // בלי stopPropagation Escape היה סוגר גם את המגירה בטלפון
+      e.preventDefault(); e.stopPropagation();
+      done = true; renderConvList();
+    }
+  };
   inp.onblur = commit;
   inp.onclick = (e) => e.stopPropagation();
+}
+
+/** שינוי שם בלי לחיצה כפולה — לטלפון וללוח הפקודות. */
+function renameConvPrompt(c) {
+  if (!c) c = activeConv();
+  if (!c) { toast('אין שיחה פעילה', true); return; }
+  if (c.anon) { toast('לצ׳אט אנונימי אין שם לשינוי', true); return; }
+  const v = prompt('שם חדש לשיחה', c.title || '');
+  if (v == null) return;
+  const t = v.trim();
+  if (!t) return;
+  c.title = clamp(t, 80);
+  markDirty(c); renderConvList();
+  if (c.id === activeId) $('convTitle').textContent = c.title;
+  toast('השם עודכן');
+}
+
+/** לחיצה ארוכה לשינוי שם במגע — לחיצה כפולה לא אמינה באצבע. */
+function bindTitleRename(t, c, item) {
+  if (c.anon) {
+    t.title = 'צ׳אט אנונימי — הכותרת קבועה, כדי שתוכן השיחה לא יופיע ברשימה';
+    return;
+  }
+  t.title = isTouch() ? 'לחיצה ארוכה לשינוי שם' : 'לחיצה כפולה לשינוי שם';
+  t.ondblclick = (e) => { e.stopPropagation(); startRename(c, item, t); };
+  let hold = 0;
+  let sx = 0, sy = 0;
+  let armed = false;
+  t.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') return;
+    sx = e.clientX; sy = e.clientY; armed = false;
+    hold = setTimeout(() => {
+      hold = 0; armed = true;
+      item._renameHold = true;
+      startRename(c, item, t);
+    }, 500);
+  });
+  const clear = (e) => {
+    if (hold) { clearTimeout(hold); hold = 0; }
+    if (armed && e) { e.preventDefault(); e.stopPropagation(); }
+  };
+  t.addEventListener('pointerup', clear);
+  t.addEventListener('pointercancel', clear);
+  t.addEventListener('pointermove', (e) => {
+    if (!hold) return;
+    if (Math.hypot(e.clientX - sx, e.clientY - sy) > 12) clear();
+  });
 }
 function renderConvList() {
   const list = $('convList'); list.innerHTML = '';
@@ -2240,13 +3418,11 @@ function renderConvList() {
     item.appendChild(del);
     // closeDrawer לפני switchConv ולא בתוכו: בחירה בשיחה שכבר פעילה יוצאת
     // מ-switchConv מיד, והמגירה נשארה פתוחה בדיוק כשהתכוונת לחזור אל השיחה.
-    item.onclick = () => { closeDrawer(); switchConv(c.id); };
-    if (!c.anon) {
-      t.ondblclick = (e) => { e.stopPropagation(); startRename(c, item, t); };
-      t.title = 'לחיצה כפולה לשינוי שם';
-    } else {
-      t.title = 'צ׳אט אנונימי — הכותרת קבועה, כדי שתוכן השיחה לא יופיע ברשימה';
-    }
+    item.onclick = () => {
+      if (item._renameHold) { item._renameHold = false; return; }
+      closeDrawer(); switchConv(c.id);
+    };
+    bindTitleRename(t, c, item);
     list.appendChild(item);
     // קטע ההקשר שהשרת מצא בגוף השיחה — מראה למה השיחה הזו תואמת
     const snip = searchHits && searchHits.get(c.id);
@@ -2259,14 +3435,37 @@ function renderConvList() {
 }
 async function switchConv(id) {
   if (id === activeId) return;
+  if (dictOn) dictStop();             // העוגן שייך לטיוטה של השיחה שעוזבים
   if (!leaveAnon(id)) return;         // עזיבת צ'אט אנונימי מוחקת אותו; ביטול = נשארים
   stashDraft();                       // הטיוטה של השיחה הנוכחית נשמרת לפני המעבר
+  // תור רץ בשיחה אחרת: ה־UI של busy נשאר, אבל התמליל כבר של השיחה החדשה —
+  // בלי משוב זה נראה כמו מסך שבור. לא חוסמים את המעבר (לגיטימי לבדוק שיחה
+  // אחרת), רק אומרים איפה העבודה ממשיכה.
+  if (busy && streamOwnerId && streamOwnerId !== id) {
+    const owner = convById(streamOwnerId);
+    const name = owner && owner.title ? clamp(owner.title, 40) : 'שיחה אחרת';
+    const n = msgQueue.length;
+    toast(n ? `עדיין רץ ב«${name}» · ${n} בתור` : `עדיין רץ ב«${name}»`);
+  }
+  // דואט ממשיך בשרת גם אחרי מעבר — בלי משוב נראה כאילו נעצר, ואז חוזרים לטופס הקמה.
+  const leaving = activeConv();
+  if (isDuet(leaving) && duetRun && duetRun.convId === leaving.id && duetRun.status === 'running') {
+    toast(`הדואט ממשיך ברקע ב«${clamp(leaving.title || 'דואט', 40)}»`);
+  }
   // התור וההמתנה למכסה שייכים לשיחה שעזבנו. מנקים מיד ולא מחכים ל-sync,
   // אחרת הצ'יפים של השיחה הקודמת נראים לרגע כאילו הם של החדשה.
+  if (limitState) {
+    const owner = streamOwnerId && convById(streamOwnerId);
+    const name = owner && owner.title ? clamp(owner.title, 40) : '';
+    toast(name ? `המתנה למכסה ממשיכה ב«${name}»` : 'המתנה למכסה ממשיכה בשיחה הקודמת');
+  }
   onQueueUpdate([]);
   setLimitState(null);
+  const next = convById(id);
+  if (next && isDuet(next)) next._awaitDuetSync = true;
   duetRun = null; duetLive = null; duetDom = null; duetViewV = 0; duetVerCache.clear();
   activeId = id;
+  stick = true;                       // שיחה חדשה — לתחתית, לא לשימור גלילה של הקודמת
   subscribeActive();                  // מנוי על זרם השיחה החדשה בשרת
   markSettings();
   renderConvList();
@@ -2279,19 +3478,47 @@ async function switchConv(id) {
 function deleteConv(id) {
   // אנונימית: אין קובץ למחוק, ויש מסלול ניקוי משלה (תהליך + זיכרון בשני הצדדים)
   const anon = convById(id);
-  if (anon && anon.anon) { endAnon(); return; }
+  if (anon && anon.anon) {
+    // אותו אישור כמו יציאה/מעבר — × ברשימה לא אמור למחוק בטעות בלי שאלה
+    if (activeId === anon.id) {
+      if (!leaveAnon(null)) return;
+      // leaveAnon משאיר activeId=null לטובת switchConv; כאן אין יעד — בוחרים אח
+      stick = true;
+      activeId = store.convs[0] ? store.convs[0].id : null;
+      if (!activeId) newConv();
+      else subscribeActive();
+      const c = activeConv();
+      if (c && !c.loaded) ensureLoaded(c.id).then(() => { if (activeId === c.id) { renderConversation(); restoreDraft(); syncConvCwd(); } });
+      renderConversation(); renderConvList();
+      if (c && c.loaded && activeId === c.id) { restoreDraft(); syncConvCwd(); renderQueue(); }
+      return;
+    }
+    if (!anonLeaveOk(anon)) return;
+    endAnon();
+    return;
+  }
+  const victim = convById(id);
+  const label = victim && victim.title ? clamp(victim.title, 40) : 'השיחה';
+  if (!confirm(`למחוק את «${label}»?\nהתמליל יימחק מהדיסק — אין דרך לשחזר.`)) return;
   if (busy && id === streamOwnerId) {
     interruptTurn();
     abandonTurn();
   }
   store.convs = store.convs.filter(c => c.id !== id);
   dirtyConvs.delete(id);
-  fetch('/api/conversations/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
+  fetch('/api/conversations/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); })
+    .catch(() => toast('המחיקה מהשרת נכשלה — השיחה עלולה לחזור אחרי רענון', true));
   if (activeId === id) activeId = store.convs[0] ? store.convs[0].id : null;
   if (!activeId) newConv();
+  else {
+    stick = true;
+    subscribeActive();
+  }
   const c = activeConv();
   if (c && !c.loaded) ensureLoaded(c.id).then(() => { if (activeId === c.id) { renderConversation(); restoreDraft(); syncConvCwd(); } });
   markSettings(); renderConversation(); renderConvList();
+  if (c && c.loaded && activeId === c.id) { restoreDraft(); syncConvCwd(); renderQueue(); }
 }
 
 // ---------- סרגל סטטוס ----------
@@ -2300,11 +3527,22 @@ function updateStatusbar() {
   const model = $('model').value;
   const mName = modelName(model) || ($('model').selectedOptions[0] && $('model').selectedOptions[0].textContent) || 'מודל ברירת מחדל';
   // שם המודל לבדו אינו אומר איזה סוכן רץ — 'Claude Opus 5' קיים בשתי הרשימות.
-  // הסימון מופיע רק כשהסוכן אינו ברירת המחדל, כדי לא להוסיף רעש לכל שיחה.
-  $('sbModel').textContent = model ? (isCursorModel(model) ? 'Cursor · ' + mName : mName) : 'מודל ברירת מחדל';
+  // עד כה זה נאמר בקידומת "Cursor · " שאכלה מרוחב השורה; עכשיו זה התג הפינתי
+  // שעל הסימן, והשם נשאר השם.
+  //
+  // הפריט נבנה מחדש רק כשהמודל באמת התחלף: שורת המצב מתרעננת גם על כל עדכון
+  // עלות והקשר שמגיע בזמן תור, ואין טעם לפרסר SVG מחדש בכל אחד מהם.
+  const sb = $('sbModel');
+  const label = model ? mName : 'מודל ברירת מחדל';
+  if (sb._bmModel !== model || sb._bmLabel !== label) {
+    sb._bmModel = model; sb._bmLabel = label;
+    sb.innerHTML = brandMarkHtml(model, 15) + `<span class="sb-model-name">${escHtml(label)}</span>`;
+    sb.title = brandTitle(model);
+  }
   // בחירה שהגיעה ממכשיר אחר או מסנכרון שיחה משנה את הבורר ישירות, בלי אירוע
   // change — הנקודה הזו היא המקום שדרכו כולן עוברות, ולכן התווית מתיישרת כאן.
   if ($('model')._mpSync) $('model')._mpSync();
+  syncModelDock();
   $('sbCost').textContent = fmtCost(conv ? conv.cost : 0);
   // פריט בלי נתון נעלם לגמרי במקום להציג "—", שנקרא כמו תקלה ולא כמו מצב ריק
   const ctxEl = $('sbContext'), turnEl = $('sbTurn');
@@ -2313,6 +3551,9 @@ function updateStatusbar() {
     const pct = Math.min(100, Math.round(conv.ctx.used / conv.ctx.win * 100));
     ctxEl.textContent = `הקשר ${pct}% · ${fmtTok(conv.ctx.used)}/${fmtTok(conv.ctx.win)}`;
     ctxEl.className = 'sb-item' + (pct >= 85 ? ' hot' : pct >= 65 ? ' warn' : '');
+    $('statusbar')?.classList.toggle('has-hot', pct >= 85);
+  } else {
+    $('statusbar')?.classList.remove('has-hot');
   }
   ctxEl.classList.toggle('hidden', !hasCtx);
   const dur = hasCtx && conv.ctx.dur;
@@ -2351,8 +3592,13 @@ function fmtResetAbsolute(iso) {
   if (!iso) return '';
   const t = new Date(iso);
   if (isNaN(t)) return '';
+  // מחזור החיוב של Cursor חודשי: "מתאפס יום ג׳ 00:00" על תאריך שבעוד שלושה
+  // שבועות אינו מזהה שום דבר. מעבר לשבוע עוברים לתאריך.
+  const far = t - Date.now() > 6 * 864e5;
   try {
-    return 'מתאפס ' + t.toLocaleString('he-IL', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    return 'מתאפס ' + t.toLocaleString('he-IL', far
+      ? { day: 'numeric', month: 'long' }
+      : { weekday: 'short', hour: '2-digit', minute: '2-digit' });
   } catch {
     return fmtReset(iso);
   }
@@ -2377,77 +3623,184 @@ function usageWindowsFromPayload(u) {
   }
   return out;
 }
-function renderUsageMeter(w, absoluteReset) {
-  const pct = Math.max(0, Math.round(w.pct));
-  const level = usageLevel(pct);
-  const row = el('div', 'um-meter' + (level === 2 ? ' hot' : level === 1 ? ' warn' : ''));
+/* ‎Cursor‎ מדווח אחוזים קטנים מאוד (0.14%, 3.63%), ועיגול לשלם הופך אותם
+   ל‎"0%"‎ ול‎"4%"‎ — הראשון שקר גמור והשני מנפח. מתחת ל-10% מציגים ספרה אחת. */
+function fmtUsagePct(raw, precise) {
+  const v = Math.max(0, typeof raw === 'number' && isFinite(raw) ? raw : 0);
+  if (!precise || v === 0 || v >= 10) return Math.round(v) + '%';
+  return (Math.round(v * 10) / 10) + '%';
+}
+/**
+ * מד אחד. ‎opts.precise‎ — אחוז עם ספרה עשרונית בערכים קטנים,
+ * ‎opts.sliver‎ — רוחב מזערי לפס כשיש שימוש שקטן מכדי להיראות,
+ * ‎opts.sub‎ — שורת משנה תחת מד אחר (קטן יותר, מודגש פחות).
+ */
+function renderUsageMeter(w, absoluteReset, opts = {}) {
+  const raw = Math.max(0, typeof w.pct === 'number' && isFinite(w.pct) ? w.pct : 0);
+  const level = usageLevel(raw);
+  const row = el('div', 'um-meter' + (level === 2 ? ' hot' : level === 1 ? ' warn' : '') + (opts.sub ? ' um-sm' : ''));
   const meta = el('div', 'um-meta');
-  meta.appendChild(el('div', 'um-label', w.label || '—'));
+  const shown = CURSOR_WINDOW_NAMES[w.id] || w.label || '—';
+  meta.appendChild(el('div', 'um-label', shown));
   let sub = '';
-  if (w.kind === 'weekly_scoped' && pct === 0) sub = `עדיין לא השתמשת ב־${w.label}`;
+  // התנאי על הערך הגולמי ולא על המעוגל: 0.14% הוא שימוש, גם אם הוא מציג 0%.
+  if (w.kind === 'weekly_scoped' && raw === 0) sub = `עדיין לא השתמשת ב־${shown}`;
   else if (w.resets_at) sub = absoluteReset ? fmtResetAbsolute(w.resets_at) : fmtReset(w.resets_at);
+  // ‎detail‎ מגיע רק ממכסת Cursor: שם האחוז לבדו חסר משמעות ("47%" ממה?)
+  if (w.detail) sub = sub ? `${w.detail} · ${sub}` : w.detail;
   meta.appendChild(el('div', 'um-sub', sub));
   const track = el('div', 'um-track');
-  const fill = el('span', 'um-fill');
-  fill.style.width = Math.min(100, pct) + '%';
+  const fill = el('span', 'um-fill' + (opts.sliver && raw > 0 ? ' on' : ''));
+  fill.style.width = Math.min(100, raw) + '%';
   track.appendChild(fill);
   row.appendChild(meta);
   row.appendChild(track);
-  row.appendChild(el('div', 'um-pct', pct + '% בשימוש'));
+  row.appendChild(el('div', 'um-pct', fmtUsagePct(raw, opts.precise) + ' בשימוש'));
   return row;
 }
-function compactUsageLabel(w) {
-  if (!w) return '—';
-  if (w.kind === 'session') return 'סשן';
-  if (w.kind === 'weekly_all') return 'שבועי';
-  return w.label || 'מודל';
+/* ==========================================================================
+   מכסה: שני סוכנים, מד אחד
+   --------------------------------------------------------------------------
+   Claude ו-Cursor מדווחים על מכסה בסכמות שונות לגמרי — חלונות של חמש שעות
+   ושבוע מול מחזור חיוב חודשי — אבל השרת כבר משטח את שניהם לאותו ‎windows[]‎,
+   ולכן כאן אין ולו פונקציית ציור אחת שיודעת במי מדובר. מה שכן מחזיק את ההבדל
+   הוא הצבע: ‎--src‎ נקבע פעם אחת על הרצועה ועל כל קטע בחלון, וכל השאר יורש.
+
+   הרצועה הקומפקטית מציגה סוכן אחד (השבב מחליף ביניהם, והבחירה נשמרת), והחלון
+   הצף מציג תמיד את שניהם — שם יש מקום, ושם משווים.
+   ========================================================================== */
+const USAGE_SOURCES = ['claude', 'cursor'];
+/* המספרים ש‎Cursor‎ מחזיר חיים בקצה התחתון של הסולם — אחוזים בודדים של
+   מחזור חיוב שלם — ולכן המדים שלו מקבלים דיוק עשרוני ופס נראה גם בשבריר אחוז. */
+const CURSOR_METER = { precise: true, sliver: true };
+const CURSOR_TOTAL_ID = 'cursor-included';
+const CURSOR_PART_IDS = ['cursor-api', 'cursor-auto'];
+/* שמות התצוגה לפי מזהה — לא לפי ‎short‎ שבמטמון. כך שינוי השם חל מיד,
+   גם אם הרצועה עדיין מחזיקה «כללי» / «אוטו» / «גרוק» מתשובה ישנה. */
+const CURSOR_WINDOW_NAMES = {
+  'cursor-api': 'מודלים כלליים',
+  'cursor-auto': 'מודלים של קרסר',
+  'cursor-grok-bot': 'גרוק בוט',
+};
+let usageData = { claude: null, cursor: null };
+
+function usageSource() {
+  const s = store.settings && store.settings.usageSource;
+  return USAGE_SOURCES.includes(s) ? s : 'claude';
 }
-function renderComposerUsageMeter(w) {
-  const pct = Math.max(0, Math.round(w.pct));
-  const level = usageLevel(pct);
-  const row = el('div', 'cu-row' + (level === 2 ? ' hot' : level === 1 ? ' warn' : ''));
-  const top = el('div', 'cu-top');
-  top.appendChild(el('div', 'cu-label', compactUsageLabel(w)));
-  top.appendChild(el('div', 'cu-pct', pct + '%'));
-  row.appendChild(top);
-  const track = el('div', 'cu-track');
-  const fill = el('span', 'cu-fill');
-  fill.style.width = Math.min(100, pct) + '%';
-  track.appendChild(fill);
-  row.appendChild(track);
-  let sub = '';
-  if (w.kind === 'session' && w.resets_at) sub = fmtReset(w.resets_at);
-  else if (w.kind !== 'session' && w.resets_at) sub = fmtResetAbsolute(w.resets_at);
-  if (sub) row.appendChild(el('div', 'cu-sub', sub));
-  return row;
+const usageSourceName = (s) => (s === 'cursor' ? 'Cursor' : 'Claude');
+
+function setUsageSource(src) {
+  if (!USAGE_SOURCES.includes(src)) src = 'claude';
+  store.settings.usageSource = src;
+  save();
+  renderComposerUsage();
 }
-function renderComposerUsage(windows, maxLevel) {
-  const host = $('composerUsageMeters');
-  const btn = $('composerUsage');
-  if (!host || !btn) return;
-  // סשן קודם, ואז שבועי כללי + מודלים עם ניצול משמעותי (כדי לא להציף)
+
+/** החלונות של סוכן אחד, מכל צורת תשובה שהיא. */
+function usageWindowsOf(src, u) {
+  if (!u) return [];
+  if (src === 'cursor') return Array.isArray(u.windows) ? u.windows : [];
+  return usageWindowsFromPayload(u);
+}
+
+/** מה שנכנס לרצועה: סשן קודם, ואז שבועי כללי + מודלים בניצול משמעותי (לא להציף). */
+function stripWindows(src, u) {
+  const windows = usageWindowsOf(src, u);
+  if (src === 'cursor') {
+    // מודלים כלליים קודמים — זה המד שהמשתמש ביקש לראות במקום הסה״כ המעורב.
+    // הסה״כ (‎cursor-included‎ בלי ‎detail‎) מוסתר גם אם המטמון הישן עוד נושא אותו.
+    const general = windows.filter((w) => w.id === 'cursor-api');
+    const auto = windows.filter((w) => w.id === 'cursor-auto');
+    const bot = windows.filter((w) => w.id === 'cursor-grok-bot');
+    const unlimited = windows.filter((w) => w.id === CURSOR_TOTAL_ID && w.detail);
+    const rest = windows.filter((w) =>
+      w.id !== 'cursor-api' && w.id !== 'cursor-auto' && w.id !== 'cursor-grok-bot' && w.id !== CURSOR_TOTAL_ID);
+    // מודלים של קרסר אחרונים: השם ארוך, והוא מקבל שורה שלמה בתחתית התיבה.
+    return [...general, ...bot, ...auto, ...unlimited, ...rest].slice(0, 3);
+  }
   const session = windows.filter((w) => w.kind === 'session');
   const weekly = windows.filter((w) => w.kind === 'weekly_all');
   const scoped = windows
     .filter((w) => w.kind === 'weekly_scoped' && typeof w.pct === 'number' && w.pct > 0)
     .sort((a, b) => b.pct - a.pct)
     .slice(0, 2);
-  const shown = [...session, ...weekly, ...scoped];
-  host.innerHTML = '';
-  for (const w of shown) host.appendChild(renderComposerUsageMeter(w));
-  btn.classList.toggle('hidden', shown.length === 0);
-  btn.classList.toggle('warn', maxLevel === 1);
-  btn.classList.toggle('hot', maxLevel === 2);
-  const tip = shown.map((w) => `${compactUsageLabel(w)} ${Math.round(w.pct)}%`).join(' · ');
-  btn.title = tip ? `לחץ לפירוט · ${tip}` : 'לחץ לפירוט מגבלות הניצול';
+  return [...session, ...weekly, ...scoped];
 }
-function renderUsageModal(u) {
-  const windows = usageWindowsFromPayload(u);
+
+function compactUsageLabel(w) {
+  if (!w) return '—';
+  if (CURSOR_WINDOW_NAMES[w.id]) return CURSOR_WINDOW_NAMES[w.id];
+  if (w.short) return w.short;
+  if (w.kind === 'session') return 'סשן';
+  if (w.kind === 'weekly_all') return 'שבועי';
+  return w.label || 'מודל';
+}
+function renderComposerUsageMeter(w, opts = {}) {
+  const raw = Math.max(0, typeof w.pct === 'number' && isFinite(w.pct) ? w.pct : 0);
+  const level = usageLevel(raw);
+  const row = el('div', 'cu-row'
+    + (level === 2 ? ' hot' : level === 1 ? ' warn' : '')
+    + (w.id === 'cursor-auto' ? ' cu-span' : ''));
+  const top = el('div', 'cu-top');
+  top.appendChild(el('div', 'cu-label', compactUsageLabel(w)));
+  top.appendChild(el('div', 'cu-pct', fmtUsagePct(raw, opts.precise)));
+  row.appendChild(top);
+  const track = el('div', 'cu-track');
+  const fill = el('span', 'cu-fill' + (opts.sliver && raw > 0 ? ' on' : ''));
+  fill.style.width = Math.min(100, raw) + '%';
+  track.appendChild(fill);
+  row.appendChild(track);
+  let sub = '';
+  if (w.detail) sub = w.detail;
+  else if (w.kind === 'session' && w.resets_at) sub = fmtReset(w.resets_at);
+  else if (w.resets_at) sub = fmtResetAbsolute(w.resets_at);
+  if (sub) row.appendChild(el('div', 'cu-sub', sub));
+  return row;
+}
+
+/** הרצועה שמתחת לתיבה — הסוכן שנבחר בלבד. */
+function renderComposerUsage() {
+  const host = $('composerUsageMeters');
+  const strip = $('composerUsage');
+  const chip = $('usageSrcToggle');
+  const open = $('usageOpen');
+  if (!host || !strip || !chip || !open) return;
+
+  const src = usageSource();
+  const other = src === 'claude' ? 'cursor' : 'claude';
+  const shown = stripWindows(src, usageData[src]);
+
+  const mopts = src === 'cursor' ? CURSOR_METER : {};
+  host.innerHTML = '';
+  for (const w of shown) host.appendChild(renderComposerUsageMeter(w, mopts));
+  if (!shown.length) host.appendChild(el('div', 'cu-empty', `אין נתוני מכסה מ-${usageSourceName(src)}`));
+
+  const maxLevel = shown.reduce((m, w) => Math.max(m, usageLevel(w.pct)), 0);
+  strip.classList.remove('src-claude', 'src-cursor');
+  strip.classList.add('src-' + src);
+  strip.classList.toggle('warn', maxLevel === 1);
+  strip.classList.toggle('hot', maxLevel === 2);
+  // הרצועה נעלמת רק כששני הסוכנים ריקים: אם הסתרנו אותה בגלל צד ריק, השבב —
+  // הדרך היחידה לחזור לצד המלא — היה נעלם איתה.
+  strip.classList.toggle('hidden', !USAGE_SOURCES.some((s) => stripWindows(s, usageData[s]).length));
+
+  chip.dataset.src = src;
+  chip.textContent = usageSourceName(src);
+  chip.title = `החלף לתצוגת המכסה של ${usageSourceName(other)}`;
+  chip.setAttribute('aria-label', chip.title);
+
+  const tip = shown.map((w) => `${compactUsageLabel(w)} ${fmtUsagePct(w.pct, mopts.precise)}`).join(' · ');
+  open.title = tip ? `לחץ לפירוט שתי המכסות · ${tip}` : 'לחץ לפירוט מגבלות הניצול';
+}
+
+function renderClaudeUsage(u) {
   const sessionHost = $('usageSessionBlock');
   const weeklyBlock = $('usageWeeklyBlock');
   const weeklyHost = $('usageWeeklyMeters');
-  if (!sessionHost || !weeklyHost || !weeklyBlock) return 0;
+  if (!sessionHost || !weeklyHost || !weeklyBlock) return;
 
+  const windows = usageWindowsOf('claude', u);
   const session = windows.filter((w) => w.kind === 'session');
   const weekly = windows.filter((w) => w.kind !== 'session');
 
@@ -2458,24 +3811,89 @@ function renderUsageModal(u) {
   for (const w of weekly) weeklyHost.appendChild(renderUsageMeter(w, true));
   weeklyBlock.hidden = weekly.length === 0;
 
+  const empty = $('usageClaudeEmpty');
+  if (empty) empty.hidden = windows.length > 0;
+
   const planEl = $('usagePlan');
-  const label = planLabel(u.plan);
-  if (planEl) {
-    if (label) { planEl.textContent = label; planEl.hidden = false; }
-    else planEl.hidden = true;
+  const label = planLabel(u && u.plan);
+  if (planEl) { planEl.textContent = label || ''; planEl.hidden = !label; }
+}
+
+/* ---------- קטע Cursor בחלון הצף ----------
+   Cursor מודד שני דליים נפרדים באותו מחזור חודשי: מודלים כלליים ומודלים
+   של קרסר. הסה״כ המעורב
+   אינו מוצג — הוא אינו תקרה. מה שנמדד במחזור אחר לגמרי (Grok Bot השבועי,
+   חיוב לפי שימוש) מקבל כותרת משלו. תאריך האיפוס של המחזור עולה אל הכותרת:
+   הוא נכון לקבוצה ולא לשורה אחת. */
+function renderCursorUsage(u) {
+  const host = $('usageCursorMeters');
+  if (!host) return;
+  const windows = usageWindowsOf('cursor', u);
+
+  host.innerHTML = '';
+  const pools = CURSOR_PART_IDS.map((id) => windows.find((w) => w.id === id)).filter(Boolean);
+  const unlimited = windows.find((w) => w.id === CURSOR_TOTAL_ID && w.detail) || null;
+  const rest = windows.filter((w) => !CURSOR_PART_IDS.includes(w.id) && w.id !== CURSOR_TOTAL_ID);
+
+  if (unlimited || pools.length) {
+    const group = el('section', 'ug');
+    const head = el('h4', 'usage-sec', 'שימוש כלול');
+    const resetAt = (unlimited && unlimited.resets_at) || (pools.find((w) => w.resets_at) || {}).resets_at || '';
+    const when = resetAt ? fmtResetAbsolute(resetAt) : '';
+    if (when) head.appendChild(el('span', 'ug-when', when));
+    group.appendChild(head);
+
+    if (unlimited) {
+      const lead = { ...unlimited };
+      if (when) lead.resets_at = null;
+      group.appendChild(renderUsageMeter(lead, true, CURSOR_METER));
+    }
+    for (const w of pools) {
+      const row = { ...w };
+      if (when) row.resets_at = null;
+      group.appendChild(renderUsageMeter(row, true, CURSOR_METER));
+    }
+    if (pools.length > 1) {
+      group.appendChild(el('p', 'ug-note', 'כל דלי נמדד מול תקרה משלו — האחוזים לא מסתכמים זה בזה.'));
+    }
+    host.appendChild(group);
   }
 
-  let max = 0;
-  for (const w of windows) max = Math.max(max, usageLevel(w.pct));
-  renderComposerUsage(windows, max);
-  return max;
+  if (rest.length) {
+    const group = el('section', 'ug');
+    // כותרת רק כשיש ממה להבדיל — אחרת זו כותרת מעל כל מה שיש.
+    if (host.childElementCount) group.appendChild(el('h4', 'usage-sec', 'מכסות נפרדות'));
+    for (const w of rest) group.appendChild(renderUsageMeter(w, true, CURSOR_METER));
+    host.appendChild(group);
+  }
+
+  const empty = $('usageCursorEmpty');
+  if (empty) {
+    empty.hidden = !!(unlimited || pools.length || rest.length);
+    empty.textContent = !u
+      ? 'לא הצלחנו לקרוא את המכסה מ-Cursor.'
+      : u.connected
+        ? 'אין כרגע מספרים להצגה — ייתכן שהתוכנית לא מונה בקשות, או שהדשבורד לא ענה.'
+        : 'לא מחובר ל-Cursor. הריצו cursor-agent login, או הדביקו את עוגיית WorkosCursorSessionToken אל CURSOR_SESSION_TOKEN בקובץ .env.';
+  }
+
+  const planEl = $('usageCursorPlan');
+  const label = (u && u.plan) || '';
+  if (planEl) { planEl.textContent = label; planEl.hidden = !label; }
 }
+
+function paintUsage() {
+  renderClaudeUsage(usageData.claude);
+  renderCursorUsage(usageData.cursor);
+  renderComposerUsage();
+}
+
+const getJSON = (url) => fetch(url).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+
 async function refreshUsage() {
-  try {
-    const r = await fetch('/api/usage');
-    const u = r.ok ? await r.json() : {};
-    renderUsageModal(u);
-  } catch {}
+  const [claude, cursor] = await Promise.all([getJSON('/api/usage'), getJSON('/api/usage/cursor')]);
+  usageData = { claude, cursor };
+  paintUsage();
 }
 
 /* ---------- המתנה לחידוש מכסת הסשן ----------
@@ -2486,6 +3904,7 @@ let limitTicker = null;
 
 function fmtCountdown(ms) {
   if (ms <= 0) return 'עוד רגע';
+  if (ms < 60000) return `בעוד ${Math.max(1, Math.ceil(ms / 1000))} שנ׳`;
   const total = Math.ceil(ms / 60000);
   const h = Math.floor(total / 60), m = total % 60;
   if (h >= 1) return `בעוד ${h} שע׳${m ? ` ו־${m} דק׳` : ''}`;
@@ -2509,8 +3928,9 @@ function setLimitState(limit) {
   limitState = limit || null;
   renderLimitBar();
   syncSendAffordance();
-  if (limitState && !limitTicker) limitTicker = setInterval(renderLimitBar, 30000);
-  if (!limitState && limitTicker) { clearInterval(limitTicker); limitTicker = null; }
+  if (limitTicker) { clearInterval(limitTicker); limitTicker = null; }
+  // רזולוציית שניות כשנותרה דקה; אחרת עדיין 1 שנ׳ — זול, והפס לא נראה תקוע
+  if (limitState) limitTicker = setInterval(renderLimitBar, 1000);
   // מתריעים רק על עצירה *טרייה*. אותו מצב מגיע שוב בכל sync — רענון דף או
   // פתיחת הטלפון לא אמורים לצלצל על משהו שקרה לפני שעתיים.
   const fresh = limitState && !had && Date.now() - (limitState.at || 0) < 2 * 60 * 1000;
@@ -2541,17 +3961,47 @@ function onLimitResumed(m) {
 }
 
 function isUsageModalOpen() { return $('usageModal') && !$('usageModal').classList.contains('hidden'); }
+function usageFocusables() {
+  const root = $('usageModal');
+  if (!root || root.classList.contains('hidden')) return [];
+  return [...root.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => !el.disabled && el.offsetParent !== null);
+}
+function onUsageModalKeydown(e) {
+  if (!isUsageModalOpen()) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setUsageModalOpen(false); return; }
+  if (e.key !== 'Tab') return;
+  const list = usageFocusables();
+  if (!list.length) { e.preventDefault(); return; }
+  const first = list[0], last = list[list.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  else if (!list.includes(document.activeElement)) { e.preventDefault(); first.focus(); }
+}
 function setUsageModalOpen(open) {
   const modal = $('usageModal');
-  const rail = $('composerUsage');
+  const strip = $('composerUsage');
+  const btn = $('usageOpen');
   if (!modal) return;
+  if (open) modal._returnFocus = document.activeElement;
   modal.classList.toggle('hidden', !open);
-  if (rail) rail.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (strip) strip.classList.toggle('open', open);
   document.body.style.overflow = open ? 'hidden' : '';
   if (open) {
+    if (!$('settings').classList.contains('hidden')) closeSettings();
+    closeModelDock({ restoreFocus: false });
+    document.removeEventListener('keydown', onUsageModalKeydown, true);
+    document.addEventListener('keydown', onUsageModalKeydown, true);
     refreshUsage();
     const close = $('usageModalClose');
     if (close) close.focus();
+  } else {
+    document.removeEventListener('keydown', onUsageModalKeydown, true);
+    if (modal._returnFocus && typeof modal._returnFocus.focus === 'function') {
+      try { modal._returnFocus.focus(); } catch {}
+      modal._returnFocus = null;
+    } else if (btn) btn.focus();
   }
 }
 function toggleUsageModal() { setUsageModalOpen(!isUsageModalOpen()); }
@@ -2666,6 +4116,14 @@ function watchStickHeight(node) {
   if (node) stickRo.observe(node);
 }
 
+/* פתיחת כרטיס בונה את גופו, אם הוא עדיין לא נבנה — ראו ‎setBody‎.
+   ‎toggle‎ אינו מבעבע, ולכן המאזין חייב לשבת בשלב הלכידה; מאזין אחד על ‎#log‎
+   חוסך מאזין לכל אחד מ-352 הכרטיסים שבשיחה ארוכה. */
+$('log').addEventListener('toggle', (e) => {
+  const d = e.target;
+  if (d && d.tagName === 'DETAILS' && d.open) flushBody(d);
+}, true);
+
 $('jumpBtn').onclick = () => {
   stick = true;
   const log = logEl();
@@ -2701,7 +4159,12 @@ function showWelcome() {
   const log = $('log');
   if (log.querySelector('.welcome')) return;
   const w = el('div', 'welcome');
-  w.innerHTML = `<div class="hero"><div class="sun">${sunburst(60)}</div><h1></h1></div>`;
+  // הסימן במסך הפתיחה הוא של המודל שהשיחה תיפתח איתו — עוד לפני המילה
+  // הראשונה כבר רואים עם מי מתחילים.
+  const hm = $('model').value;
+  w.innerHTML = `<div class="hero"><div class="sun bmark-tint" style="${brandVars(hm)}">`
+    + `${brandMarkHtml(hm, 60)}</div><h1></h1></div>`;
+  w.querySelector('.hero .sun').title = brandTitle(hm);
   w.querySelector('h1').textContent = greeting();
   const sg = el('div', 'suggests');
   for (const s of SUGGESTS) {
@@ -2721,23 +4184,570 @@ function hideWelcome() { const w = $('log').querySelector('.welcome'); if (w) w.
 
 // ---------- toasts ----------
 function toast(text, err) {
-  const t = el('div', 'toast' + (err ? ' err' : ''), text); $('toasts').appendChild(t);
+  const host = $('toasts');
+  if (host && !host.getAttribute('aria-live')) {
+    host.setAttribute('aria-live', 'polite');
+    host.setAttribute('role', 'status');
+  }
+  const t = el('div', 'toast' + (err ? ' err' : ''), text);
+  if (err) { t.setAttribute('role', 'alert'); t.setAttribute('aria-live', 'assertive'); }
+  host.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(() => t.remove(), 300); }, 4200);
 }
 
 // ---------- קלט ----------
 let histIdx = -1;
-function autoGrow() { const i = $('input'); i.style.height = 'auto'; i.style.height = Math.min(i.scrollHeight, window.innerHeight * 0.42) + 'px'; }
-$('input').addEventListener('input', autoGrow);
-$('input').addEventListener('input', () => stashDraftSoon());
-$('input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); return; }
+
+/**
+ * האם הטקסט דורש ‎compose-tall‎.
+ *
+ * חשוב: ההחלטה לפי רוחב החריץ *הצר* (שורה אחת בין כפתורים), לא לפי
+ * ‎scrollHeight‎ הנוכחי. אחרת: ברוחב הצר הטקסט נשבר → tall → ברוחב המלא
+ * הוא שוב שורה אחת → יורדים מ-tall → שוב צר → לולאה אינסופית.
+ *
+ * ‎textW‎ / ‎narrowSlot‎ בפיקסלים של תוכן (בלי ריפוד). ‎currentlyTall‎ נותן
+ * היסטרזיס קטן כדי לא לרפרף על סף המדידה.
+ *
+ * הסף לכניסה הוא ‎narrowSlot - 2‎ ולא ‎narrowSlot + 4‎: מרווח לכיוון החיובי
+ * פירושו טקסט שכבר חורג מהחריץ ועדיין מוצג בו — כלומר נשבר לשתי שורות בין
+ * הכפתורים, שזה בדיוק המראה שהמצב הזה בא למנוע. שגיאת מדידה קיימת (מדידת
+ * קנבס מול פריסה אמיתית), ולכן המרווח נשאר — רק בכיוון הבטוח: להקדים
+ * בשני פיקסלים זה בלתי נראה, לאחר בפיקסל אחד זה שורה שבורה.
+ */
+function composeTallDecision(textW, narrowSlot, currentlyTall, hasNewline) {
+  if (hasNewline) return true;
+  if (!(textW > 0) || !(narrowSlot > 0)) return false;
+  if (currentlyTall) return textW > narrowSlot - 16;
+  return textW > narrowSlot - 2;
+}
+
+/** רוחב החריץ הצר לתיבה בשורת compact — card פחות כפתורים ורווחים. */
+function composeNarrowSlotPx(input) {
+  const card = input.closest('.composer-card');
+  if (!card) return Math.max(0, input.clientWidth);
+  const gap = 6;
+  const pad = (() => {
+    const s = getComputedStyle(card);
+    return (parseFloat(s.paddingLeft) || 0) + (parseFloat(s.paddingRight) || 0);
+  })();
+  let btn = 0, n = 0;
+  // schedBtn יושב באותה שורה ב-compact (בין צירוף לחריץ). בלי זה החריץ
+  // מחושב רחב ב־46+6px ממה שיש בפועל, והטקסט נשבר לשתי שורות בתוך השורה
+  // הצרה — בדיוק מה ש-shouldComposeTall אמור למנוע.
+  for (const id of ['micBtn', 'attachBtn', 'schedBtn', 'sendBtn']) {
+    const el = $(id);
+    if (!el || el.classList.contains('hidden')) continue;
+    const w = el.getBoundingClientRect().width;
+    // width 0 = display:none (למשל תזמון שמוסתר בחריץ הצר) — לא נופלים
+    // ל־34px ברירת מחדל, שזה בדיוק הפיקסלים שגורמים לשבירת שורה.
+    if (!(w > 0)) continue;
+    btn += w;
+    n++;
+  }
+  // mic · attach · sched · [חריץ] · send — n כפתורים ⇒ n רווחים סביב החריץ
+  return Math.max(48, card.clientWidth - pad - btn - gap * Math.max(n, 1));
+}
+
+function inputTextWidthPx(input) {
+  const raw = input.value;
+  if (!raw) return 0;
+  // שורה אחת לוגית למדידה: רווחים מנורמלים; \n מטופל בנפרד ב-shouldComposeTall
+  const v = raw.replace(/\s+/g, ' ').trim();
+  if (!v) return 0;
+  const cs = getComputedStyle(input);
+  const ctx = inputTextWidthPx._ctx
+    || (inputTextWidthPx._ctx = document.createElement('canvas').getContext('2d'));
+  ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`.trim();
+  return ctx.measureText(v).width;
+}
+
+function shouldComposeTall(input) {
+  const v = input.value;
+  if (!v) return false;
+  const hasNewline = v.includes('\n');
+  const cs = getComputedStyle(input);
+  const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  const slot = composeNarrowSlotPx(input) - padX;
+  const tw = hasNewline ? 0 : inputTextWidthPx(input);
+  return composeTallDecision(tw, slot, document.body.classList.contains('compose-tall'), hasNewline);
+}
+
+const TALL_MS = 340;
+const TALL_EASE = 'cubic-bezier(.22, .72, .18, 1)';
+
+function visibleBox(el) {
+  if (!el || el.classList.contains('hidden')) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+
+function ghostAt(el, rect) {
+  const g = el.cloneNode(true);
+  g.classList.add('cc-ghost');
+  g.removeAttribute('id');
+  g.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
+  Object.assign(g.style, {
+    position: 'fixed', left: rect.left + 'px', top: rect.top + 'px',
+    width: rect.width + 'px', height: rect.height + 'px',
+    margin: '0', zIndex: '25', pointerEvents: 'none',
+    boxSizing: 'border-box', overflow: 'hidden',
+  });
+  document.body.appendChild(g);
+  return g;
+}
+
+function flipTo(el, first, last, origin) {
+  const dx = first.left - last.left;
+  const dy = first.top - last.top;
+  const sx = last.width ? first.width / last.width : 1;
+  const sy = last.height ? first.height / last.height : 1;
+  if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 && Math.abs(sx - 1) < 0.02 && Math.abs(sy - 1) < 0.02) return;
+  el.getAnimations().forEach((a) => a.cancel());
+  const anim = el.animate(
+    [
+      { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`, transformOrigin: origin },
+      { transform: 'translate(0, 0) scale(1, 1)', transformOrigin: origin },
+    ],
+    { duration: TALL_MS, easing: TALL_EASE, fill: 'both' },
+  );
+  anim.finished.then(() => anim.cancel()).catch(() => {});
+}
+
+/**
+ * מעבר ‎compose-tall‎ באנימציית FLIP: התיבה נמתחת מהחריץ בין הכפתורים
+ * לרוחב מלא, והכפתורים יורדים לשורה מתחת. רק כאן — לא בפתיחת המקלדת.
+ * כפתור המודל חוזר לשורת הפקדים; שלושת הבוררים נפתחים מעליו בלחיצה.
+ */
+function setComposeTall(on) {
+  const body = document.body;
+  if (body.classList.contains('compose-tall') === on) return;
+  const compact = body.classList.contains('compose-compact');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const input = $('input');
+  /* ריקון התיבה (שליחה) לא עובר FLIP. האנימציה מועכת את התיבה באותו רגע
+     שההודעה נכנסת לשיחה והמקלדת זזה — וזה נראה כגליטץ, לא כמעבר. */
+  const emptying = !on && !(input && input.value);
+  if (!compact || reduce || emptying || typeof body.animate !== 'function') {
+    body.classList.toggle('compose-tall', on);
+    growInput(input);
+    return;
+  }
+
+  const movers = ['#input', '#micBtn', '#attachBtn', '#schedBtn', '#sendBtn']
+    .map((s) => document.querySelector(s)).filter(visibleBox);
+  const dock = $('modelDock');
+  const first = new Map();
+  for (const el of movers) first.set(el, el.getBoundingClientRect());
+  let pillGhost = null;
+  if (!on && visibleBox(dock)) pillGhost = ghostAt(dock, dock.getBoundingClientRect());
+
+  body.classList.toggle('compose-tall', on);
+  growInput(input);
+  void body.offsetWidth;
+
+  const origin = 'top right';
+  for (const el of movers) {
+    const f = first.get(el);
+    const l = el.getBoundingClientRect();
+    if (f && l.width) flipTo(el, f, l, origin);
+  }
+
+  if (on && visibleBox(dock)) {
+    dock.getAnimations().forEach((a) => a.cancel());
+    const anim = dock.animate(
+      [
+        { opacity: 0, transform: 'translateY(10px) scale(.96)', transformOrigin: origin },
+        { opacity: 1, transform: 'translateY(0) scale(1)', transformOrigin: origin },
+      ],
+      { duration: TALL_MS * 0.85, delay: 40, easing: TALL_EASE, fill: 'both' },
+    );
+    anim.finished.then(() => anim.cancel()).catch(() => {});
+  } else if (pillGhost) {
+    const anim = pillGhost.animate(
+      [
+        { opacity: 1, transform: 'translateY(0) scale(1)' },
+        { opacity: 0, transform: 'translateY(8px) scale(.96)' },
+      ],
+      { duration: TALL_MS * 0.65, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' },
+    );
+    anim.finished.then(() => pillGhost.remove()).catch(() => pillGhost.remove());
+  }
+}
+
+function growInput(i) {
+  // גובה החלון *החזותי*, לא ‎innerHeight‎: ב-iOS המקלדת אינה מקטינה את
+  // ‎innerHeight‎ (וגם לא את ‎dvh‎), ולכן 42% ממנו הם תיבה שדוחפת את שורת
+  // הכפתורים אל מתחת למקלדת בדיוק כשהיא ארוכה — כלומר כשצריך אותה.
+  const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  i.style.height = 'auto';
+  i.style.height = Math.min(i.scrollHeight, vh * 0.42) + 'px';
+}
+
+function autoGrow() {
   const i = $('input');
-  if (e.key === 'ArrowUp' && i.selectionStart === 0 && store.history && store.history.length) { e.preventDefault(); histIdx = Math.min(histIdx + 1, store.history.length - 1); i.value = store.history[histIdx]; autoGrow(); }
-  else if (e.key === 'ArrowDown' && histIdx >= 0) { e.preventDefault(); histIdx--; i.value = histIdx < 0 ? '' : store.history[histIdx]; autoGrow(); }
+  const want = shouldComposeTall(i);
+  if (document.body.classList.contains('compose-tall') === want) growInput(i);
+  else setComposeTall(want);
+  // typeof: autoGrow רץ גם ב-harness מבודד שבו syncSendAffordance אינו קיים
+  if (typeof syncSendAffordance === 'function') syncSendAffordance();
+}
+$('input').addEventListener('input', autoGrow);
+$('input').addEventListener('input', () => { histIdx = -1; stashDraftSoon(); });
+$('input').addEventListener('keydown', (e) => {
+  // Esc בזמן הכתבה עוצר אותה ולא סוגר חלונית — זה המצב הפעיל ביותר במסך
+  if (e.key === 'Escape' && dictOn) { e.preventDefault(); e.stopPropagation(); dictStop(); return; }
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !e.repeat) {
+    // כרטיס שאלה/אישור פתוח — Enter בתור לא צריך לשרשר פרומפט במקום לענות
+    if (typeof pendingPerms !== 'undefined' && pendingPerms && pendingPerms.size > 0) {
+      e.preventDefault();
+      const asks = typeof pendingAskCount === 'function' ? pendingAskCount() : 0;
+      toast(asks
+        ? 'יש שאלה שממתינה לתשובה — ענה בכרטיס או לחץ על הפס למעלה'
+        : 'יש בקשת אישור שממתינה — אשר או דחה בכרטיס או בפס למעלה');
+      jumpToPendingAsk();
+      return;
+    }
+    e.preventDefault(); sendMessage(); return;
+  }
+  const i = $('input');
+  // קיצור «↑/↓ בתיבה ריקה» — לא לדרוס טיוטה כשהסמן רק בתחילת שורה
+  if (e.key === 'ArrowUp' && i.selectionStart === 0 && i.selectionEnd === 0
+      && store.history && store.history.length
+      && (histIdx >= 0 || !i.value)) {
+    e.preventDefault();
+    histIdx = Math.min(histIdx + 1, store.history.length - 1);
+    i.value = store.history[histIdx];
+    autoGrow(); stashDraftSoon();
+  } else if (e.key === 'ArrowDown' && histIdx >= 0) {
+    e.preventDefault();
+    histIdx--;
+    i.value = histIdx < 0 ? '' : store.history[histIdx];
+    autoGrow(); stashDraftSoon();
+  }
 });
-$('sendBtn').onclick = () => sendMessage();
-$('stopBtn').onclick = () => { interruptTurn(); };
+$('sendBtn').onclick = () => {
+  if (busy && !composerHasPayload() && !limitState) { interruptTurn(); return; }
+  sendMessage();
+};
+
+/** לחיצה על פקד במחבר לא לוקחת את הפוקוס מהתיבה.
+ *  בטלפון ה-blur סוגר את המקלדת, ‎compose-compact‎ נופל, והפריסה קופצת
+ *  באמצע שליחה או פתיחת תפריט. ‎preventDefault‎ על mousedown מונע את
+ *  העברת הפוקוס בלי לבטל את ה-click שבא אחריו. */
+function keepFieldFocus(el) {
+  if (!el) return;
+  el.addEventListener('mousedown', (e) => {
+    const input = $('input');
+    if (input && document.activeElement === input) e.preventDefault();
+  });
+}
+keepFieldFocus($('sendBtn'));
+keepFieldFocus($('attachBtn'));
+keepFieldFocus($('micBtn'));
+keepFieldFocus($('schedBtn'));
+
+/* ==========================================================================
+   הכתבה קולית — מיקרופון בשורת הקלט
+   --------------------------------------------------------------------------
+   הקלדת עברית באצבע אחת בטלפון היא הצוואר הצר של הממשק הזה: כל שאר הדרכים
+   להזין תוכן כבר קיימות (הדבקה, גרירה, שיתוף מאפליקציה אחרת), רק המהירה
+   מכולן חסרה. `SpeechRecognition` של הדפדפן נותן אותה בלי שרת ובלי מפתח.
+
+   שלוש החלטות שמחזיקות את המימוש:
+
+   1. **הטקסט נכנס לתיבה, לא לרצועה נפרדת.** מה שנאמר הוא טיוטה ככל טיוטה
+      אחרת — אפשר לערוך אותו באמצע, למחוק מילה, להוסיף `@קובץ` ולשלוח. רצועה
+      שמחזיקה את הטקסט בנפרד הייתה דורשת "העבר לתיבה" נוסף, וכל מה שנאמר עד
+      שלא נלחץ היה אבוד.
+
+   2. **עוגן במקום append.** בתחילת ההכתבה נרשם היכן עמד הסמן: מה שלפניו הוא
+      `head` ומה שאחריו `suffix`. הדיבור מצטרף ל-`head`, כך שאפשר להכתיב
+      *לתוך* אמצע טקסט קיים ולא רק בסופו. בחירה מסומנת מוחלפת במה שנאמר,
+      בדיוק כמו הקלדה.
+
+   3. **`interim` הוא טקסט לכל דבר.** תוצאת ביניים נכתבת לתיבה ונדרסת בכל
+      עדכון — כך רואים את המשפט נבנה. `mirror` הוא מה שכתבנו לאחרונה: אם
+      התיבה שונה ממנו, המשתמש נגע בה בזמן שדיברנו, ואז נלקח עוגן חדש מהסמן
+      במקום לדרוס את מה שהוא הקליד.
+
+   המנוע של Chrome מסיים את ההכרה מעצמו אחרי שקט, גם עם `continuous = true`
+   (ובאנדרואיד תוך שניות). לכן ההקשבה כאן היא לולאה: `onend` מפעיל מחדש כל
+   עוד `dictOn`, והדבר היחיד שעוצר אותה הוא בקשה מפורשת או שגיאה. `dictOn`
+   הוא הרצון של המשתמש, לא מצב המנוע — וזו ההפרדה שמונעת גם את הלולאה
+   ההפוכה, שבה `stop()` מפעיל `onend` שמפעיל `start()` מחדש.
+   ========================================================================== */
+
+const DICT_LANGS = [
+  { id: 'he-IL', short: 'עב', name: 'עברית' },
+  { id: 'en-US', short: 'EN', name: 'English' },
+];
+const DICT_DEFAULT = 'he-IL';
+
+let dictRec = null;            // מופע ה-SpeechRecognition החי, או null
+let dictOn = false;        // המשתמש מקשיב עכשיו (רצון, לא מצב מנוע)
+let dictAnchor = null;     // { head, suffix, interim, mirror }
+let dictLoops = 0;         // הפעלות-מחדש רצופות שנגמרו מיד — הגנה מלולאה
+let dictStartedAt = 0;
+
+const SpeechRec = () => window.SpeechRecognition || window.webkitSpeechRecognition;
+/**
+ * הכתבה דורשת הקשר מאובטח: ב-http רגיל Chrome לא ייתן הרשאת מיקרופון גם אם
+ * האובייקט קיים. הממשק מוגש ב-https או מ-localhost, ולכן זה בדרך כלל מתקיים —
+ * אבל מאזין ה-LAN יכול לרוץ בלי תעודה, ושם עדיף כפתור מושבת עם הסבר מאשר
+ * כפתור שנכשל בלחיצה. Firefox פשוט אינו מממש את ה-API, ושם אין מה להציג.
+ */
+const dictSupported = () => !!SpeechRec();
+const dictSecure = () => window.isSecureContext !== false;
+
+function dictLang() {
+  const v = store.settings && store.settings.dictLang;
+  return DICT_LANGS.some(l => l.id === v) ? v : DICT_DEFAULT;
+}
+const dictLangInfo = () => DICT_LANGS.find(l => l.id === dictLang()) || DICT_LANGS[0];
+
+/**
+ * חיבור מקטע שנשמע אל הטקסט שלפניו. המנוע מחזיר את המילים בלי רווח מוביל
+ * בעברית ועם רווח מוביל באנגלית, ובלי שום הבטחה לגבי רווחים כפולים — לכן
+ * הנרמול כאן ולא שם. הרווח נוסף גם כשהסמן עמד באמצע מילה: מי שמתחיל להכתיב
+ * שם מתכוון למילה חדשה.
+ */
+function dictJoin(left, chunk) {
+  chunk = String(chunk || '').replace(/\s+/g, ' ').trim();
+  if (!chunk) return left;
+  if (!left) return chunk;
+  return /\s$/.test(left) ? left + chunk : left + ' ' + chunk;
+}
+
+/**
+ * עוגן חדש מהסמן הנוכחי. טווח מסומן נבלע — מה שיוכתב יחליף אותו, כמו הקלדה.
+ * כשהתיבה איננה בפוקוס אין באמת סמן: `selectionStart` מחזיר שם 0 בדפדפנים
+ * מסוימים, ואז הכתבה על טיוטה קיימת הייתה נדחפת *לפני* מה שכבר כתוב. בלי
+ * פוקוס העוגן הוא הסוף, שהוא גם מה שמתכוונים אליו כשמפעילים מקיצור מקלדת.
+ * `mirror` נקבע כאן ולא נשאר ריק, אחרת הבדיקה הראשונה ב-dictReanchor הייתה
+ * מזהה "המשתמש נגע" ומוחקת את העוגן שהרגע נקבע.
+ */
+function dictAnchorAtCaret() {
+  const i = $('input');
+  const end = i.value.length;
+  const live = document.activeElement === i && i.selectionStart != null;
+  const a = live ? i.selectionStart : end;
+  const b = live && i.selectionEnd != null ? i.selectionEnd : a;
+  const head = i.value.slice(0, Math.min(a, b));
+  // `base` הוא אורך ה-head ברגע העיגון. `head` עצמו גדל עם כל מקטע שנסגר,
+  // ולכן הוא לא יכול לשמש כדי לענות על "האם נאמר כבר משהו".
+  return { head, base: head.length, suffix: i.value.slice(Math.max(a, b)), interim: '', mirror: i.value };
+}
+
+/**
+ * סימנים שאין לפניהם רווח בעברית ובאנגלית. מי שמעמיד את הסמן לפני נקודה
+ * ומכתיב עוד מילה מתכוון להוסיף אותה למשפט, לא לרחק את הנקודה ממנו.
+ */
+const DICT_TIGHT = /^[\s.,;:!?)\]}»"'׳״]/;
+
+/**
+ * כותב `head + interim + suffix` לתיבה ומשאיר את הסמן בין הדיבור לשארית.
+ * `dictJoin` מטפל ברווח שמשמאל לדיבור; הרווח שמימין לו הוא עניין נפרד, כי שם
+ * יושב טקסט שהיה בתיבה מלכתחילה — בלעדיו הכתבה לאמצע משפט הייתה מדביקה את
+ * המילה החדשה למילה שאחריה.
+ */
+function dictRender() {
+  const a = dictAnchor; if (!a) return;
+  const i = $('input');
+  const spoken = dictJoin(a.head, a.interim);
+  const gap = (spoken.length > a.base && a.suffix && !DICT_TIGHT.test(a.suffix)) ? ' ' : '';
+  const val = spoken + gap + a.suffix;
+  i.value = val;
+  a.mirror = val;
+  try { i.setSelectionRange(spoken.length, spoken.length); } catch {}
+  autoGrow();
+  stashDraftSoon();
+}
+
+/**
+ * לפני כל עדכון: האם התיבה עדיין מה שכתבנו? אם לא — המשתמש הקליד או מחק בזמן
+ * שדיברנו, ועוגן ישן היה מוחק את העריכה שלו ברגע שתגיע המילה הבאה. עוגן חדש
+ * מהסמן שומר את שני הצדדים: מה שהוא כתב נשאר, וההמשך נכנס במקום שבו הוא עומד.
+ */
+function dictReanchor() {
+  if (!dictAnchor || $('input').value !== dictAnchor.mirror) dictAnchor = dictAnchorAtCaret();
+}
+
+/** מכבה את המנוע בלי לגעת ב-dictOn וב-dictAnchor (שימושי גם להחלפת שפה). */
+function dictKillEngine() {
+  if (!dictRec) return;
+  try { dictRec.onresult = dictRec.onerror = dictRec.onend = dictRec.onstart = null; dictRec.abort(); } catch {}
+  dictRec = null;
+}
+
+/**
+ * מרים מנוע חדש בשפה הנוכחית. `abort` (ולא `stop`) בכיבוי זורק תוצאות ביניים
+ * שלא הספיקו להסתיים — וזה בסדר בדיוק כאן, כי הן כבר כתובות בתיבה: מה שנראה
+ * על המסך הוא מה שנשאר, ואין רגע שבו טקסט נעלם מתחת ליד.
+ */
+function dictSpin() {
+  const R = SpeechRec();
+  let r;
+  try { r = new R(); } catch { dictStop('ההכתבה לא נתמכת בדפדפן הזה'); return; }
+  r.lang = dictLang();
+  r.continuous = true;
+  r.interimResults = true;
+  r.maxAlternatives = 1;
+
+  r.onstart = () => { dictStartedAt = Date.now(); dictPaint(); };
+
+  r.onresult = (e) => {
+    if (!dictOn) return;
+    dictReanchor();
+    let interim = '';
+    for (let k = e.resultIndex; k < e.results.length; k++) {
+      const res = e.results[k];
+      const t = (res[0] && res[0].transcript) || '';
+      if (res.isFinal) dictAnchor.head = dictJoin(dictAnchor.head, t);
+      else interim += t;
+    }
+    dictAnchor.interim = interim.replace(/\s+/g, ' ').trim();
+    dictRender();
+    dictLoops = 0;                    // נשמע דיבור — המנוע חי, לא בלולאה
+  };
+
+  r.onerror = (e) => {
+    const err = (e && e.error) || '';
+    // שקט הוא לא שגיאה, וביטול הוא אנחנו. בשניהם onend יחליט מה הלאה.
+    if (err === 'no-speech' || err === 'aborted') return;
+    if (err === 'not-allowed' || err === 'service-not-allowed') {
+      dictStop('אין הרשאת מיקרופון — צריך לאשר אותה בהגדרות האתר בדפדפן');
+      return;
+    }
+    if (err === 'network') { dictStop('שירות ההכתבה של הדפדפן לא זמין (נדרשת רשת)'); return; }
+    if (err === 'language-not-supported') { dictStop(`הדפדפן לא יודע להכתיב ב${dictLangInfo().name}`); return; }
+    if (err === 'audio-capture') { dictStop('לא נמצא מיקרופון'); return; }
+    dictStop('ההכתבה נעצרה' + (err ? ` (${err})` : ''));
+  };
+
+  r.onend = () => {
+    if (!dictOn) { dictPaint(); return; }
+    // סיום מיידי וחוזר אינו שקט אלא מנוע שמסרב לעלות (הרשאה שנשללה בלי
+    // אירוע שגיאה, מיקרופון תפוס). ארבעה כאלה ברצף = עוצרים ואומרים.
+    dictLoops = (Date.now() - dictStartedAt < 500) ? dictLoops + 1 : 0;
+    if (dictLoops >= 4) { dictStop('לא הצלחתי להחזיק את המיקרופון פתוח'); return; }
+    dictRestart(r, 0);
+  };
+
+  dictRec = r;
+  try { dictStartedAt = Date.now(); r.start(); }
+  catch { dictKillEngine(); dictStop('לא הצלחתי להפעיל את המיקרופון'); }
+}
+
+/**
+ * הפעלה מחדש אחרי שהמנוע סיים מעצמו (שקט). ‎start()‎ בתוך ‎onend‎ זורק
+ * ‎InvalidStateError‎ כשהמנוע עוד לא שחרר את ההתקן — וזה קורה דווקא
+ * באנדרואיד, שם הוא מסיים כל כמה שניות. לכן ניסיון נוסף אחרי רבע שנייה
+ * במקום לוותר: מיקרופון שנכבה באמצע משפט בלי מילה אחת הוא בדיוק מה שנראה
+ * כמו תקלה אקראית. גם הוויתור, כשהוא מגיע, נאמר בקול.
+ */
+function dictRestart(r, tries) {
+  if (!dictOn || dictRec !== r) return;      // נעצר או הוחלף בינתיים
+  try { dictStartedAt = Date.now(); r.start(); }
+  catch {
+    if (tries >= 2) { dictStop('ההכתבה נעצרה — אפשר להפעיל שוב'); return; }
+    setTimeout(() => dictRestart(r, tries + 1), 250);
+  }
+}
+
+function dictStart() {
+  if (dictOn) return;
+  if (!dictSupported()) { toast('הדפדפן הזה לא תומך בהכתבה קולית', true); return; }
+  if (!dictSecure()) { toast('הכתבה קולית דורשת חיבור מאובטח (https)', true); return; }
+  dictOn = true;
+  dictLoops = 0;
+  dictAnchor = dictAnchorAtCaret();
+  dictSpin();
+  dictPaint();
+  dlog('dict.start', { lang: dictLang() });
+}
+
+/** עצירה מכל סיבה. `msg` נאמר רק כשהעצירה לא נתבקשה. */
+function dictStop(msg) {
+  if (!dictOn && !dictRec) { dictPaint(); return; }
+  dictOn = false;
+  dictKillEngine();
+  dictAnchor = null;                  // מה שנכתב לתיבה נשאר בה כטקסט רגיל
+  dictPaint();
+  if (msg) toast(msg, true);
+  stashDraft();
+  dlog('dict.stop', { reason: msg || 'user' });
+}
+
+const dictToggle = () => (dictOn ? dictStop() : dictStart());
+
+/** החלפת שפה תוך כדי הקשבה מרימה מנוע חדש ומשאירה את העוגן — מה שכבר הוכתב נשאר. */
+function dictSetLang(id) {
+  if (!DICT_LANGS.some(l => l.id === id)) return;
+  store.settings.dictLang = id;
+  save();
+  if (dictOn) {
+    const a = dictAnchor;
+    if (a) a.interim = '';
+    dictKillEngine();
+    dictAnchor = a;
+    dictLoops = 0;
+    dictSpin();
+    dictRender();
+  }
+  dictPaint();
+}
+const dictNextLang = () => DICT_LANGS[(DICT_LANGS.findIndex(l => l.id === dictLang()) + 1) % DICT_LANGS.length];
+
+function dictPaint() {
+  const btn = $('micBtn'); if (!btn) return;
+  const usable = dictSupported();
+  btn.classList.toggle('hidden', !usable);
+  if (!usable) return;
+  // לא ‎disabled‎: כפתור מושבת בולע לחיצות, ואז אין דרך להסביר למה אין הכתבה
+  // ב-http. ‎aria-disabled‎ + שמירה ב-dictStart (toast) משאירים את הלחיצה חיה.
+  const secure = dictSecure();
+  btn.disabled = false;
+  btn.setAttribute('aria-disabled', secure ? 'false' : 'true');
+  btn.classList.toggle('on', dictOn);
+  btn.setAttribute('aria-pressed', dictOn ? 'true' : 'false');
+  btn.title = !secure ? 'הכתבה קולית דורשת חיבור מאובטח (https)'
+    : dictOn ? 'עצור הכתבה (Esc)'
+    : `הכתבה קולית · ${dictLangInfo().name} · Ctrl/⌘+Shift+M`;
+  btn.setAttribute('aria-label', btn.title);
+  const strip = $('dictStrip');
+  if (strip) {
+    strip.classList.toggle('hidden', !dictOn);
+    if (dictOn) {
+      const lang = $('dictLang');
+      lang.textContent = dictLangInfo().short;
+      lang.title = `החלף ל${dictNextLang().name}`;
+    }
+  }
+  document.body.classList.toggle('dictating', dictOn);
+}
+
+if (dictSupported()) {
+  // אף כפתור של ההכתבה לא גונב פוקוס: הסמן שבתיבה הוא נקודת העיגון, וכפתור
+  // שמאפס אותו היה שולח את המשפט הבא לסוף הטיוטה במקום למקום שבו עמדת.
+  for (const id of ['micBtn', 'dictDone', 'dictLang']) {
+    $(id).addEventListener('mousedown', (e) => e.preventDefault());
+  }
+  $('micBtn').onclick = dictToggle;
+  $('dictDone').onclick = () => dictStop();
+  $('dictLang').onclick = () => dictSetLang(dictNextLang().id);
+  // הלשונית ברקע = המיקרופון נשאר פתוח בכיס. משחררים אותו; מה שנאמר עד כה
+  // כבר בתיבה, וההכתבה מתחדשת בלחיצה אחת בחזרה.
+  document.addEventListener('visibilitychange', () => { if (document.hidden && dictOn) dictStop(); });
+  addEventListener('pagehide', () => dictStop());
+}
+$('godLiveBtn').onclick = () => toggleGodLive();
+$('godLiveClose').onclick = () => closeGodLive();
+document.addEventListener('click', (e) => {
+  const panel = $('godLivePanel');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (panel.contains(e.target) || ($('godLiveBtn') && $('godLiveBtn').contains(e.target))) return;
+  closeGodLive();
+});
 /**
  * הבדיקה הידנית, מכל נקודת כניסה: הכפתור הקבוע בסרגל, הכפתור שצץ כשהתור
  * נראה תקוע, ולוח הפקודות. הכפתור בסרגל מסתובב תמיד — גם כשהלחיצה הגיעה
@@ -2759,14 +4769,20 @@ $('syncBtn').onclick = () => manualCheck($('syncBtn'));
 $('resyncBtn').onclick = () => manualCheck($('resyncBtn'));
 $('newDuet').onclick = () => {
   if (!leaveAnon(null)) return;
-  if (busy) { interruptTurn(); abandonTurn(); }
+  if (busy && streamOwnerId === activeId) {
+    if (!confirm('יש תשובה פעילה בשיחה הזו.\nלעצור אותה ולפתוח דואט?')) return;
+    interruptTurn(); abandonTurn();
+  } else if (busy) { interruptTurn(); abandonTurn(); }
   stashDraft();
   closeDrawer();
   newDuetConv();
 };
 function startNewChat() {
   if (!leaveAnon(null)) return;       // לפני כל שאר הפעולות: ביטול חייב להשאיר הכול כשהיה
-  if (busy) { interruptTurn(); abandonTurn(); }
+  if (busy && streamOwnerId === activeId) {
+    if (!confirm('יש תשובה פעילה בשיחה הזו.\nלעצור אותה ולפתוח שיחה חדשה?')) return;
+    interruptTurn(); abandonTurn();
+  } else if (busy) { interruptTurn(); abandonTurn(); }
   stashDraft();
   closeDrawer();   // אם נלחץ מתוך המגירה — היעד הוא תיבת הכתיבה, לא הרשימה
   const empty = store.convs.find(c => c.loaded && !isDuet(c) && !c.anon && c.messages.length === 0 && !(c.draft || '').trim());
@@ -2811,21 +4827,119 @@ $('anonTools').onclick = () => {
 
 // ---------- הגדרות + עיצוב ----------
 let settingsOpenedAt = 0;
-function openSettings() { $('settings').classList.remove('hidden'); settingsOpenedAt = Date.now(); renderNotifyRow(); }
+let settingsReturnFocus = null;
+function openSettings() {
+  if (!$('findBar').classList.contains('hidden')) closeFind();
+  if (!$('modal').classList.contains('hidden')) closeModal();
+  if (isUsageModalOpen()) setUsageModalOpen(false);
+  closeModelDock({ restoreFocus: false });
+  settingsReturnFocus = document.activeElement;
+  $('settings').classList.remove('hidden');
+  const tog = $('settingsToggle');
+  if (tog) tog.setAttribute('aria-expanded', 'true');
+  settingsOpenedAt = Date.now();
+  renderNotifyRow();
+  renderInstallRow();
+  renderLocalRow();
+  const first = $('settings').querySelector('input, select, button, textarea');
+  if (first) try { first.focus(); } catch {}
+}
+function closeSettings() {
+  $('settings').classList.add('hidden');
+  const tog = $('settingsToggle');
+  if (tog) tog.setAttribute('aria-expanded', 'false');
+  const back = settingsReturnFocus;
+  settingsReturnFocus = null;
+  if (back && typeof back.focus === 'function') {
+    try { back.focus(); } catch {}
+  } else if (tog) tog.focus();
+}
 
 // ---------- מתג ההתרעות ----------
 $('notifyOn').onchange = (e) => { store.settings.notify = e.target.checked; save(); renderNotifyRow(); };
+$('notifyActionsOn').onchange = (e) => { store.settings.notifyActions = e.target.checked; save(); renderNotifyRow(); };
 $('notifyAsk').onclick = () => notifyChipClick(); // באותו כפתור יושבות "בקש" ו"למה חסום"
 $('notifyChip').onclick = () => notifyChipClick();
+$('presence').onclick = () => {
+  if ($('presence').dataset.mode === 'view') claimPrimary();
+};
+$('presence').onkeydown = (e) => {
+  if ($('presence').dataset.mode !== 'view') return;
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); claimPrimary(); }
+};
 $('notifyTest').onclick = () => {
   // בדיקה אמיתית: אותו מסלול בדיוק שההתרעות האמיתיות עוברות בו
   desktopNotify('בדיקת התרעה', 'ככה תיראה התרעה על סיום משימה');
   toast('נשלחה התרעת בדיקה');
 };
+
+function onLocalDockChange() {
+  readLocalDockIntoStore();
+  markSettings();
+  pushLocalConfig();
+  syncModelDock();
+  save();
+}
+const localTempEl = $('localTemp');
+const localMaxEl = $('localMaxTokens');
+if (localTempEl) localTempEl.addEventListener('change', onLocalDockChange);
+if (localMaxEl) localMaxEl.addEventListener('change', onLocalDockChange);
+if ($('localTimeoutSet')) $('localTimeoutSet').addEventListener('change', () => {
+  const v = $('localTimeoutSet').value;
+  const loc = localSettings();
+  if (!v) delete loc.timeoutMs;
+  else loc.timeoutMs = Number(v);
+  markSettings();
+  pushLocalConfig();
+  save();
+});
+if ($('localSave')) $('localSave').onclick = async () => {
+  if (!CONFIG.local || !CONFIG.local.enabled) return;
+  const url = ($('localUrl') && $('localUrl').value) || '';
+  const timeoutRaw = $('localTimeoutSet') && $('localTimeoutSet').value;
+  const loc = localSettings();
+  if (!timeoutRaw) delete loc.timeoutMs;
+  else loc.timeoutMs = Number(timeoutRaw);
+  markSettings(); save();
+  try {
+    const r = await fetch('/api/local', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: url,
+        timeoutMs: loc.timeoutMs != null ? loc.timeoutMs : null,
+        temperature: loc.temperature != null ? loc.temperature : null,
+        maxTokens: loc.maxTokens != null ? loc.maxTokens : null,
+      }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(j.error || 'שמירת ההגדרות המקומיות נכשלה', true); return; }
+    CONFIG.local = { ...CONFIG.local, ...j, enabled: true };
+    toast('הגדרות מקומיות נשמרו');
+    renderLocalRow();
+    const p = await fetch('/api/local/probe', { method: 'POST' });
+    const st = await p.json().catch(() => ({}));
+    if (st && st.enabled) CONFIG.local = { ...CONFIG.local, ...st, enabled: true };
+    await loadConfig();
+  } catch { toast('שמירת ההגדרות המקומיות נכשלה', true); }
+};
+if ($('localProbe')) $('localProbe').onclick = async () => {
+  const btn = $('localProbe');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/local/probe', { method: 'POST' });
+    const j = await r.json().catch(() => ({}));
+    if (j && j.enabled) CONFIG.local = { ...CONFIG.local, ...j, enabled: true };
+    await loadConfig();
+    if (j && j.found) toast('השרת המקומי מחובר');
+    else toast(j.lastFail || 'השרת המקומי לא ענה', true);
+  } catch { toast('בדיקת השרת המקומי נכשלה', true); }
+  if (btn) btn.disabled = false;
+};
 $('settingsToggle').onclick = (e) => {
   e.stopPropagation();
   if ($('settings').classList.contains('hidden')) openSettings();
-  else $('settings').classList.add('hidden');
+  else closeSettings();
 };
 document.addEventListener('click', (e) => {
   const s = $('settings');
@@ -2833,7 +4947,7 @@ document.addEventListener('click', (e) => {
   // הקליק *שפתח* את החלונית ממשיך לבעבע לכאן ומיד סגר אותה — כך "הגדרות"
   // בלוח הפקודות (הדרך היחידה אליהן בטלפון) פשוט לא עשה כלום.
   if (Date.now() - settingsOpenedAt < 300) return;
-  if (!s.contains(e.target) && e.target !== $('settingsToggle')) s.classList.add('hidden');
+  if (!s.contains(e.target) && e.target !== $('settingsToggle')) closeSettings();
 });
 // matchMedia ולא innerWidth: זו בדיוק אותה נקודת שבירה שבה ה-CSS הופך את
 // הסרגל למגירה צפה. שתי הגדרות נפרדות של "760" נוטות להיפרד זו מזו — ולכן
@@ -2846,12 +4960,20 @@ const drawerMode = isNarrow;
 function closeDrawer() {
   if (!drawerMode()) return;
   document.querySelector('.app').classList.remove('side-open');
+  const t = $('sideToggle');
+  if (t) try { t.focus(); } catch {}
 }
-function toggleSide() { const app = document.querySelector('.app'); if (drawerMode()) app.classList.toggle('side-open'); else app.classList.toggle('side-collapsed'); }
+function toggleSide() {
+  const app = document.querySelector('.app');
+  if (drawerMode()) {
+    const open = app.classList.toggle('side-open');
+    if (open) closeModelDock({ restoreFocus: false });
+  } else app.classList.toggle('side-collapsed');
+}
 $('sideToggle').onclick = toggleSide;
 $('sideCollapse').onclick = toggleSide;
 // המגירה בטלפון נסגרת בהקשה על העמעום — הדרך שבה סוגרים מגירה בכל אפליקציה
-$('sideBackdrop').onclick = () => document.querySelector('.app').classList.remove('side-open');
+$('sideBackdrop').onclick = () => closeDrawer();
 
 /* ---------- סגירת המגירה בהחלקה ----------
    שלוש הדרכים שהיו לסגור אותה בטלפון: ה-‹ בפינה, רצועת עמעום של ~55px
@@ -2915,7 +5037,9 @@ $('sideBackdrop').onclick = () => document.querySelector('.app').classList.remov
 // כפתור "עוד" בסרגל העליון פותח את לוח הפקודות כתפריט פעולות
 $('moreBtn').onclick = () => {
   const p = $('palette');
-  p.classList.contains('hidden') ? openPalette(false) : closePalette();
+  const open = p.classList.contains('hidden');
+  open ? openPalette(false) : closePalette();
+  $('moreBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
 };
 
 // ---------- רוחב סרגל צד — גרירה קלאסית ----------
@@ -2983,7 +5107,11 @@ function initSideResize() {
 }
 
 // ---------- חלונית ניצול מכסה (כפתור בסטטוסבר → מודאל מרכזי) ----------
-$('composerUsage').onclick = (e) => { e.stopPropagation(); toggleUsageModal(); };
+$('usageOpen').onclick = (e) => { e.stopPropagation(); toggleUsageModal(); };
+$('usageSrcToggle').onclick = (e) => {
+  e.stopPropagation();
+  setUsageSource(usageSource() === 'claude' ? 'cursor' : 'claude');
+};
 $('usageModalClose').onclick = () => setUsageModalOpen(false);
 $('usageModal').addEventListener('click', (e) => { if (e.target === $('usageModal')) setUsageModalOpen(false); });
 document.addEventListener('keydown', (e) => {
@@ -3007,25 +5135,6 @@ function clearPendingAtts() {
   renderAttStrip();
 }
 
-function renderAttStrip() {
-  const strip = $('attStrip');
-  strip.innerHTML = '';
-  strip.classList.toggle('hidden', pendingAtts.length === 0);
-  for (const a of pendingAtts) {
-    const chip = el('div', 'att-chip');
-    const thumb = el('div', 'thumb');
-    if (a.url) { const im = el('img'); im.src = a.url; im.alt = ''; thumb.appendChild(im); }
-    else thumb.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5.5" width="16" height="13" rx="2"/><circle cx="9" cy="10.5" r="1.6"/><path d="M5.5 16.5l4-4 2.5 2.5 2.2-2.2 4.3 3.7"/></svg>';
-    const info = el('div', 'ac-info');
-    info.appendChild(el('div', 'ac-name', a.name));
-    const cls = a.status === 'up' ? 'up' : a.status === 'err' ? 'err' : a.kind;
-    info.appendChild(el('div', 'ac-path ' + cls, a.status === 'up' ? 'מעלה…' : a.status === 'err' ? 'העלאה נכשלה' : a.path));
-    const rm = el('button', 'ac-rm', '×'); rm.title = 'הסר';
-    rm.onclick = () => { pendingAtts = pendingAtts.filter(x => x !== a); revokeAtt(a); renderAttStrip(); };
-    chip.appendChild(thumb); chip.appendChild(info); chip.appendChild(rm);
-    strip.appendChild(chip);
-  }
-}
 function renderMsgAtts(atts) {
   const box = el('div', 'msg-atts');
   for (const a of atts) {
@@ -3044,77 +5153,131 @@ function renderMsgAtts(atts) {
 function readAsDataURL(file) {
   return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
 }
-async function addAttachment(file, forceTemp) {
-  if (!file || !(file.type || '').startsWith('image/')) return;
+async function addAttachment(file, forceTemp, quiet) {
+  if (!file || !(file.type || '').startsWith('image/')) {
+    if (!quiet && file && (file.type || file.name)) {
+      toast('ניתן לצרף תמונות בלבד — קבצים אחרים לא נתמכים', true);
+    }
+    return false;
+  }
   if (file.size > MAX_IMAGE_BYTES) {
     toast('התמונה גדולה מדי (מקסימום 30MB)', true);
-    return;
+    return false;
   }
   const url = URL.createObjectURL(file);
-  const att = { name: file.name || 'הדבקה.png', url, kind: 'temp', path: '', status: 'up', data: '', media: file.type || 'image/png' };
+  const att = { name: file.name || 'הדבקה.png', url, kind: 'temp', path: '', status: 'up', data: '', media: file.type || 'image/png', file, forceTemp: !!forceTemp };
   pendingAtts.push(att); renderAttStrip();
-  att.ready = (async () => {
-    try {
-      // התמונה נשלחת ל-Claude ישירות כ-base64 (בלוק image) — עובד תמיד, בלי הרשאות קבצים
-      const dataUrl = await readAsDataURL(file);
-      att.data = dataUrl.slice(dataUrl.indexOf(',') + 1);
-      const mm = /^data:([^;]+)/.exec(dataUrl); if (mm) att.media = mm[1];
-      att.status = 'ready';
-      // נתיב לתצוגה (best-effort): נתיב-דיסק אמיתי אם קיים, אחרת עותק זמני שיימחק אוטומטית
-      if (!forceTemp && file.path) { att.kind = 'disk'; att.path = file.path; }
-      else if (isAnon(activeConv())) {
-        // בצ'אט אנונימי לא נכתב עותק: התמונה מגיעה למודל כ-base64 ישירות,
-        // והעותק הזמני היה נשאר בדיסק שש שעות אחרי שהשיחה כבר "נמחקה".
-        att.kind = 'temp';
-        att.path = '(בזיכרון בלבד · לא נכתב לדיסק)';
-      }
-      else {
-        try {
-          const r = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: att.name, dataUrl }) });
-          const j = await r.json();
-          if (j && j.ok) { att.path = j.path; att.name = j.name || att.name; }
-          else att.path = '(בזיכרון · זמני)';
-        } catch { att.path = '(בזיכרון · זמני)'; }
-        att.kind = 'temp';
-      }
-    } catch { att.status = 'err'; }
-    renderAttStrip();
-  })();
+  att.ready = uploadAttachment(att);
+  return true;
+}
+/** העלאה / קריאת base64 לצירוף קיים — משמש גם לניסיון חוזר אחרי כשל. */
+async function uploadAttachment(att) {
+  const file = att.file;
+  if (!file) { att.status = 'err'; renderAttStrip(); return; }
+  att.status = 'up';
+  renderAttStrip();
+  try {
+    // התמונה נשלחת ל-Claude ישירות כ-base64 (בלוק image) — עובד תמיד, בלי הרשאות קבצים
+    const dataUrl = await readAsDataURL(file);
+    att.data = dataUrl.slice(dataUrl.indexOf(',') + 1);
+    const mm = /^data:([^;]+)/.exec(dataUrl); if (mm) att.media = mm[1];
+    att.status = 'ready';
+    // נתיב לתצוגה (best-effort): נתיב-דיסק אמיתי אם קיים, אחרת עותק זמני שיימחק אוטומטית
+    if (!att.forceTemp && file.path) { att.kind = 'disk'; att.path = file.path; }
+    else if (isAnon(activeConv())) {
+      // בצ'אט אנונימי לא נכתב עותק: התמונה מגיעה למודל כ-base64 ישירות,
+      // והעותק הזמני היה נשאר בדיסק שש שעות אחרי שהשיחה כבר "נמחקה".
+      att.kind = 'temp';
+      att.path = '(בזיכרון בלבד · לא נכתב לדיסק)';
+    }
+    else {
+      try {
+        const r = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: att.name, dataUrl }) });
+        const j = await r.json();
+        if (j && j.ok) { att.path = j.path; att.name = j.name || att.name; }
+        else att.path = '(בזיכרון · זמני)';
+      } catch { att.path = '(בזיכרון · זמני)'; }
+      att.kind = 'temp';
+    }
+  } catch { att.status = 'err'; toast('העלאת התמונה נכשלה — לחץ על הצ׳יפ לניסיון חוזר', true); }
+  renderAttStrip();
+}
+
+function renderAttStrip() {
+  const strip = $('attStrip');
+  strip.innerHTML = '';
+  strip.classList.toggle('hidden', pendingAtts.length === 0);
+  for (const a of pendingAtts) {
+    const chip = el('div', 'att-chip' + (a.status === 'err' ? ' err' : ''));
+    const thumb = el('div', 'thumb');
+    if (a.url) { const im = el('img'); im.src = a.url; im.alt = ''; thumb.appendChild(im); }
+    else thumb.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5.5" width="16" height="13" rx="2"/><circle cx="9" cy="10.5" r="1.6"/><path d="M5.5 16.5l4-4 2.5 2.5 2.2-2.2 4.3 3.7"/></svg>';
+    const info = el('div', 'ac-info');
+    info.appendChild(el('div', 'ac-name', a.name));
+    const cls = a.status === 'up' ? 'up' : a.status === 'err' ? 'err' : a.kind;
+    info.appendChild(el('div', 'ac-path ' + cls,
+      a.status === 'up' ? 'מעלה…'
+        : a.status === 'err' ? 'העלאה נכשלה · לחץ לניסיון חוזר'
+        : a.path));
+    const rm = el('button', 'ac-rm', '×'); rm.title = 'הסר';
+    rm.onclick = (e) => { e.stopPropagation(); pendingAtts = pendingAtts.filter(x => x !== a); revokeAtt(a); renderAttStrip(); };
+    chip.appendChild(thumb); chip.appendChild(info); chip.appendChild(rm);
+    if (a.status === 'err' && a.file) {
+      chip.title = 'לחץ לניסיון חוזר';
+      chip.style.cursor = 'pointer';
+      chip.onclick = () => { a.ready = uploadAttachment(a); };
+    }
+    strip.appendChild(chip);
+  }
+  if (typeof syncSendAffordance === 'function') syncSendAffordance();
 }
 
 $('attachBtn').onclick = () => $('fileInput').click();
+$('schedBtn').onclick = () => openSchedule();
 $('fileInput').onchange = (e) => { [...e.target.files].forEach(f => addAttachment(f)); e.target.value = ''; };
 
 // הדבקה — תמונה מהלוח נשמרת זמנית
 $('input').addEventListener('paste', (e) => {
   const items = [...((e.clipboardData && e.clipboardData.items) || [])];
   const imgs = items.filter(it => it.type.startsWith('image/'));
-  if (imgs.length) { e.preventDefault(); imgs.forEach(it => { const f = it.getAsFile(); if (f) addAttachment(f, true); }); }
+  if (!imgs.length) return;
+  e.preventDefault();
+  let added = 0;
+  imgs.forEach(it => { const f = it.getAsFile(); if (f) { addAttachment(f, true); added++; } });
+  if (!added) toast('לא הצלחתי לקרוא תמונה מהלוח', true);
 });
 
 // גרירה ושחרור מכל מקום בחלון
 let dragN = 0;
 const hasFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+const hideDropzone = () => { dragN = 0; const dz = $('dropzone'); if (dz) dz.classList.add('hidden'); };
 window.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragN++; $('dropzone').classList.remove('hidden'); });
 window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
-window.addEventListener('dragleave', () => { dragN--; if (dragN <= 0) { dragN = 0; $('dropzone').classList.add('hidden'); } });
-window.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragN = 0; $('dropzone').classList.add('hidden'); [...e.dataTransfer.files].forEach(f => addAttachment(f)); });
+window.addEventListener('dragleave', () => { dragN--; if (dragN <= 0) hideDropzone(); });
+window.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); hideDropzone(); [...e.dataTransfer.files].forEach(f => addAttachment(f)); });
+window.addEventListener('dragend', hideDropzone);
 ['cwd', 'model', 'effort', 'perm'].forEach(id => $(id).addEventListener('change', () => {
-  store.settings[id] = $(id).value;
-  // בחירת ההרשאות נזכרת תחת הסוכן שאליו היא שייכת — ראו populatePerms
-  if (id === 'perm') store.settings[activeAgent() === 'cursor' ? 'cursorPerm' : 'perm'] = $('perm').value;
+  // בחירת ההרשאות נזכרת תחת הסוכן שאליו היא שייכת — ראו populatePerms.
+  // בלי ההפרדה, ‎force‎ של Cursor היה נכתב ל-settings.perm ומודל Claude היה
+  // מקבל אותו בשיגור (ה-CLI נופל: argument 'force' is invalid).
+  if (id === 'perm') store.settings[permStoreKey()] = $('perm').value;
+  else store.settings[id] = $(id).value;
   if (id === 'model') {
     updateEfforts();
     // החלפת סוכן מחליפה את רשימת מצבי ההרשאה כולה; בלי הבנייה מחדש הבורר היה
     // נשאר עם מצב של הסוכן הקודם, ונשלח לסוכן שלא מכיר אותו.
     populatePerms();
+    store.settings[permStoreKey()] = $('perm').value;
     store.settings.effort = $('effort').value;
   }
   // תיקיית העבודה נזכרת גם ברמת השיחה (וברמת ההגדרות כברירת מחדל לשיחה הבאה)
   if (id === 'cwd') { const c = activeConv(); if (c) c.cwd = $('cwd').value; updateCwdChip(); }
   // החלפת מצב הרשאות תוך כדי שיחה — נשלחת חיה ל-CLI (set_permission_mode)
-  if (id === 'perm') markGodPill();
-  if (id === 'perm' && ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'set_permission_mode', mode: $('perm').value }));
+  if (id === 'perm') {
+    markGodPill();
+    if ($('perm').value === 'god') toast('מצב GOD — כל בקשת הרשאה תאושר אוטומטית');
+  }
+  if (id === 'perm' && ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'set_permission_mode', mode: permValue() }));
   // החלפת מודל/מאמץ תוך כדי שיחה — השרת מחיל אותה על השיחה הרצה (set_model,
   // ואם צריך גם הפעלה מחדש עם resume) ומשדר את הבוררים למסכים האחרים.
   // שניהם נשלחים יחד כי בחירת מודל עשויה לשנות את רשימת המאמצים.
@@ -3221,15 +5384,19 @@ function openDirPicker(start) {
   const list = el('div', 'dp-list');
   const actions = el('div', 'dp-actions');
   const pick = el('button', 'rm-btn primary', 'בחר תיקייה זו');
-  pick.onclick = () => { setCwd(dirPickAt); closeModal(); toast('תיקיית העבודה: ' + dirPickAt); };
+  pick.onclick = () => {
+    if (pick.disabled || !dirPickAt) { toast('אין תיקייה זמינה לבחירה', true); return; }
+    setCwd(dirPickAt); closeModal(); toast('תיקיית העבודה: ' + dirPickAt);
+  };
   actions.appendChild(pick);
   wrap.appendChild(cur); wrap.appendChild(list); wrap.appendChild(actions);
   openModal('בחירת תיקיית עבודה', wrap);
-  loadDirs(start, cur, list);
+  loadDirs(start, cur, list, pick);
 }
-async function loadDirs(p, cur, list) {
+async function loadDirs(p, cur, list, pick) {
   list.innerHTML = '';
   list.appendChild(el('div', 'modal-empty', 'טוען…'));
+  if (pick) pick.disabled = true;
   let d;
   try {
     const r = await fetch('/api/list-dirs?path=' + encodeURIComponent(p || ''));
@@ -3238,20 +5405,27 @@ async function loadDirs(p, cur, list) {
   } catch (e) {
     list.innerHTML = '';
     list.appendChild(el('div', 'modal-empty', 'לא ניתן לקרוא את התיקייה (' + (e.message || e) + ')'));
+    if (pick) pick.disabled = true;
     return;
   }
   dirPickAt = d.path;
   cur.textContent = d.path;
+  if (pick) pick.disabled = false;
   list.innerHTML = '';
+  cur.title = d.path || '';
   if (d.parent) {
-    const up = el('button', 'dp-row up', '‹‹  ' + d.parent);
-    up.onclick = () => loadDirs(d.parent, cur, list);
+    const parentName = String(d.parent).split('/').filter(Boolean).pop() || d.parent;
+    const up = el('button', 'dp-row up', '↑  ' + parentName);
+    up.title = d.parent;
+    up.setAttribute('aria-label', 'לתיקייה שמעל: ' + d.parent);
+    up.onclick = () => loadDirs(d.parent, cur, list, pick);
     list.appendChild(up);
   }
   if (!d.dirs.length) list.appendChild(el('div', 'modal-empty', 'אין תת־תיקיות'));
   for (const name of d.dirs) {
     const row = el('button', 'dp-row', name + '/');
-    row.onclick = () => loadDirs(d.path.replace(/\/$/, '') + '/' + name, cur, list);
+    row.title = name;
+    row.onclick = () => loadDirs(d.path.replace(/\/$/, '') + '/' + name, cur, list, pick);
     list.appendChild(row);
   }
 }
@@ -3259,12 +5433,55 @@ function checkCwd() {
   const v = $('cwd').value.trim(); const h = $('cwdHint');
   if (isNoDir(v)) { h.textContent = '✓ שיחה בלבד — הכלים כבויים, אין גישה לקבצים'; h.className = 'hint ok'; return; }
   if (!v) { h.textContent = ''; h.className = 'hint'; return; }
-  fetch('/api/check-dir?path=' + encodeURIComponent(v)).then(r => r.json()).then(d => { h.textContent = d.ok ? '✓ תיקייה קיימת' : '✗ לא נמצאה'; h.className = 'hint ' + (d.ok ? 'ok' : 'bad'); }).catch(() => {});
+  fetch('/api/check-dir?path=' + encodeURIComponent(v)).then(r => r.json()).then(d => { h.textContent = d.ok ? '✓ תיקייה קיימת' : '✗ לא נמצאה'; h.className = 'hint ' + (d.ok ? 'ok' : 'bad'); }).catch(() => { h.textContent = '✗ לא הצלחתי לבדוק את התיקייה'; h.className = 'hint bad'; });
 }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 function isDark() { const t = document.documentElement.getAttribute('data-theme'); if (t) return t === 'dark'; return matchMedia('(prefers-color-scheme: dark)').matches; }
-$('themeToggle').onclick = () => { const next = isDark() ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', next); store.settings.theme = next; save(); };
+
+/* ערכת הדגשת התחביר הולכת אחרי המתג של האפליקציה, לא אחרי מערכת ההפעלה.
+   שתי הערכות של highlight.js נטענות ב-index.html עם ‎media‎ של
+   ‎prefers-color-scheme‎, וזה נכון כל עוד אין באפליקציה מתג משלה — אבל יש.
+   טלפון שמערכת ההפעלה שלו בהירה ושהאפליקציה בו הוחלפה לכהה קיבל את הערכה
+   *הבהירה*: דיו כהה על ‎--code-bg‎ כהה, כלומר בלוק קוד שלא ניתן לקרוא בכלל.
+
+   ‎media="not all"‎ ולא ‎disabled‎: הוא מנטרל את הגיליון בלי לגרום לדפדפן
+   למשוך אותו מחדש בכל החלפה. */
+function syncHljsTheme() {
+  const dark = isDark();
+  const light = document.getElementById('hlLight');
+  const night = document.getElementById('hlDark');
+  if (light) light.media = dark ? 'not all' : 'all';
+  if (night) night.media = dark ? 'all' : 'not all';
+}
+
+function syncThemeChrome() {
+  const btn = $('themeToggle');
+  if (!btn) return;
+  const dark = isDark();
+  const label = dark ? 'מצב כהה · לחץ לבהיר' : 'מצב בהיר · לחץ לכהה';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.setAttribute('aria-pressed', dark ? 'true' : 'false');
+}
+$('themeToggle').onclick = () => {
+  const next = isDark() ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  store.settings.theme = next;
+  syncHljsTheme();
+  rethemeMermaid();
+  save();
+  syncThemeChrome();
+  toast(next === 'dark' ? 'מצב כהה' : 'מצב בהיר');
+};
+
+// בלי העדפה מפורשת הערכה עדיין הולכת אחרי מערכת ההפעלה, ולכן שינוי שם
+// חייב להגיע גם לערכת הקוד. ‎isDark‎ מכריע מי גובר, ולכן הקריאה בטוחה תמיד.
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  syncHljsTheme();
+  // בלי העדפת משתמש מפורשת — גם דיאגרמות mermaid עוקבות אחרי המערכת
+  if (!store.settings.theme) rethemeMermaid();
+});
 
 // ---------- קונפיג דינמי (נמשך מה-CLI) ----------
 let CONFIG = { models: [], permissionModes: [], cursorPermissionModes: [], cursorPrefix: 'cursor/' };
@@ -3278,7 +5495,15 @@ let CONFIG = { models: [], permissionModes: [], cursorPermissionModes: [], curso
    רשימת מצבי ההרשאה, ומזהי הסשן שאינם קבילים זה אצל זה.
    ========================================================================== */
 const isCursorModel = (id) => typeof id === 'string' && id.startsWith(CONFIG.cursorPrefix || 'cursor/');
+const isLocalModel = (id) => typeof id === 'string' && id.startsWith((CONFIG.local && CONFIG.local.prefix) || 'local/');
 const activeAgent = () => (isCursorModel($('model').value) ? 'cursor' : 'claude');
+/** מפתח הזיכרון למצב הרשאות — לכל ספק משלו, כדי ש-GOD של Claude לא יישב על מודל מקומי. */
+function permStoreKey(modelId) {
+  const id = modelId == null ? $('model').value : modelId;
+  if (isCursorModel(id)) return 'cursorPerm';
+  if (isLocalModel(id)) return 'localPerm';
+  return 'perm';
+}
 const AGENT_LABEL = { claude: 'Claude', cursor: 'Cursor' };
 /** מזהה הסשן להמשך — רק אם הוא נוצר בידי הסוכן שעומד לרוץ עכשיו. */
 function resumeIdFor(conv) {
@@ -3309,11 +5534,11 @@ const CURSOR_PERM_LABEL = { default: 'רשימת היתר בלבד', plan: 'פת
    --------------------------------------------------------------------------
    מצב של הממשק, לא של ה-CLI: השרת מריץ את ה-CLI במצב שבו הוא שואל על *כל*
    כלי, ועונה "אשר" בעצמו. בניגוד ל"ללא בקשות" — שם ה-CLI לא שואל בכלל, ולכן
-   אין מה לרשום — כאן כל בקשה עוברת דרך השרת ונרשמת, ובסוף התור נפתח כרטיס
-   עם הרשימה המלאה של מה שאושר. השאלה היחידה שעדיין מגיעה למסך היא
+   אין מה לרשום — כאן כל בקשה עוברת דרך השרת ונרשמת, ותוך כדי הריצה אפשר
+   לפתוח כפתור ולראות את הרשימה המלאה של מה שאושר. השאלה היחידה שעדיין מגיעה למסך היא
    AskUserQuestion: אין לה "אישור", יש לה תשובה, ורק המשתמש יכול לתת אותה.
    ========================================================================== */
-const GOD_HINT = 'כל בקשת הרשאה מאושרת אוטומטית · בסוף התור יוצג כפתור עם כל מה שרץ';
+const GOD_HINT = 'כל בקשת הרשאה מאושרת אוטומטית · תוך כדי הריצה יופיע כפתור לפתוח בדיוק מה שאושר';
 const CURSOR_PERM_HINT = {
   force: 'מריץ כל כלי בלי לשאול',
   autoReview: 'מסווג בשרת מריץ אוטומטית קריאות בטוחות; השאר נדחה (אין כרטיס אישור ב---print)',
@@ -3385,17 +5610,30 @@ function toggleFavoriteModel(id) {
  * מחזיר את הכפתור; אם הבורר כבר בעץ, הכפתור נשתל לפניו.
  * קריאה חוזרת רק מרעננת את התווית — כך אפשר לקרוא אחרי כל מילוי מחדש.
  */
+/** בטלפון: לחיצה על בורר לא משאירה את תיבת הכתיבה ממוקדת, אחרת iOS
+ *  פותח את המקלדת כאילו המשתמש רצה להקליד. */
+function blurComposerField() {
+  const input = $('input');
+  if (input && document.activeElement === input) input.blur();
+}
+
 function attachModelSearch(sel) {
   if (sel._mpSync) { sel._mpSync(); return sel._mpBtn; }
   const btn = el('button', 'pill mp-btn');
   btn.type = 'button';
-  btn.onclick = () => openModelPicker(sel);
+  btn.setAttribute('aria-haspopup', 'dialog');
+  btn.setAttribute('aria-controls', 'modelPicker');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.addEventListener('pointerdown', () => { if (isTouch()) blurComposerField(); });
+  btn.onclick = (e) => { e.stopPropagation(); openModelPicker(sel); };
   sel.classList.add('mp-native');
   sel._mpBtn = btn;
   sel._mpSync = () => {
     const o = sel.selectedOptions[0];
-    btn.textContent = o ? o.textContent : 'מודל ברירת מחדל';
-    btn.title = (modelName(sel.value) || btn.textContent) + ' — לחץ לחיפוש מודל';
+    const label = o ? o.textContent : 'מודל ברירת מחדל';
+    btn.innerHTML = brandMarkHtml(sel.value, 16) + `<span class="mp-btn-name">${escHtml(label)}</span>`;
+    btn.title = brandTitle(sel.value) + ' — לחץ לחיפוש מודל';
+    btn.setAttribute('aria-label', btn.title);
   };
   sel._mpSync();
   if (sel.parentElement) sel.parentElement.insertBefore(btn, sel);
@@ -3403,16 +5641,36 @@ function attachModelSearch(sel) {
 }
 
 function openModelPicker(sel) {
+  if (!$('palette').classList.contains('hidden')) closePalette();
   mpState = { sel, cur: sel.value, items: [], idx: 0 };
-  $('modelPicker').classList.remove('hidden');
+  refreshModelList();
   const inp = $('modelPickerInput');
   inp.value = '';
+  inp.placeholder = isTouch()
+    ? 'חיפוש מודל…'
+    : 'חיפוש מודל…  ·  gemini, opus, חינם';
+  // בטלפון מקלדת שקופצת בולעת חצי מסך. השדה נשאר readonly עד נגיעה מכוונת
+  // בו — אחרת הלחיצה שפתחה את הרשימה נוחתת על השדה ופותחת מקלדת.
+  if (isTouch()) {
+    blurComposerField();
+    inp.readOnly = true;
+  } else inp.readOnly = false;
+  $('modelPicker').classList.remove('hidden');
+  if (sel && sel._mpBtn) sel._mpBtn.setAttribute('aria-expanded', 'true');
   buildModelPicker('');
-  // בטלפון מקלדת שקופצת בולעת חצי מסך; שם עדיף להתחיל ברשימה גלויה, וההקלדה
-  // זמינה בנגיעה אחת בשדה.
-  if (!isTouch()) inp.focus();
+  if (isTouch()) queueMicrotask(() => { if (document.activeElement === inp) inp.blur(); });
+  else inp.focus();
 }
-function closeModelPicker() { $('modelPicker').classList.add('hidden'); mpState = null; }
+function closeModelPicker() {
+  const sel = mpState && mpState.sel;
+  const btn = sel && sel._mpBtn;
+  $('modelPicker').classList.add('hidden');
+  if (btn) {
+    btn.setAttribute('aria-expanded', 'false');
+    try { btn.focus(); } catch {}
+  }
+  mpState = null;
+}
 
 /** תוצאות החיפוש: כל מילה חייבת להימצא בשם, במזהה או בקטגוריה.
  *  מועדפים עולים לקבוצה «מועדפים» בראש הרשימה (לפי סדר הסימון), בלי כפילות
@@ -3476,8 +5734,14 @@ function renderModelPicker() {
         if (isFav) host.appendChild(el('div', 'mp-favs-row'));
       }
     }
-    const row = el('div', 'pl-item mp-item' + (isFav ? ' mp-fav-chip' : '') + (i === st.idx ? ' sel' : ''));
-    row.appendChild(el('span', 'pl-ic', it.value === st.cur ? '✓' : '›'));
+    const row = el('div', 'pl-item mp-item' + (isFav ? ' mp-fav-chip' : '')
+      + (i === st.idx ? ' sel' : '') + (it.value === st.cur ? ' mp-cur' : ''));
+    // הסימן תופס את מקומו של החץ: באותו רוחב, ועם מידע שהחץ לא נשא. המודל
+    // הנבחר מסומן בפס האקצנט של ‎.mp-cur‎ ולא ב-✓, כדי לא להחליף את הסימן
+    // בדיוק בשורה שבה חשוב לראות אותו.
+    const ic = el('span', 'pl-ic');
+    ic.appendChild(brandMarkEl(it.value, 17));
+    row.appendChild(ic);
     row.appendChild(el('span', 'mp-name', it.label));
     // המזהה מוצג רק כשהוא מוסיף מידע: אצל רוב השערים שם המודל *הוא* המזהה,
     // ושורה שכתוב בה אותו דבר פעמיים רק מקשה על הסריקה.
@@ -3492,11 +5756,21 @@ function renderModelPicker() {
       fav.setAttribute('aria-label', fav.title);
       fav.setAttribute('aria-pressed', on ? 'true' : 'false');
       fav.textContent = on ? '★' : '☆';
-      fav.onmousedown = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+      const doFav = () => {
         toggleFavoriteModel(it.value);
         buildModelPicker($('modelPickerInput').value);
+      };
+      fav.onmousedown = (e) => {
+        // מונע blur של שדה החיפוש לפני ה-click; העכבר מטפל כאן
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.button === 0) doFav();
+      };
+      fav.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // Enter/Space מהמקלדת — detail=0; עכבר כבר טופל ב-mousedown
+        if (e.detail === 0) doFav();
       };
       row.appendChild(fav);
     }
@@ -3509,7 +5783,9 @@ function renderModelPicker() {
     }
   });
   if (cols.childNodes.length) list.appendChild(cols);
-  $('modelPickerFoot').textContent = st.items.length + ' מודלים · ★ מועדף · ↑↓ לניווט · Enter לבחירה';
+  $('modelPickerFoot').textContent = isTouch()
+    ? st.items.length + ' מודלים · ★ מועדף'
+    : st.items.length + ' מודלים · ★ מועדף · ↑↓ לניווט · Enter לבחירה · F למועדף';
   const sel = list.querySelector('.pl-item.sel');
   if (sel) sel.scrollIntoView({ block: 'nearest' });
 }
@@ -3526,6 +5802,7 @@ function pickModel(i) {
   }
   if (st.sel._mpSync) st.sel._mpSync();
 }
+$('modelPickerInput').addEventListener('pointerdown', () => { $('modelPickerInput').readOnly = false; });
 $('modelPickerInput').addEventListener('input', (e) => buildModelPicker(e.target.value));
 $('modelPickerInput').addEventListener('keydown', (e) => {
   if (!mpState) return;
@@ -3535,28 +5812,223 @@ $('modelPickerInput').addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown') { e.preventDefault(); mpState.idx = (mpState.idx + 1) % n; renderModelPicker(); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); mpState.idx = (mpState.idx - 1 + n) % n; renderModelPicker(); }
   else if (e.key === 'Enter') { e.preventDefault(); pickModel(); }
+  else if (e.key === 'f' || e.key === 'F' || e.key === '*') {
+    e.preventDefault();
+    const it = mpState.items[mpState.idx];
+    if (it && it.value) { toggleFavoriteModel(it.value); buildModelPicker($('modelPickerInput').value); }
+  }
 });
 $('modelPicker').addEventListener('click', (e) => { if (e.target === $('modelPicker')) closeModelPicker(); });
 
-async function loadConfig() {
-  try { const r = await fetch('/api/config'); if (r.ok) CONFIG = await r.json(); } catch {}
-  // הכפתור נדלק רק כשה-CLI שמותקן כאן באמת יודע לרוץ בלי לשמור סשן
+/* ---------- כפתור המודל בסרגל: פותח את שלושת הבוררים מעליו ---------- */
+function isModelDockOpen() {
+  const dock = $('modelDock');
+  return !!(dock && dock.classList.contains('open'));
+}
+function syncModelDock() {
+  const btn = $('modelDockBtn');
+  const sel = $('model');
+  if (!btn || !sel) return;
+  const o = sel.selectedOptions[0];
+  const label = o ? o.textContent : 'מודל ברירת מחדל';
+  btn.innerHTML = brandMarkHtml(sel.value, 16) + `<span class="mp-btn-name">${escHtml(label)}</span>`;
+  const permSel = $('perm');
+  const effortSel = $('effort');
+  const permTxt = permSel && permSel.selectedOptions[0] ? permSel.selectedOptions[0].textContent : '';
+  const effortOn = effortSel && effortSel.parentElement && effortSel.parentElement.style.display !== 'none' && effortSel.value;
+  const effortTxt = effortOn && effortSel.selectedOptions[0] ? effortSel.selectedOptions[0].textContent : '';
+  const tempSel = $('localTemp');
+  const tempOn = tempSel && tempSel.parentElement && !tempSel.parentElement.classList.contains('hidden') && tempSel.value !== '';
+  const tempTxt = tempOn && tempSel.selectedOptions[0] ? tempSel.selectedOptions[0].textContent : '';
+  const parts = [label, permTxt, effortTxt, tempTxt].filter(Boolean);
+  btn.title = (parts.join(' · ') || 'מודל והגדרות') + ' — לחץ להגדרות מודל';
+  btn.setAttribute('aria-label', btn.title);
+  if (typeof placeModelPop === 'function' && isModelDockOpen()) placeModelPop();
+}
+/* נקרא אחרי ש־trackVisualViewport נרשם. סגירת התפריט משחררת נעילת
+   compact אם המקלדת כבר נסגרה באמצע. */
+let reflowComposerViewport = () => {};
+
+const PHONE_LAYOUT_MQ = '(max-width: 760px), (max-height: 500px) and (pointer: coarse)';
+
+/** מחזיר את חלונית המודל לתוך הכפתור ומנקה מיקום שחושב למסך צר. */
+function restoreModelPop() {
+  const pop = $('modelDockPop');
+  if (!pop) return;
+  pop.classList.remove('docked-fixed');
+  pop.style.removeProperty('--pop-left');
+  pop.style.removeProperty('--pop-bottom');
+  pop.style.removeProperty('--pop-w');
+  pop.style.removeProperty('--pop-max-h');
+  if (pop._home && pop.parentElement !== pop._home) pop._home.appendChild(pop);
+}
+
+/** במסך צר החלונית ננעלת לרוחב הכרטיס ולחלון החזותי.
+ *  absolute בתוך הכפתור גולש מהמסך (min-width של 228px על כפתור צר),
+ *  ו-100vw מזיז את כל הדף. fixed על ה-body לא נלכד ב-transform של FLIP. */
+function placeModelPop() {
+  const pop = $('modelDockPop');
+  const card = document.querySelector('.composer-card');
+  if (!pop || !card) return;
+  if (!matchMedia(PHONE_LAYOUT_MQ).matches || !isModelDockOpen()) {
+    restoreModelPop();
+    return;
+  }
+  if (!pop._home) pop._home = pop.parentElement;
+  if (pop.parentElement !== document.body) document.body.appendChild(pop);
+  const r = card.getBoundingClientRect();
+  const vv = window.visualViewport;
+  const offY = vv ? vv.offsetTop : 0;
+  const offX = vv ? vv.offsetLeft : 0;
+  const viewW = vv ? vv.width : window.innerWidth;
+  const layoutH = window.innerHeight;
+  const left = Math.max(8, Math.round(r.left + offX));
+  const width = Math.max(120, Math.round(Math.min(r.width, viewW - 16)));
+  const clampedLeft = Math.min(left, Math.max(8, Math.round(viewW - width - 8)));
+  const bottom = Math.max(8, Math.round(layoutH - (r.top + offY) + 8));
+  const room = Math.round(r.top - 8);
+  const maxH = Math.min(380, Math.max(80, room));
+  pop.style.setProperty('--pop-left', clampedLeft + 'px');
+  pop.style.setProperty('--pop-bottom', bottom + 'px');
+  pop.style.setProperty('--pop-w', width + 'px');
+  pop.style.setProperty('--pop-max-h', maxH + 'px');
+  pop.classList.add('docked-fixed');
+}
+
+function openModelDock() {
+  if (!isNarrow()) return;
+  const dock = $('modelDock');
+  const pop = $('modelDockPop');
+  const btn = $('modelDockBtn');
+  if (!dock || !pop || !btn) return;
+  if (typeof closeAc === 'function') closeAc();
+  dock.classList.add('open');
+  blurComposerField();
+  placeModelPop();
+  pop.classList.remove('hidden');
+  btn.setAttribute('aria-expanded', 'true');
+  modelDockOpenedAt = Date.now();
+}
+function closeModelDock(opts) {
+  const dock = $('modelDock');
+  if (!dock || !dock.classList.contains('open')) return;
+  dock.classList.remove('open');
+  const pop = $('modelDockPop');
+  if (pop) pop.classList.add('hidden');
+  restoreModelPop();
+  const btn = $('modelDockBtn');
+  const input = $('input');
+  const keepInput = input && document.activeElement === input;
+  if (btn) {
+    btn.setAttribute('aria-expanded', 'false');
+    if (!keepInput && (!opts || opts.restoreFocus !== false)) {
+      try { btn.focus(); } catch {}
+    }
+  }
+  reflowComposerViewport();
+}
+function toggleModelDock() {
+  if (isModelDockOpen()) closeModelDock();
+  else openModelDock();
+}
+let modelDockOpenedAt = 0;
+const modelDockBtn = $('modelDockBtn');
+if (modelDockBtn) {
+  modelDockBtn.addEventListener('pointerdown', () => { if (isNarrow()) blurComposerField(); });
+  modelDockBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    blurComposerField();
+    toggleModelDock();
+  });
+}
+document.addEventListener('click', (e) => {
+  if (!isModelDockOpen()) return;
+  if (Date.now() - modelDockOpenedAt < 300) return;
+  const dock = $('modelDock');
+  const pop = $('modelDockPop');
+  if (dock && dock.contains(e.target)) return;
+  if (pop && pop.contains(e.target)) return;
+  if (e.target && e.target.closest && e.target.closest('#modelPicker')) return;
+  const ae = document.activeElement;
+  if (ae && dock && dock.contains(ae) && (ae.tagName === 'SELECT' || ae.classList.contains('mp-btn'))) return;
+  closeModelDock({ restoreFocus: false });
+});
+$('input').addEventListener('focus', () => closeModelDock({ restoreFocus: false }));
+
+let modelListSig = '';
+function modelListSignature(models) {
+  return (models || []).map((m) => m.id).join('\n');
+}
+/** הרשימה בשרת משתנה ברקע (בריאות, ספק שעלה). בלי הרענון הזה הבורר נשאר על מה שנטען בעלייה. */
+async function refreshModelList() {
+  try {
+    const r = await fetch('/api/config');
+    if (!r.ok) return;
+    const next = await r.json();
+    const sig = modelListSignature(next.models);
+    if (sig === modelListSig) return;
+    modelListSig = sig;
+    applyConfig(next);
+  } catch { /* הרשת המקומית מהבהבת — הרשימה הקודמת נשארת */ }
+}
+function applyConfig(cfg) {
+  if (!cfg || typeof cfg !== 'object') return;
+  CONFIG = {
+    ...CONFIG,
+    models: Array.isArray(cfg.models) ? cfg.models : (CONFIG.models || []),
+    permissionModes: Array.isArray(cfg.permissionModes) ? cfg.permissionModes : (CONFIG.permissionModes || []),
+    cursorPermissionModes: Array.isArray(cfg.cursorPermissionModes) ? cfg.cursorPermissionModes : (CONFIG.cursorPermissionModes || []),
+    cursorPermissionDefault: cfg.cursorPermissionDefault || CONFIG.cursorPermissionDefault || 'force',
+    cursorPrefix: cfg.cursorPrefix || CONFIG.cursorPrefix || 'cursor/',
+    local: cfg.local || CONFIG.local,
+    anonymous: cfg.anonymous !== undefined ? cfg.anonymous : CONFIG.anonymous,
+  };
   anonAvailable = !!(CONFIG && CONFIG.anonymous);
   const nav = $('newAnon');
   if (nav) {
     nav.classList.toggle('disabled', !anonAvailable);
+    nav.setAttribute('aria-disabled', anonAvailable ? 'false' : 'true');
     nav.title = anonAvailable
       ? 'שיחה שלא נשמרת בשום מקום — נמחקת ביציאה'
       : 'לא זמין: ה-CLI המותקן לא מכיר --no-session-persistence';
   }
-  populateModels(); populatePerms(); updateEfforts(); updateStatusbar();
+  adoptLocalExtrasFromConfig();
+  modelListSig = modelListSignature(CONFIG.models);
+  populateModels();
+  populatePerms();
+  updateEfforts();
+  updateStatusbar();
+  renderLocalRow();
+  if (mpState) buildModelPicker($('modelPickerInput') ? $('modelPickerInput').value : '');
+}
+
+async function loadConfig() {
+  try {
+    const r = await fetch('/api/config');
+    if (r.ok) applyConfig(await r.json());
+    else toast('טעינת הגדרות השרת נכשלה', true);
+  } catch { toast('טעינת הגדרות השרת נכשלה', true); }
+  if (!loadConfig._watch) {
+    loadConfig._watch = setInterval(() => { refreshModelList(); }, 12000);
+  }
+}
+
+function onRemoteConfig(m) {
+  applyConfig(m);
 }
 function populateModels() {
-  const sel = $('model'); const cur = store.settings.model || '';
+  const sel = $('model'); const cur = sel.value || (store.settings && store.settings.model) || '';
   sel.innerHTML = ''; sel.appendChild(opt('', 'מודל ברירת מחדל'));
   fillModelOptions(sel);
   keepValue(sel, cur, '');
+  // מודל שכבר נבחר ויצא מהרשימה הבריאה נשאר מסומן — לא מחליפים שיחה פעילה
+  // בשקט — אבל הוא לא חוזר לרשימה לבחירה מחדש.
+  if (cur && sel.value !== cur) {
+    sel.appendChild(opt(cur, leafId(cur) || cur));
+    sel.value = cur;
+  }
   attachModelSearch(sel);   // גם משתיל את כפתור החיפוש וגם מרענן את התווית
+  syncModelDock();
 }
 function modelEfforts() {
   const m = CONFIG.models.find(x => x.id === $('model').value);
@@ -3572,6 +6044,7 @@ function updateEfforts() {
   if (sel.parentElement) sel.parentElement.style.display = has ? '' : 'none';
   keepValue(sel, cur, '');
   if (!has) sel.value = '';
+  updateLocalDock();
 }
 /**
  * מצבי ההרשאה משתנים עם הסוכן, ולכן הבורר נבנה מחדש בכל החלפת מודל. הבחירה
@@ -3579,23 +6052,47 @@ function updateEfforts() {
  * סיבוב ב-Cursor מוצא את מה שהשאיר, ולא ערך שנפל לברירת מחדל בדרך.
  */
 const withGodMode = (modes) => (modes.includes('god') ? modes : [...modes, 'god']);
+function permModesForAgent() {
+  const cursorMode = activeAgent() === 'cursor';
+  if (cursorMode) {
+    return (CONFIG.cursorPermissionModes || []).length ? CONFIG.cursorPermissionModes : ['force', 'default', 'plan', 'ask'];
+  }
+  return withGodMode((CONFIG.permissionModes || []).length
+    ? CONFIG.permissionModes
+    : ['acceptEdits', 'auto', 'bypassPermissions', 'manual', 'dontAsk', 'plan']);
+}
+/** ערך שנשלח לשרת — לעולם לא מצב של הסוכן השני, גם אם הבורר עוד לא נבנה מחדש. */
+function permValue() {
+  const modes = permModesForAgent();
+  const v = $('perm').value;
+  if (modes.includes(v)) return v;
+  const fallback = activeAgent() === 'cursor'
+    ? (CONFIG.cursorPermissionDefault || 'force')
+    : (modes.includes('acceptEdits') ? 'acceptEdits' : modes[0]);
+  dlog('perm.clamp', { from: v, to: fallback, agent: activeAgent() });
+  return fallback;
+}
 /** הבורר עצמו נצבע כשהמצב הנבחר הוא GOD — אי אפשר להיות בו בלי לראות את זה. */
 function markGodPill() {
   const sel = $('perm');
-  if (sel) sel.classList.toggle('god-on', sel.value === 'god');
+  if (!sel) return;
+  const god = sel.value === 'god';
+  sel.classList.toggle('god-on', god);
+  const dockBtn = $('modelDockBtn');
+  if (dockBtn) dockBtn.classList.toggle('god-on', god);
+  // title על ה־<select> עצמו (לא רק על ה־<option>): בטלפון אין hover על אפשרות
+  // ברשימה לפני הבחירה, ואחריה חייבים הסבר גלוי בלי לפתוח את התפריט שוב.
+  sel.title = god ? GOD_HINT
+    : (activeAgent() === 'cursor' ? 'מצב הרשאות · cursor-agent' : 'מצב הרשאות · Claude Code');
 }
 function populatePerms() {
   const sel = $('perm');
   const cursorMode = activeAgent() === 'cursor';
-  const modes = cursorMode
-    ? ((CONFIG.cursorPermissionModes || []).length ? CONFIG.cursorPermissionModes : ['force', 'default', 'plan', 'ask'])
-    // GOD הוא מצב של הממשק ולא של ה-CLI, ולכן הוא מובטח כאן גם מול שרת
-    // שהרשימה שלו הגיעה מ---help בלבד.
-    : withGodMode((CONFIG.permissionModes || []).length ? CONFIG.permissionModes : ['acceptEdits', 'plan', 'bypassPermissions']);
+  const modes = permModesForAgent();
   const fallback = cursorMode
     ? (CONFIG.cursorPermissionDefault || 'force')
     : (modes.includes('acceptEdits') ? 'acceptEdits' : modes[0]);
-  const remembered = cursorMode ? store.settings.cursorPerm : store.settings.perm;
+  const remembered = store.settings[permStoreKey()];
   sel.innerHTML = '';
   for (const md of modes) {
     const o = opt(md, (cursorMode && CURSOR_PERM_LABEL[md]) || PERM_LABEL[md] || md);
@@ -3604,8 +6101,133 @@ function populatePerms() {
     sel.appendChild(o);
   }
   keepValue(sel, remembered, fallback);
-  sel.title = cursorMode ? 'מצב הרשאות · cursor-agent' : 'מצב הרשאות · Claude Code';
   markGodPill();
+}
+
+/* ---------- הגדרות ייחודיות לספק המקומי ----------
+   Claude חושף מאמץ, Cursor חושף מצבי הרשאה משלו. הספק המקומי חושף
+   טמפרטורה, תקרת תשובה, כתובת שרת וזמן המתנה — וכולם נשמרים אצלו בלבד. */
+const LOCAL_TEMP_OPTS = [
+  ['', 'טמפ׳ · ברירת שרת'],
+  ['0', 'טמפ׳ 0 · מדויק'],
+  ['0.3', 'טמפ׳ 0.3 · ממוקד'],
+  ['0.7', 'טמפ׳ 0.7 · מאוזן'],
+  ['1', 'טמפ׳ 1 · יצירתי'],
+];
+const LOCAL_MAX_OPTS = [
+  ['', 'אורך · ברירת שרת'],
+  ['1024', 'עד 1,024 טוקנים'],
+  ['2048', 'עד 2,048 טוקנים'],
+  ['4096', 'עד 4,096 טוקנים'],
+  ['8192', 'עד 8,192 טוקנים'],
+];
+const LOCAL_TIMEOUT_OPTS = [
+  ['', '10 דק׳ המתנה'],
+  ['1200000', '20 דק׳ המתנה'],
+  ['2400000', '40 דק׳ המתנה'],
+  ['3600000', 'שעה המתנה'],
+];
+function localSettings() {
+  if (!store.settings) store.settings = {};
+  if (!store.settings.local || typeof store.settings.local !== 'object') store.settings.local = {};
+  return store.settings.local;
+}
+function fillChoiceSelect(sel, opts, cur) {
+  if (!sel) return;
+  sel.innerHTML = '';
+  for (const [v, lab] of opts) sel.appendChild(opt(v, lab));
+  const want = cur == null || cur === '' ? '' : String(cur);
+  keepValue(sel, want, '');
+}
+function localExtrasPayload() {
+  const s = localSettings();
+  const out = {};
+  if (typeof s.temperature === 'number') out.temperature = s.temperature;
+  if (typeof s.maxTokens === 'number' && s.maxTokens > 0) out.maxTokens = s.maxTokens;
+  if (typeof s.timeoutMs === 'number' && s.timeoutMs > 0) out.timeoutMs = s.timeoutMs;
+  return Object.keys(out).length ? out : undefined;
+}
+function turnPayloadExtras() {
+  if (!isLocalModel($('model').value)) return {};
+  const p = localExtrasPayload();
+  return p ? { local: p } : {};
+}
+function readLocalDockIntoStore() {
+  const loc = localSettings();
+  const t = $('localTemp') && $('localTemp').value;
+  const m = $('localMaxTokens') && $('localMaxTokens').value;
+  loc.temperature = t === '' || t == null ? undefined : Number(t);
+  loc.maxTokens = m === '' || m == null ? undefined : Number(m);
+  if (!Number.isFinite(loc.temperature)) delete loc.temperature;
+  if (!Number.isFinite(loc.maxTokens) || loc.maxTokens < 1) delete loc.maxTokens;
+}
+function fillLocalDockFromStore() {
+  const loc = localSettings();
+  fillChoiceSelect($('localTemp'), LOCAL_TEMP_OPTS, loc.temperature);
+  fillChoiceSelect($('localMaxTokens'), LOCAL_MAX_OPTS, loc.maxTokens);
+}
+function updateLocalDock() {
+  const on = isLocalModel($('model').value);
+  const tw = $('localTempWrap');
+  const mw = $('localMaxWrap');
+  if (tw) tw.classList.toggle('hidden', !on);
+  if (mw) mw.classList.toggle('hidden', !on);
+  if (on) fillLocalDockFromStore();
+  syncModelDock();
+}
+let localPutTimer = null;
+function pushLocalConfig() {
+  clearTimeout(localPutTimer);
+  localPutTimer = setTimeout(async () => {
+    if (!CONFIG.local || !CONFIG.local.enabled) return;
+    const loc = localSettings();
+    try {
+      const r = await fetch('/api/local', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          temperature: loc.temperature != null ? loc.temperature : null,
+          maxTokens: loc.maxTokens != null ? loc.maxTokens : null,
+          timeoutMs: loc.timeoutMs != null ? loc.timeoutMs : null,
+        }),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        CONFIG.local = { ...CONFIG.local, ...j, enabled: true };
+      }
+    } catch { /* שמירה מקומית כבר נעשתה; השרת יתיישר בתור הבא */ }
+  }, 280);
+}
+function renderLocalRow() {
+  const row = $('localRow');
+  if (!row) return;
+  const loc = CONFIG.local;
+  const on = !!(loc && loc.enabled);
+  row.classList.toggle('hidden', !on);
+  if (!on) return;
+  const url = $('localUrl');
+  if (url && document.activeElement !== url) url.value = loc.baseUrl || '';
+  const to = (localSettings().timeoutMs != null ? localSettings().timeoutMs : (loc.extras && loc.extras.timeoutMs));
+  fillChoiceSelect($('localTimeoutSet'), LOCAL_TIMEOUT_OPTS, to);
+  const hint = $('localHint');
+  if (hint) {
+    hint.classList.remove('ok', 'bad');
+    if (loc.online) {
+      hint.classList.add('ok');
+      hint.textContent = loc.models === 1 ? 'מחובר · מודל אחד' : 'מחובר · ' + (loc.models || 0) + ' מודלים';
+    } else {
+      hint.classList.add('bad');
+      hint.textContent = loc.lastFail || 'לא מחובר — «בדוק עכשיו» שולח בקשה בלי לחכות לרבע שעה';
+    }
+  }
+}
+function adoptLocalExtrasFromConfig() {
+  const e = CONFIG.local && CONFIG.local.enabled && CONFIG.local.extras;
+  if (!e) return;
+  const loc = localSettings();
+  if (loc.temperature == null && e.temperature != null) loc.temperature = e.temperature;
+  if (loc.maxTokens == null && e.maxTokens != null) loc.maxTokens = e.maxTokens;
+  if (loc.timeoutMs == null && e.timeoutMs != null) loc.timeoutMs = e.timeoutMs;
 }
 
 // ---------- טיוטות ותיקיית עבודה לכל שיחה ----------
@@ -3629,6 +6251,23 @@ function restoreDraft() {
 }
 const stashDraftSoon = debounce(stashDraft, 500);
 
+/**
+ * ניקוי התיבה אחרי שליחה — כולל ביטול הטיוטה במכשיר השני.
+ *
+ * ‎stashDraft‎ לא מספיק כאן משתי סיבות: השמה ל-‎value‎ אינה מייצרת אירוע
+ * ‎input‎, ובמסלול שכבר אפס את ‎conv.draft‎ הוא יוצא מוקדם כי אין מה לשמור.
+ * בלי השידור המפורש, המכשיר השני נשאר עם הטקסט *שכבר נשלח* בתיבת הכתיבה
+ * שלו — ומאחר שטיוטה מרחוק נכנסת רק לשדה ריק, היא גם לא תנוקה משם לבד.
+ */
+function clearComposer() {
+  const i = $('input');
+  if (i.value) { i.value = ''; autoGrow(); }
+  const c = activeConv();
+  if (c && c.draft) { c.draft = ''; markDirty(c); }
+  sendUi('draft', '');
+  if (typeof closeModelDock === 'function') closeModelDock({ restoreFocus: false });
+}
+
 /** תיקיית העבודה נזכרת לכל שיחה בנפרד — לא מריצים פקודות בפרויקט הלא נכון. */
 function syncConvCwd() {
   const c = activeConv();
@@ -3645,6 +6284,7 @@ function updateCwdChip() {
     $('cwdChipText').textContent = isNarrow() ? 'שיחה' : 'ללא תיקייה';
     chip.title = 'שיחה ללא תיקייה — בלי כלים ובלי גישה לקבצים · לחץ לשינוי';
     chip.classList.remove('icon-only');
+    chip.setAttribute('aria-label', chip.title);
     return;
   }
   const short = v ? v.replace(/^\/home\/[^/]+/, '~') : '~';
@@ -3658,17 +6298,17 @@ function updateCwdChip() {
   const label = $('cwdChipText');
   label.textContent = text;
   chip.title = 'תיקיית העבודה של השיחה: ' + (v || '~') + ' · לחץ לשינוי';
-  // הצ׳יפ מתחרה על הרוחב עם כותרת השיחה, ובמסך צר הוא יכול לקבל פחות מרוחב
-  // של אות. "o" חתוך מתוך "overflow" הוא לא פחות מידע מאייקון — הוא פחות
-  // *ו*נראה שבור. לכן מודדים אחרי הכתיבה, וכשלא נשאר מספיק מוותרים על
-  // הכיתוב לגמרי: אייקון תיקייה שהוא יעד מגע שלם, והנתיב ב-title ובהגדרות.
+  // הצ׳יפ הוא מה שמזהה את הפרויקט בסרגל. בלי כותרת השיחה לידו הוא מקבל יותר
+  // רוחב, אבל בנתיב עמוק עדיין יכול לרדת מתחת לרוחב של שם קריא — ואז אייקון
+  // תיקייה כיעד מגע שלם עדיף על "o" חתוך. הנתיב המלא נשאר ב-title ובהגדרות.
   chip.classList.remove('icon-only');
   const visible = label.clientWidth, needed = label.scrollWidth;
   if (needed > 0 && visible < Math.min(needed, 34)) chip.classList.add('icon-only');
+  chip.setAttribute('aria-label', chip.title || 'תיקיית העבודה');
 }
 // גם המפרידים בשורת המצב תלויים ברוחב: מעבר מעל/מתחת ל-760px מסתיר או מחזיר
 // פריטים ב-media query, ובלי חישוב מחדש נשאר "·" יתום עד העדכון הבא.
-addEventListener('resize', () => { updateCwdChip(); markStatusSeparators(); });
+addEventListener('resize', () => { updateCwdChip(); markStatusSeparators(); if (typeof placeModelPop === 'function') placeModelPop(); });
 
 /* ---------- הסרגל העליון לפי הרוחב שלו, לא של החלון ----------
    בדסקטופ סרגל השיחות הוא עמודה בגריד, ולכן ‎max-width‎ על החלון לא יודע כמה
@@ -3690,32 +6330,6 @@ addEventListener('resize', () => { updateCwdChip(); markStatusSeparators(); });
   apply();
 })();
 
-/* ---------- רצועת הבוררים: רמז גלילה ----------
-   כשהרצועה צרה מתוכנה, בורר נחתך באמצע מילה — וזה נראה כמו פריסה שבורה ולא
-   כמו "יש עוד, גלול". הדהוי בקצה הוא ההבדל. הצד שממנו נשאר תוכן נקבע לפי
-   המיקום בפועל של הילדים ולא לפי scrollLeft, כי הסימן שלו ב-RTL שונה
-   בין דפדפנים. */
-(function pillRowScrollHint() {
-  const row = document.querySelector('.pill-row');
-  if (!row) return;
-  const apply = () => {
-    const box = row.getBoundingClientRect();
-    let left = Infinity, right = -Infinity;
-    for (const kid of row.children) {
-      const r = kid.getBoundingClientRect();
-      if (r.left < left) left = r.left;
-      if (r.right > right) right = r.right;
-    }
-    if (!isFinite(left)) return;
-    row.classList.toggle('ovf-left', box.left - left > 1);
-    row.classList.toggle('ovf-right', right - box.right > 1);
-  };
-  row.addEventListener('scroll', apply, { passive: true });
-  new ResizeObserver(apply).observe(row);
-  addEventListener('resize', apply);
-  apply();
-})();
-
 // ---------- אתחול ----------
 async function init() {
   // כותרת חלון קבועה — KWin משייך לפיה את החלון לאייקון rtl-claude (לא Brave)
@@ -3734,8 +6348,11 @@ async function init() {
 
   // כל מה שתלוי בהגדרות חייב לרוץ רק אחרי שהן הגיעו מהשרת
   if (store.settings.theme) document.documentElement.setAttribute('data-theme', store.settings.theme);
+  syncHljsTheme();   // אחרי החלת הערכה השמורה, ולא לפניה
+  syncThemeChrome();
   initSideResize();
   applyWide();
+  dictPaint();        // חושף את המיקרופון ומציג את השפה שנשמרה בהגדרות
   renderNotifyChip(); // תלוי ב-settings.notify, לכן רק אחרי שההגדרות הגיעו
   if (!activeId) newConv();
   const cur = activeConv();
@@ -3748,8 +6365,78 @@ async function init() {
   loadConfig();
   refreshUsage(); setInterval(refreshUsage, 30000); // ניצול מכסה — רענון חי כל 30 שנ׳
   if (storeReady) { setSaveState('saved'); scheduleFlush(); } else setSaveState('error');
+  takeSharedInput();
+  runLaunchShortcut();
+}
+
+/* לחיצה ארוכה על האייקון במסך הבית פותחת את הקיצורים שבמניפסט, וכל אחד מהם
+   הוא בסך הכול כתובת. הפעולה נעשית *אחרי* ‎init‎ בכוונה: "שיחה חדשה" לפני
+   שההגדרות והשיחות הגיעו מהשרת הייתה נמחקת ברגע שהן מגיעות. */
+function runLaunchShortcut() {
+  const go = new URLSearchParams(location.search).get('go');
+  if (!go) return;
+  history.replaceState(null, '', location.pathname);
+  // אותו מסלול כמו הכפתורים — כולל אישור לפני עצירת תור ו־leaveAnon
+  if (go === 'new') startNewChat();
+  else if (go === 'duet') $('newDuet').click();
 }
 init();
+
+/* ==========================================================================
+   שיתוף מאפליקציה אחרת בטלפון
+   --------------------------------------------------------------------------
+   ‎share_target‎ שבמניפסט מוסיף את האפליקציה לתפריט השיתוף של המערכת. ה-POST
+   נקלט ב-Service Worker (ראו takeShare שם), מה שהתקבל מחכה ב-Cache Storage,
+   והדף נפתח עם ‎?share=1‎. כאן אוספים אותו: הטקסט נכנס לשדה הכתיבה, והתמונות
+   נכנסות כצירופים באותו מסלול בדיוק שמשרת הדבקה וגרירה — כלומר הן נשלחות
+   למודל כ-base64 ולא כקובץ, וכל מה שנאמר על צירופים תקף גם כאן.
+   מה שנאסף נמחק מיד: התיבה הזו היא מעבר, לא אחסון.
+   ========================================================================== */
+async function takeSharedInput() {
+  if (new URLSearchParams(location.search).get('share') !== '1') return;
+  // הכתובת מתנקה מיד, כדי שרענון לא ינסה לאסוף שיתוף שכבר נאסף
+  history.replaceState(null, '', location.pathname);
+  if (!('caches' in window)) return;
+  try {
+    const cache = await caches.open('rtl-claude-share');
+    const keys = await cache.keys();
+    if (!keys.length) {
+      toast('השיתוף לא הגיע — נסו שוב מהאפליקציה האחרת', true);
+      return;
+    }
+    let text = '';
+    const files = [];
+    for (const k of keys) {
+      const res = await cache.match(k);
+      if (!res) continue;
+      if (new URL(k.url).pathname === '/__share/text') { text = await res.text(); continue; }
+      const blob = await res.blob();
+      const name = decodeURIComponent(res.headers.get('X-Share-Name') || 'שיתוף.png');
+      files.push(new File([blob], name, { type: blob.type || 'image/png' }));
+    }
+    for (const k of keys) await cache.delete(k);
+
+    if (text) {
+      const input = $('input');
+      // לא דורסים טיוטה שכבר הייתה שם — השיתוף מצטרף לסופה
+      input.value = input.value ? input.value.replace(/\s*$/, '') + '\n' + text : text;
+      autoGrow(); stashDraft();
+    }
+    let attached = 0, skipped = 0;
+    for (const f of files) {
+      if (await addAttachment(f, true, true)) attached++;
+      else skipped++;
+    }
+    $('input').focus();
+    dlog('share.in', { chars: text.length, files: files.length, attached, skipped });
+    if (attached) toast(attached === 1 ? 'תמונה צורפה מהשיתוף' : attached + ' תמונות צורפו מהשיתוף');
+    else if (skipped) toast('ניתן לצרף תמונות בלבד — הקובץ ששותף לא נתמך', true);
+    else if (!text) toast('השיתוף לא כלל תמונה או טקסט שניתן לצרף', true);
+  } catch (e) {
+    dlog('share.fail', { err: String((e && e.message) || e) });
+    toast('קליטת השיתוף נכשלה', true);
+  }
+}
 
 /* ==========================================================================
    פיצ'רים חזקים — הנגשת פונקציות הטרמינל ב-GUI
@@ -3808,7 +6495,7 @@ function newAskRef(id, tool, input, description) {
   return { type: 'ask', id, tool, input: input || {}, description: description || '', decision: null, answers: null, response: '' };
 }
 
-function showPermission(id, req) {
+function showPermission(id, req, opts) {
   req = req || {};
   const ref = newAskRef(id, req.tool_name || 'כלי', req.input || {}, req.description || '');
   ref.suggestions = Array.isArray(req.permission_suggestions) ? req.permission_suggestions : [];
@@ -3817,22 +6504,27 @@ function showPermission(id, req) {
   renderAskBar();
   notifyQuestion(ref);
   // לא קופצים בכוח לשיחה אחרת — הפס העליון "ממתין לתשובה" מוביל לשם בלחיצה
+  // silent: סנכרון מחדש עלול להחיות כמה כרטיסים בבת אחת — toast אחד בחוץ
+  if (opts && opts.silent) return;
   if (streamOwnerId && activeId !== streamOwnerId) toast('Claude ממתין לתשובה בשיחה אחרת');
   else autoScroll();
 }
 
 function decidePermission(id, decision, extra, ref) {
-  const pre = ref || (pendingPerms.get(id) || {}).ref;
-  if (ws && ws.readyState === ws.OPEN) {
-    // label/answers נוסעים יחד עם ההחלטה כדי שהכרטיס במכשיר השני ייסגר עם
-    // הניסוח המדויק ("נענה" / "התוכנית אושרה") ועם התשובה שנבחרה בפועל.
-    ws.send(JSON.stringify({
-      type: 'permission', requestId: id, decision, ...extra,
-      label: (pre && pre.decision) || decision,
-      answers: (pre && pre.answers) || null,
-      response: (pre && pre.response) || null,
-    }));
+  if (!ws || ws.readyState !== ws.OPEN) {
+    toast('אין חיבור לשרת — לא ניתן לאשר או לדחות כרגע', true);
+    return;
   }
+  const pre = ref || (pendingPerms.get(id) || {}).ref;
+  // label/answers נוסעים יחד עם ההחלטה כדי שהכרטיס במכשיר השני ייסגר עם
+  // הניסוח המדויק ("נענה" / "התוכנית אושרה") ועם התשובה שנבחרה בפועל.
+  ws.send(JSON.stringify({
+    type: 'permission', requestId: id, decision, ...extra,
+    label: (pre && pre.decision) || decision,
+    answers: (pre && pre.answers) || null,
+    response: (pre && pre.response) || null,
+  }));
+  closeAskNotification(id);
   const p = pendingPerms.get(id);
   const r = ref || (p && p.ref);
   pendingPerms.delete(id);
@@ -3842,7 +6534,20 @@ function decidePermission(id, decision, extra, ref) {
   if (!pendingPerms.size) renderWorking();
 }
 
+/**
+ * ההתראה של בקשה שכבר נענתה חייבת לרדת מהמגירה. עם requireInteraction היא
+ * נשארת שם עד שנוגעים בה, וכפתור "אשר" שמצביע על בקשה סגורה הוא בדיוק סוג
+ * ההתראה שמלמדת להתעלם מהתראות.
+ */
+function closeAskNotification(id) {
+  navigator.serviceWorker?.ready
+    .then((reg) => reg.getNotifications({ tag: 'ask-' + id }))
+    .then((list) => { for (const n of list) n.close(); })
+    .catch(() => {});
+}
+
 function closePermission(id, note) {
+  closeAskNotification(id);
   const p = pendingPerms.get(id);
   pendingPerms.delete(id);
   if (p && p.ref) { p.ref.decision = note; refreshAskCard(p.ref); persist(); }
@@ -3859,16 +6564,97 @@ function clearAllPerms() {
    יומן GOD
    --------------------------------------------------------------------------
    במצב GOD אין כרטיסי אישור — השרת עונה "אשר" ומשדר לכאן שורה על כל בקשה.
-   הן נאספות לאורך התור, וכשהוא נגמר נכנסות ככרטיס אחד מקופל בסוף ההודעה:
-   כפתור שאומר כמה בקשות אושרו, ומתחתיו כל אחת מהן עם הקלט המלא שלה — אותה
-   תצוגה בדיוק שהייתה בכרטיס האישור, רק בדיעבד. הכרטיס נשמר בתמליל, ולכן הוא
-   שם גם אחרי רענון דף ובמכשיר השני.
+   הן נאספות לאורך התור. תוך כדי הריצה מופיע כפתור בפס «עובד…» שפותח את
+   הרשימה המלאה (אותה תצוגה שהייתה בכרטיס האישור). כשהתור נגמר הן נכנסות
+   ככרטיס אחד מקופל בסוף ההודעה, ונשמרות בתמליל — גם אחרי רענון ובמכשיר השני.
    ========================================================================== */
 function onGodAllow(entry) {
   if (!entry || !entry.tool) return;
+  if (entry.id && godTurn.some((x) => x.id === entry.id)) return;
   godTurn.push(entry);
   dlog('god.allow', { tool: entry.tool, n: godTurn.length });
-  renderWorking();   // בפס "עובד…" רואים שהאישורים נמשכים, ולא רק בסוף
+  renderWorking();   // הכפתור החי מתעדכן מיד, לא רק בסוף התור
+}
+
+/* GOD דחה פקודה שהייתה הורגת את Sol. הטוסט מגיע בנפרד; כאן נשארת שורה
+   בתמליל, כדי שהסיבה לא תיעלם אחרי ארבע שניות. */
+const godDenySeen = new Set();
+function onGodDeny(m) {
+  if (!m || !m.text) return;
+  if (m.id && godDenySeen.has(m.id)) return;
+  if (m.id) godDenySeen.add(m.id);
+  if (godDenySeen.size > 50) godDenySeen.delete(godDenySeen.values().next().value);
+  addNote(m.text, true);
+  dlog('god.deny', { tool: m.tool || '' });
+}
+
+function godLiveLabel(n) {
+  return n === 1 ? 'GOD · בקשה אחת אושרה' : `GOD · ${n} בקשות אושרו`;
+}
+
+/** כפתור + פאנל חיים: מה שאושר עד עכשיו בתור שרץ. */
+function renderGodLive() {
+  const btn = $('godLiveBtn');
+  const panel = $('godLivePanel');
+  if (!btn) return;
+  const n = godTurn.length;
+  btn.classList.toggle('hidden', n === 0);
+  if (!n) {
+    closeGodLive(true);
+    return;
+  }
+  const label = godLiveLabel(n);
+  const txt = btn.querySelector('.god-live-txt');
+  if (txt) txt.textContent = label;
+  btn.title = 'לחץ כדי לראות בדיוק מה GOD אישר בתור הזה';
+  btn.setAttribute('aria-label', label + ' — הצג פירוט');
+  if (panel && !panel.classList.contains('hidden')) syncGodLivePanel();
+}
+
+function syncGodLivePanel() {
+  const body = $('godLiveBody');
+  if (!body) return;
+  while (body.childElementCount < godTurn.length) {
+    const row = godRow(godTurn[body.childElementCount]);
+    row.open = true;
+    body.appendChild(row);
+  }
+  body.scrollTop = body.scrollHeight;
+}
+
+function openGodLive() {
+  if (!godTurn.length) return;
+  const panel = $('godLivePanel');
+  const btn = $('godLiveBtn');
+  const body = $('godLiveBody');
+  if (!panel || !btn) return;
+  if (body) {
+    body.replaceChildren();
+    godTurn.forEach((it, i) => {
+      const row = godRow(it);
+      if (i === godTurn.length - 1) row.open = true;
+      body.appendChild(row);
+    });
+  }
+  panel.classList.remove('hidden');
+  btn.setAttribute('aria-expanded', 'true');
+}
+
+function closeGodLive(clear) {
+  const panel = $('godLivePanel');
+  const btn = $('godLiveBtn');
+  if (panel) panel.classList.add('hidden');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+  if (clear) {
+    const body = $('godLiveBody');
+    if (body) body.replaceChildren();
+  }
+}
+
+function toggleGodLive() {
+  const panel = $('godLivePanel');
+  if (!panel || panel.classList.contains('hidden')) openGodLive();
+  else closeGodLive();
 }
 
 /** סוגר את יומן התור לכרטיס בתמליל. נקרא בסיום תור וגם כשהוא נשבר באמצע. */
@@ -3876,6 +6662,7 @@ function pushGodBlock() {
   if (!godTurn.length) return;
   const ref = { type: 'god', items: godTurn, at: Date.now() };
   godTurn = [];
+  renderGodLive();
   if (!ensureLive()) return;
   live.msgObj.blocks.push(ref);
   if (live.contentEl && document.body.contains(live.contentEl)) {
@@ -4094,6 +6881,14 @@ function renderQuestionCard(ref, isLive) {
     card.appendChild(actions);
     syncValid = () => { send.disabled = !collect(); };
     syncValid();
+    // Enter בשדה «אחר…» שולח כמו הכפתור — בלי זה צריך לחפש את «שלח תשובה» מתחת
+    card.querySelectorAll('.ask-other-input').forEach((inp) => {
+      inp.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' || e.isComposing) return;
+        e.preventDefault();
+        if (!send.disabled) send.click();
+      });
+    });
   } else {
     if (ref.answers && Object.keys(ref.answers).length) {
       const sum = el('div', 'ask-answered');
@@ -4196,7 +6991,11 @@ function renderDialogCard(ref, isLive) {
   return card;
 }
 function sendDialog(id, response, error) {
-  if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'dialog', requestId: id, response, error }));
+  if (!ws || ws.readyState !== ws.OPEN) {
+    toast('אין חיבור לשרת — לא ניתן להשיב כרגע', true);
+    return;
+  }
+  ws.send(JSON.stringify({ type: 'dialog', requestId: id, response, error }));
   const p = pendingPerms.get(id);
   pendingPerms.delete(id);
   if (p && p.ref) { refreshAskCard(p.ref); persist(); }
@@ -4218,7 +7017,12 @@ function renderAskBar() {
     : (n > 1 ? `${n} בקשות אישור ממתינות` : 'Claude ממתין לאישור שלך');
 }
 async function jumpToPendingAsk() {
-  const first = pendingPerms.values().next().value;
+  // מעדיפים שאלת AskUserQuestion על פני כרטיס הרשאה שנפתח קודם ב-Map
+  let first = null;
+  for (const p of pendingPerms.values()) {
+    if (p.ref && p.ref.tool === 'AskUserQuestion') { first = p; break; }
+  }
+  if (!first) first = pendingPerms.values().next().value;
   if (!first || !first.ref) return;
   if (streamOwnerId && activeId !== streamOwnerId) await switchConv(streamOwnerId);
   const node = document.querySelector(`[data-ask-id="${CSS.escape(first.ref.id)}"]`);
@@ -4230,14 +7034,46 @@ async function jumpToPendingAsk() {
   if (btn) setTimeout(() => btn.focus(), 350);
 }
 
-/** התראה כשהשאלה מגיעה והחלון לא בפוקוס — אחרת היא פשוט לא נראית. */
+/**
+ * התראה כשהשאלה מגיעה והחלון לא בפוקוס — אחרת היא פשוט לא נראית.
+ *
+ * בקשת אישור רגילה מקבלת שני כפתורים בתוך ההתראה עצמה, כך שאפשר לענות עליה
+ * מהטלפון בלי לפתוח את האפליקציה — וזה בדיוק הרגע שבו זה משנה, כי התור עומד
+ * וממתין. הכפתורים עוברים דרך ה-Service Worker אל ‎/api/permission-answer‎.
+ *
+ * שתי בקשות שלא מקבלות כפתורים, במכוון:
+ * · ‎AskUserQuestion‎ — התשובה שלה היא בחירה מתוך אפשרויות, ו"אשר/דחה"
+ *   פשוט אינם התשובה.
+ * · מצב שבו הכיתוב אינו אומר *מה* מאשרים. גוף ההתראה נושא את שם הכלי ואת
+ *   הפקודה/הקובץ, כי כפתור אישור בלי זה הוא בקשה לאשר משהו לא ידוע.
+ */
 function notifyQuestion(ref) {
   const isQ = ref.tool === 'AskUserQuestion';
   const text = isQ ? 'Claude שאל אותך שאלה' : 'Claude ממתין לאישור שלך';
+  // לפני היציאה על פוקוס: מי שכן מסתכל על המסך לא מקבל התראה בכלל, ורטט הוא
+  // הדרך היחידה שנשארה לסמן לו שנפתח כרטיס שממתין לו.
+  haptic(HAPTIC_ASK);
   if (document.hasFocus()) return;
   setTitleBadge(text);
-  desktopNotify(text, isQ ? 'לחץ כדי לענות' : 'לחץ כדי לאשר');
+  if (isQ) { desktopNotify(text, 'לחץ כדי לענות', { vibrate: HAPTIC_ASK }); return; }
+  const what = clamp(toolPreview(ref.tool, ref.input) || ref.description || '', 120);
+  desktopNotify(text, ref.tool + (what ? ' · ' + what : ''), {
+    // חייב להישאר גלוי עד שעונים: בקשה שנעלמת מהמגירה משאירה את התור תקוע
+    requireInteraction: true,
+    vibrate: HAPTIC_ASK,
+    // תג ייחודי לבקשה. עם ה-tag המשותף 'rtl-claude' בקשה שנייה הייתה דורסת
+    // את הראשונה, ואיתה את הכפתורים שמצביעים על ה-requestId שלה.
+    tag: 'ask-' + ref.id,
+    actions: notifyActionsOn() ? [
+      { action: 'allow', title: 'אשר' },
+      { action: 'deny', title: 'דחה' },
+    ] : [],
+    data: { convId: streamOwnerId || subId, requestId: ref.id },
+  });
 }
+
+/** כפתורי אישור בהתראה — ניתנים לכיבוי, כי במגירת ההתראות הם נגישים גם נעול. */
+function notifyActionsOn() { return store.settings.notifyActions !== false; }
 function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 
 // ---------- תפריט השלמה: פקודות סלאש (/) ואזכור קבצים (@) ----------
@@ -4252,6 +7088,7 @@ const CLIENT_CMDS = {
   '/clear': () => $('newChat').click(),
   '/anon': () => startAnonChat(),
   '/rc': (arg) => openRc(arg),
+  '/later': (arg) => openSchedule(arg || undefined),
 };
 
 // המטמון מפתוח לפי סוכן *ולפי תיקייה*: שני התפריטים שונים לגמרי, והחלפה
@@ -4259,21 +7096,34 @@ const CLIENT_CMDS = {
 let cmdCacheKey = '';
 async function getCommands() {
   const key = activeAgent() + '|' + ($('cwd').value || '');
-  if (cmdCache && cmdCacheKey === key) return cmdCache;
+  // cmdCache=[] הוא תוצאה תקינה (אין פקודות) — אסור לטפל ב־[] כ־miss
+  if (cmdCache !== null && cmdCacheKey === key) return { ok: true, commands: cmdCache };
   cmdCacheKey = key;
   try {
     const r = await fetch('/api/commands?cwd=' + encodeURIComponent($('cwd').value || '') + '&agent=' + activeAgent());
     cmdCache = (await r.json()).commands || [];
+    return { ok: true, commands: cmdCache };
+  } catch {
+    cmdCache = null;
+    cmdCacheKey = '';
+    return { ok: false, commands: [] };
   }
-  catch { cmdCache = []; }
-  return cmdCache;
 }
 const fileFetch = debounce(async (q) => {
   try {
     const r = await fetch('/api/files?cwd=' + encodeURIComponent($('cwd').value || '') + '&q=' + encodeURIComponent(q));
     const files = (await r.json()).files || [];
-    if (ac && ac.mode === 'file') { ac.items = files.map(f => ({ name: f })); ac.sel = 0; renderAc(); }
-  } catch {}
+    // תשובה מאוחרת לשאילתה ישנה לא דורסת את הרשימה הנוכחית
+    if (ac && ac.mode === 'file' && ac.token && ac.token.q === q) {
+      ac.items = files.map(f => ({ name: f }));
+      ac.sel = 0;
+      ac.error = false;
+      ac.empty = !files.length;
+      renderAc();
+    }
+  } catch {
+    if (ac && ac.mode === 'file' && ac.token && ac.token.q === q) { ac.items = []; ac.error = true; ac.empty = false; renderAc(); }
+  }
 }, 160);
 
 function tokenAtCaret() {
@@ -4292,12 +7142,24 @@ async function updateAc() {
   const tk = tokenAtCaret();
   if (!tk) return closeAc();
   if (tk.mode === 'slash') {
-    const cmds = await getCommands();
+    const res = await getCommands();
+    const extra = [{ name: '/later', desc: 'תזמן הודעה לשעה מדויקת באותו סשן', client: true }];
     const q = tk.q.toLowerCase();
-    ac = { mode: 'slash', token: tk, items: cmds.filter(c => c.name.slice(1).toLowerCase().includes(q)), sel: 0 };
+    const seen = new Set();
+    const items = [];
+    for (const c of extra.concat(res.commands)) {
+      if (seen.has(c.name) || !c.name.slice(1).toLowerCase().includes(q)) continue;
+      seen.add(c.name);
+      items.push(c);
+    }
+    ac = {
+      mode: 'slash', token: tk, items, sel: 0,
+      error: !res.ok,
+      empty: res.ok && !items.length,
+    };
     renderAc();
   } else {
-    ac = { mode: 'file', token: tk, items: [], sel: 0 };
+    ac = { mode: 'file', token: tk, items: [], sel: 0, error: false, empty: false };
     renderAc();
     fileFetch(tk.q);
   }
@@ -4305,7 +7167,20 @@ async function updateAc() {
 
 function renderAc() {
   const m = acMenu();
-  if (!ac || !ac.items.length) { m.classList.add('hidden'); m.innerHTML = ''; return; }
+  if (!ac) { m.classList.add('hidden'); m.innerHTML = ''; return; }
+  // מצב טעינה / ריק / שגיאה — לא מסתירים בשקט; אחרת @ ו-/ נראים שבורים
+  if (!ac.items.length) {
+    m.innerHTML = '';
+    const head = el('div', 'ac-head', ac.mode === 'slash' ? 'פקודות' : 'קבצים בתיקיית העבודה');
+    m.appendChild(head);
+    let msg = 'טוען…';
+    if (ac.error) msg = 'לא נטען — נסה שוב';
+    else if (ac.empty) msg = ac.mode === 'file' ? 'לא נמצאו קבצים' : 'אין התאמות';
+    else if (ac.mode === 'slash') msg = 'אין התאמות';
+    m.appendChild(el('div', 'ac-empty', msg));
+    m.classList.remove('hidden');
+    return;
+  }
   m.innerHTML = '';
   const head = el('div', 'ac-head', ac.mode === 'slash' ? 'פקודות' : 'קבצים בתיקיית העבודה');
   m.appendChild(head);
@@ -4321,6 +7196,8 @@ function renderAc() {
     m.appendChild(row);
   });
   m.classList.remove('hidden');
+  const selRow = m.querySelector('.ac-item.sel');
+  if (selRow && selRow.scrollIntoView) selRow.scrollIntoView({ block: 'nearest' });
 }
 
 function acceptAc(idx) {
@@ -4329,7 +7206,7 @@ function acceptAc(idx) {
   if (!it) return;
   const i = $('input'); const val = i.value; const tk = ac.token;
   if (ac.mode === 'slash') {
-    const cmd = cmdCache.find(c => c.name === it.name) || it;
+    const cmd = (cmdCache || []).find(c => c.name === it.name) || it;
     if (cmd.client && CLIENT_CMDS[cmd.name]) { closeAc(); i.value = ''; autoGrow(); CLIENT_CMDS[cmd.name](''); return; }
     const rest = val.slice(tk.end);
     i.value = it.name + ' ' + rest.replace(/^\s+/, '');
@@ -4348,24 +7225,69 @@ function closeAc() { ac = null; const m = acMenu(); m.classList.add('hidden'); m
 // אינטגרציה עם הקלט: מאזין input לעדכון, ומאזין keydown בשלב הלכידה כדי לתפוס ניווט לפני שליחה
 $('input').addEventListener('input', updateAc);
 $('input').addEventListener('keydown', (e) => {
-  if (!ac || !ac.items.length) return;
+  if (!ac) return;
+  // בזמן טעינה / ריק / שגיאה — Enter לא אמור לשלוח את מחרוזת ה-@ החצויה
+  if (!ac.items.length) {
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (ac.empty || ac.error) closeAc();
+    } else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation(); closeAc(); }
+    return;
+  }
   if (e.key === 'ArrowDown') { e.preventDefault(); e.stopImmediatePropagation(); ac.sel = (ac.sel + 1) % Math.min(ac.items.length, 40); renderAc(); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); const n = Math.min(ac.items.length, 40); ac.sel = (ac.sel - 1 + n) % n; renderAc(); }
   else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopImmediatePropagation(); acceptAc(); }
-  else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeAc(); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation(); closeAc(); }
 }, true);
 $('input').addEventListener('blur', () => setTimeout(closeAc, 120));
 
 // ---------- מודאל כללי ----------
+let modalReturnFocus = null;
+function modalFocusables() {
+  const root = $('modal');
+  if (!root || root.classList.contains('hidden')) return [];
+  return [...root.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => !el.disabled && el.offsetParent !== null);
+}
+function onModalKeydown(e) {
+  if ($('modal').classList.contains('hidden')) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeModal(); return; }
+  if (e.key !== 'Tab') return;
+  const list = modalFocusables();
+  if (!list.length) { e.preventDefault(); return; }
+  const first = list[0], last = list[list.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  else if (!list.includes(document.activeElement)) { e.preventDefault(); first.focus(); }
+}
 function openModal(title, node) {
+  if (!$('settings').classList.contains('hidden')) closeSettings();
+  if (isUsageModalOpen()) setUsageModalOpen(false);
+  if (!$('findBar').classList.contains('hidden')) closeFind();
+  if (!$('palette').classList.contains('hidden')) closePalette();
+  if (!$('modelPicker').classList.contains('hidden')) closeModelPicker();
+  closeModelDock({ restoreFocus: false });
+  modalReturnFocus = document.activeElement;
   $('modalTitle').textContent = title;
   const b = $('modalBody'); b.innerHTML = ''; b.appendChild(node);
   $('modal').classList.remove('hidden');
+  document.removeEventListener('keydown', onModalKeydown, true);
+  document.addEventListener('keydown', onModalKeydown, true);
+  const close = $('modalClose');
+  if (close) try { close.focus(); } catch {}
 }
-function closeModal() { $('modal').classList.add('hidden'); }
+function closeModal() {
+  document.removeEventListener('keydown', onModalKeydown, true);
+  $('modal').classList.add('hidden');
+  const back = modalReturnFocus;
+  modalReturnFocus = null;
+  if (back && typeof back.focus === 'function') {
+    try { back.focus(); } catch {}
+  }
+}
 $('modalClose').onclick = closeModal;
 $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('modal').classList.contains('hidden')) closeModal(); });
+// Escape מטופל במאזין הגלובלי — לא כפול כאן
 
 function fmtAgo(ms) {
   const d = Date.now() - ms;
@@ -4451,13 +7373,21 @@ function openLogs(preset) {
   const copy = el('button', 'logs-btn', '⧉ העתק');
   copy.type = 'button';
   copy.onclick = async () => {
-    try { await navigator.clipboard.writeText(pre.textContent); toast('היומן הועתק'); }
-    catch { toast('ההעתקה נכשלה', true); }
+    const body = (pre.textContent || '').trim();
+    if (!body || body === 'טוען…' || body.startsWith('קריאת היומן נכשלה')) {
+      toast('אין יומן להעתקה עדיין', true); return;
+    }
+    const ok = await copyText(body);
+    toast(ok ? 'היומן הועתק' : 'ההעתקה נכשלה', !ok);
   };
   const dl = el('button', 'logs-btn', '⇩ הורד');
   dl.type = 'button';
   dl.onclick = () => {
-    const blob = new Blob([pre.textContent], { type: 'text/plain;charset=utf-8' });
+    const body = (pre.textContent || '').trim();
+    if (!body || body === 'טוען…' || body.startsWith('קריאת היומן נכשלה')) {
+      toast('אין יומן להורדה עדיין', true); return;
+    }
+    const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -4516,36 +7446,213 @@ function resumeSession(s) {
   const existing = store.convs.find(c => c.sessionId === s.id);
   if (!leaveAnon(existing ? existing.id : null)) return;
   if (existing) { switchConv(existing.id); closeModal(); return; }
+  if (busy && streamOwnerId === activeId) {
+    if (!confirm('יש תשובה פעילה בשיחה הזו.\nלעצור אותה ולהמשיך סשן מהדיסק?')) return;
+    interruptTurn(); abandonTurn();
+  } else if (busy) { interruptTurn(); abandonTurn(); }
+  stashDraft();
   const c = {
     id: uid(), title: clamp(s.title, 42), sessionId: s.id, sessionAgent: s.agent || 'claude',
     messages: [], cost: 0, ctx: null,
     cwd: $('cwd').value, draft: '', createdAt: Date.now(), updatedAt: Date.now(), loaded: true,
   };
-  store.convs.unshift(c); activeId = c.id; save();
-  restoreDraft();
-  renderConversation(); renderConvList(); closeModal();
+  store.convs.unshift(c);
+  markDirty(c); markSettings();
+  // switchConv מטפל בסנכרון/תור/דואט — גם כשזו שיחה חדשה ברשימה
+  switchConv(c.id);
+  closeModal();
   addNote('ממשיך סשן קיים מהדיסק — ההקשר ייטען אוטומטית בהודעה הבאה.');
   $('input').focus();
 }
 $('openSessions').onclick = openSessions;
 
 // ---------- שרתי MCP ----------
+// הרישום הוא לסוכן, לא למודל: Claude מכסה כל מודל שרץ דרכו, Cursor את
+// המודלים שלו. אותו טופס רושם לאחד מהם או לשניהם, והתג על השורה אומר למי.
+const MCP_AGENT_LABEL = { claude: 'Claude', cursor: 'Cursor' };
+
+function mcpAgentButtons(form) {
+  const box = el('div', 'mcp-add-agents');
+  box.appendChild(el('span', 'mcp-add-lbl', 'סוכנים'));
+  for (const agent of ['claude', 'cursor']) {
+    const b = el('button', 'mcp-target on', MCP_AGENT_LABEL[agent]);
+    b.type = 'button';
+    b.dataset.agent = agent;
+    b.setAttribute('aria-pressed', 'true');
+    b.onclick = () => {
+      const on = b.getAttribute('aria-pressed') === 'true';
+      const pressed = [...form.querySelectorAll('.mcp-target')].filter((x) => x.getAttribute('aria-pressed') === 'true');
+      if (on && pressed.length <= 1) return;
+      b.setAttribute('aria-pressed', on ? 'false' : 'true');
+      b.classList.toggle('on', !on);
+    };
+    box.appendChild(b);
+  }
+  return box;
+}
+
+function selectedMcpAgents(form) {
+  return [...form.querySelectorAll('.mcp-target')]
+    .filter((b) => b.getAttribute('aria-pressed') === 'true')
+    .map((b) => b.dataset.agent);
+}
+
+function mcpAddForm(reload) {
+  const form = el('form', 'mcp-add');
+  const kinds = el('div', 'mcp-add-kinds');
+  let transport = 'stdio';
+  const kindBtn = (id, label) => {
+    const b = el('button', 'mcp-kind' + (id === transport ? ' on' : ''), label);
+    b.type = 'button';
+    b.dataset.kind = id;
+    b.onclick = () => {
+      transport = id;
+      [...kinds.children].forEach((c) => c.classList.toggle('on', c.dataset.kind === id));
+      valLabel.textContent = id === 'http' ? 'כתובת' : 'פקודה';
+      value.placeholder = id === 'http' ? 'https://example.com/mcp' : 'npx -y some-mcp-server';
+    };
+    return b;
+  };
+  kinds.appendChild(kindBtn('stdio', 'פקודה'));
+  kinds.appendChild(kindBtn('http', 'כתובת'));
+
+  const nameField = el('label', 'mcp-field');
+  nameField.appendChild(el('span', 'mcp-add-lbl', 'שם'));
+  const name = el('input');
+  name.dir = 'ltr';
+  name.placeholder = 'blender';
+  name.autocomplete = 'off';
+  name.spellcheck = false;
+  name.setAttribute('aria-label', 'שם השרת');
+  nameField.appendChild(name);
+
+  const valField = el('label', 'mcp-field');
+  const valLabel = el('span', 'mcp-add-lbl', 'פקודה');
+  const value = el('input');
+  value.dir = 'ltr';
+  value.placeholder = 'npx -y some-mcp-server';
+  value.autocomplete = 'off';
+  value.spellcheck = false;
+  value.setAttribute('aria-label', 'פקודה או כתובת של שרת MCP');
+  valField.appendChild(valLabel);
+  valField.appendChild(value);
+
+  const msg = el('div', 'mcp-msg');
+  msg.setAttribute('role', 'alert');
+  const submit = el('button', 'rm-btn primary', 'הוסף');
+  submit.type = 'submit';
+
+  form.appendChild(el('div', 'mcp-add-title', 'שרת חדש'));
+  form.appendChild(kinds);
+  form.appendChild(nameField);
+  form.appendChild(valField);
+  form.appendChild(mcpAgentButtons(form));
+  const actions = el('div', 'mcp-add-actions');
+  actions.appendChild(submit);
+  actions.appendChild(msg);
+  form.appendChild(actions);
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    msg.textContent = '';
+    const agents = selectedMcpAgents(form);
+    const body = { name: name.value.trim(), transport, agents };
+    if (transport === 'http') body.url = value.value.trim();
+    else body.command = value.value.trim();
+    submit.disabled = true;
+    try {
+      const r = await fetch('/api/mcp', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.ok) {
+        msg.textContent = data.error || data.message || 'הרישום נכשל';
+        if (data.results) reload();
+        return;
+      }
+      name.value = '';
+      value.value = '';
+      toast(data.message || 'השרת נרשם');
+      reload();
+    } catch (err) {
+      msg.textContent = err.message || 'הרישום נכשל';
+    } finally {
+      submit.disabled = false;
+    }
+  };
+  return form;
+}
+
+function mcpRow(s, reload) {
+  const row = el('div', 'mcp-row');
+  row.appendChild(el('span', 'mcp-dot ' + (s.connected ? 'on' : 'off')));
+  const info = el('div', 'mcp-info');
+  const line = el('div', 'mcp-name-line');
+  line.appendChild(el('div', 'mcp-name', s.name));
+  const agent = s.agent === 'cursor' ? 'cursor' : 'claude';
+  line.appendChild(el('span', 'mcp-agent ' + agent, MCP_AGENT_LABEL[agent]));
+  info.appendChild(line);
+  if (s.url) info.appendChild(el('div', 'mcp-url mono', s.url));
+  row.appendChild(info);
+  row.appendChild(el('span', 'mcp-status ' + (s.connected ? 'on' : 'off'), s.connected ? 'מחובר' : 'מנותק'));
+  const rm = el('button', 'rm-btn danger mcp-rm', 'הסר');
+  rm.type = 'button';
+  rm.onclick = async () => {
+    const who = MCP_AGENT_LABEL[agent];
+    if (!confirm(`להסיר את ${s.name} מ-${who}?`)) return;
+    rm.disabled = true;
+    try {
+      const r = await fetch('/api/mcp/remove', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: s.name, agent }),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.ok) { toast(data.error || 'ההסרה נכשלה', true); rm.disabled = false; return; }
+      toast(data.message || 'השרת הוסר');
+      reload();
+    } catch (err) {
+      toast(err.message || 'ההסרה נכשלה', true);
+      rm.disabled = false;
+    }
+  };
+  row.appendChild(rm);
+  return row;
+}
+
 async function openMcp() {
   const wrap = el('div', 'mcp-list');
-  wrap.appendChild(el('div', 'modal-note', 'שרתי MCP המחוברים ל-Claude Code. הכלים שלהם זמינים אוטומטית בשיחות.'));
-  openModal('שרתי MCP', wrap);
-  try {
-    const r = await fetch('/api/mcp');
-    const data = await r.json();
-    if (!data.servers || !data.servers.length) { wrap.appendChild(el('div', 'modal-empty', data.raw || 'לא הוגדרו שרתי MCP.')); return; }
-    for (const s of data.servers) {
-      const row = el('div', 'mcp-row');
-      row.innerHTML = `<span class="mcp-dot ${s.connected ? 'on' : 'off'}"></span>` +
-        `<div class="mcp-info"><div class="mcp-name">${escHtml(s.name)}</div><div class="mcp-url mono">${escHtml(s.url)}</div></div>` +
-        `<span class="mcp-status ${s.connected ? 'on' : 'off'}">${s.connected ? 'מחובר' : 'מנותק'}</span>`;
-      wrap.appendChild(row);
+  wrap.appendChild(el('div', 'modal-note',
+    'שרת MCP נרשם לסוכן, לא למודל. Claude זמין לכל מודל שרץ דרכו — ישיר, שער או מקומי. Cursor זמין למודלי Cursor. אותו שרת אפשר לרשום לשניהם.'));
+  const list = el('div', 'mcp-servers');
+  // שתי טעינות חופפות (פתיחת החלון, ואז רישום) — התשובה הישנה מגיעה
+  // אחרונה ומחליפה רשימה שכבר כוללת את השרת החדש.
+  let ticket = 0;
+  const reload = async () => {
+    const mine = ++ticket;
+    list.innerHTML = '';
+    list.appendChild(el('div', 'modal-empty', 'טוען…'));
+    try {
+      const r = await fetch('/api/mcp', { cache: 'no-store' });
+      const data = await r.json();
+      if (mine !== ticket) return;
+      list.innerHTML = '';
+      const servers = data.servers || [];
+      if (!servers.length) {
+        list.appendChild(el('div', 'modal-empty', 'אין שרתים רשומים.'));
+        return;
+      }
+      for (const s of servers) list.appendChild(mcpRow(s, reload));
+    } catch {
+      if (mine !== ticket) return;
+      list.innerHTML = '';
+      list.appendChild(el('div', 'modal-empty', 'שגיאה בטעינת שרתי MCP.'));
     }
-  } catch { wrap.appendChild(el('div', 'modal-empty', 'שגיאה בטעינת שרתי MCP.')); }
+  };
+  wrap.appendChild(mcpAddForm(reload));
+  wrap.appendChild(el('div', 'mcp-add-title', 'שרתים רשומים'));
+  wrap.appendChild(list);
+  openModal('שרתי MCP', wrap);
+  reload();
 }
 $('openMcp').onclick = openMcp;
 $('openLogs').onclick = () => { closeDrawer(); openLogs(); };
@@ -4561,6 +7668,7 @@ function paintRemote() {
   b.classList.toggle('on', !!remoteState.listening && n > 0);
   b.title = !remoteState.listening ? 'חיבור מכשירים (המאזין לא פעיל)'
     : n ? `${n} מכשירים מקושרים` : 'קשר מכשיר';
+  b.setAttribute('aria-label', b.title);
 }
 
 async function fetchRemote() {
@@ -4619,28 +7727,61 @@ function renderRemote(wrap) {
     img.src = '/api/remote/qr?t=' + Date.now();
     img.alt = 'קוד קישור';
     qr.appendChild(img);
-    qr.appendChild(el('div', 'remote-meta', `סרוק מהטלפון · תקף עוד ${fmtLeft((s.pairExpiresAt || 0) - Date.now())}`));
+    const expMeta = el('div', 'remote-meta', '');
+    let codeBtn = null, copyBtn = null;
+    const paintExp = () => {
+      const left = (s.pairExpiresAt || 0) - Date.now();
+      const dead = left <= 0;
+      expMeta.textContent = dead
+        ? 'פג תוקף — בטלו והנפיקו קוד חדש'
+        : `סרוק מהטלפון · תקף עוד ${fmtLeft(left)}`;
+      qr.classList.toggle('expired', dead);
+      img.style.opacity = dead ? '0.35' : '';
+      if (codeBtn) { codeBtn.disabled = dead; codeBtn.setAttribute('aria-disabled', dead ? 'true' : 'false'); }
+      if (copyBtn) { copyBtn.disabled = dead; }
+    };
+    paintExp();
+    qr.appendChild(expMeta);
     box.appendChild(qr);
+    if (!wrap._pairTick) {
+      wrap._pairTick = setInterval(() => {
+        if ($('modal').classList.contains('hidden') || !wrap.isConnected || !remoteState.pairUrl) {
+          clearInterval(wrap._pairTick); wrap._pairTick = null; return;
+        }
+        paintExp();
+      }, 1000);
+    }
 
     // מי שלא יכול לסרוק — מחשב מול מחשב, או קוד שנשלח בהודעה — מקליד את הקוד
     // הקצר בכתובת ה-LAN. לכן הוא מוצג כאן באותה בולטות כמו ה-QR.
     if (s.pairCode) {
       const man = el('div', 'pair-code-box');
       man.appendChild(el('div', 'remote-meta', 'או פתחו במכשיר החדש את הכתובת שלמעלה והקלידו:'));
-      const code = el('div', 'pair-code', s.pairCode);
+      const code = el('button', 'pair-code', s.pairCode);
+      code.type = 'button';
       code.title = 'לחיצה מעתיקה';
-      code.onclick = async () => { (await copyText(s.pairCode)) ? toast('הקוד הועתק') : toast('ההעתקה נכשלה', true); };
+      code.setAttribute('aria-label', 'העתק קוד קישור ' + s.pairCode);
+      code.onclick = async () => {
+        if (code.disabled) { toast('הקוד פג תוקף — הנפיקו קוד חדש', true); return; }
+        (await copyText(s.pairCode)) ? toast('הקוד הועתק') : toast('ההעתקה נכשלה', true);
+      };
+      codeBtn = code;
       man.appendChild(code);
       box.appendChild(man);
     }
 
     const row = el('div', 'remote-actions');
     const copy = el('button', 'rm-btn', 'העתק קישור');
-    copy.onclick = async () => { (await copyText(s.pairUrl)) ? toast('הקישור הועתק') : toast('ההעתקה נכשלה', true); };
+    copy.onclick = async () => {
+      if (copy.disabled) { toast('הקישור פג תוקף — הנפיקו קוד חדש', true); return; }
+      (await copyText(s.pairUrl)) ? toast('הקישור הועתק') : toast('ההעתקה נכשלה', true);
+    };
+    copyBtn = copy;
     const cancel = el('button', 'rm-btn', 'בטל');
     cancel.onclick = async () => { try { await remoteCall('cancel-pair'); renderRemote(wrap); } catch (e) { toast(e.message, true); } };
     row.appendChild(copy); row.appendChild(cancel);
     box.appendChild(row);
+    paintExp();
   } else {
     const row = el('div', 'remote-actions');
     const on = el('button', 'rm-btn primary', 'קשר מכשיר חדש');
@@ -4868,7 +8009,7 @@ function rcStartForm(wrap) {
     dp.appendChild(cur); dp.appendChild(list);
     const acts = el('div', 'dp-actions'); acts.appendChild(pick); dp.appendChild(acts);
     box.appendChild(dp);
-    loadDirs(dirPickAt || rcForm.cwd || '', cur, list);
+    loadDirs(dirPickAt || rcForm.cwd || '', cur, list, pick);
   }
 
   // או שהבדיקה המקדימה גילתה זאת, או שהתהליך כבר נפל על זה בפועל
@@ -5001,8 +8142,13 @@ function rcSessionList(wrap) {
   const only = el('input', 'rc-chk'); only.type = 'checkbox'; only.id = 'rcOnly';
   only.checked = rcOnlyRc;
   only.onchange = () => { rcOnlyRc = only.checked; renderRc(wrap); };
-  const onlyL = el('label', 'rm-lbl', 'רק של Remote Control');
+  const onlyL = el('label', 'rm-lbl');
   onlyL.htmlFor = 'rcOnly';
+  onlyL.append('רק של ');
+  const rcName = el('span');
+  rcName.dir = 'ltr';
+  rcName.textContent = 'Remote Control';
+  onlyL.appendChild(rcName);
   head.appendChild(only); head.appendChild(onlyL);
   box.appendChild(head);
 
@@ -5107,12 +8253,28 @@ $('openRc').onclick = () => { closeDrawer(); openRc(); };
 // ---------- מצב רחב: הגדלת שטח העבודה ----------
 // ההגדרות נטענות מהשרת אחרי עליית הדף, לכן ההחלה עצמה קורית מתוך init().
 function applyWide() {
-  document.querySelector('.app').classList.toggle('wide', !!store.settings.wide);
+  const on = !!store.settings.wide;
+  document.querySelector('.app').classList.toggle('wide', on);
+  const btn = $('wideToggle');
+  if (btn) {
+    const label = on ? 'צמצם את שטח העבודה' : 'הרחב את שטח העבודה';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
 }
 (function wireWide() {
   const app = document.querySelector('.app');
   const btn = $('wideToggle');
-  if (btn) btn.onclick = () => { const on = app.classList.toggle('wide'); store.settings.wide = on; btn.title = on ? 'צמצם את שטח העבודה' : 'הרחב את שטח העבודה'; save(); };
+  if (btn) btn.onclick = () => {
+    const on = app.classList.toggle('wide');
+    store.settings.wide = on;
+    const label = on ? 'צמצם את שטח העבודה' : 'הרחב את שטח העבודה';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    save();
+  };
 })();
 
 // ---------- לוח פקודות (Ctrl/Cmd+K) — ניווט ופעולות מהירות ----------
@@ -5126,24 +8288,56 @@ const paletteActions = () => [
   { ic: '⌁', name: 'Remote Control — שליטה מ-claude.ai ומהנייד (/rc)', run: () => openRc() },
   { ic: '◐', name: 'החלף מצב תצוגה (בהיר/כהה)', run: () => $('themeToggle').click() },
   { ic: '⤢', name: 'מצב רחב', run: () => $('wideToggle').click() },
+  { ic: '▤', name: 'מכסה — Claude מול Cursor', run: () => setUsageModalOpen(true) },
+  { ic: '⇄', name: `החלף את רצועת המכסה ל-${usageSourceName(usageSource() === 'claude' ? 'cursor' : 'claude')}`, run: () => $('usageSrcToggle').click() },
   { ic: '⟳', name: 'בדוק מול השרת וסנכרן את המסך', run: () => manualCheck() },
   { ic: '☰', name: 'יומן ריצה — למה התור נעצר', run: () => openLogs() },
   { ic: '⌂', name: 'תיקיית העבודה של השיחה', run: () => openDirPicker($('cwd').value.trim()) },
-  { ic: '⚙', name: 'הגדרות', run: () => openSettings() },
-  { ic: '⌕', name: 'חיפוש בתוך השיחה', run: () => openFind() },
+  { ic: '⚙', name: 'הגדרות', run: () => { closeDrawer(); openSettings(); } },
+  { ic: '⌕', name: 'חיפוש בתוך השיחה', run: () => { closeDrawer(); openFind(); } },
+  { ic: '◷', name: 'תזמן הודעה לשעה מדויקת באותו סשן', run: () => openSchedule() },
+  { ic: '✎', name: 'שנה שם לשיחה הפעילה', run: () => { closeDrawer(); renameConvPrompt(); } },
   { ic: '⇩', name: 'ייצוא השיחה ל-Markdown', run: () => exportActiveConv() },
+  ...(dictSupported() ? [
+    { ic: '🎙', name: dictOn ? 'עצור את ההכתבה הקולית' : 'הכתבה קולית — הכתב את ההודעה', run: () => dictToggle() },
+    { ic: '⇄', name: `החלף את שפת ההכתבה ל${dictNextLang().name}`, run: () => dictSetLang(dictNextLang().id) },
+  ] : []),
   { ic: '⌨', name: 'מקשי קיצור', run: () => openShortcuts() },
 ];
 let pal = null;
+let paletteReturnFocus = null;
 // focus=false כשהלוח נפתח ככפתור "עוד" בטלפון: שם הוא תפריט פעולות, ומקלדת
 // שקופצת ובולעת חצי מסך על תפריט של עשר שורות היא בדיוק ההפך ממה שצריך.
 function openPalette(focus = true) {
+  if (!$('modelPicker').classList.contains('hidden')) closeModelPicker();
+  closeModelDock({ restoreFocus: false });
+  if (!$('settings').classList.contains('hidden')) closeSettings();
+  if (isUsageModalOpen()) setUsageModalOpen(false);
+  if (!$('modal').classList.contains('hidden')) closeModal();
+  if (!$('findBar').classList.contains('hidden')) closeFind();
+  paletteReturnFocus = document.activeElement;
   $('palette').classList.remove('hidden');
+  const more = $('moreBtn');
+  if (more) more.setAttribute('aria-expanded', 'true');
   const inp = $('paletteInput');
   inp.value = ''; buildPalette('');
+  // בטלפון אין Ctrl+K — הרמז הזה רק מבלבל כשנפתח מ־⋮
+  inp.placeholder = isTouch()
+    ? 'הקלד פקודה או חפש שיחה…'
+    : 'הקלד פקודה או חפש שיחה…  ·  Ctrl+K';
   if (focus) inp.focus();
 }
-function closePalette() { $('palette').classList.add('hidden'); pal = null; }
+function closePalette() {
+  $('palette').classList.add('hidden');
+  pal = null;
+  const more = $('moreBtn');
+  if (more) more.setAttribute('aria-expanded', 'false');
+  const back = paletteReturnFocus || more;
+  paletteReturnFocus = null;
+  if (back && typeof back.focus === 'function') {
+    try { back.focus(); } catch {}
+  }
+}
 function buildPalette(q) {
   q = q.trim().toLowerCase();
   const actions = paletteActions().filter(a => !q || a.name.toLowerCase().includes(q));
@@ -5198,8 +8392,75 @@ addEventListener('focus', clearTitleBadge);
 addEventListener('focus', renderNotifyChip);
 // ב-PWA מותקן לחיצה על התרעה לא תמיד מייצרת focus — ה-SW מודיע לנו ישירות
 navigator.serviceWorker?.addEventListener('message', (e) => {
-  if (e.data && e.data.type === 'notification-click') clearTitleBadge();
+  if (e.data && e.data.type === 'notification-click') {
+    clearTitleBadge();
+    if (pendingPerms && pendingPerms.size) jumpToPendingAsk();
+  }
 });
+
+/**
+ * רטט קצר על אירוע שדורש תשומת לב.
+ *
+ * שני מסלולים נפרדים לשני מצבים, ולא בכפילות: ‎navigator.vibrate‎ מתעלם
+ * בשקט כשהלשונית מוסתרת (זה בכוונה, בכל הדפדפנים), ולכן הוא משרת רק את הרגע
+ * שבו *מסתכלים* על המסך — כרטיס אישור שנפתח מול העיניים. כשהאפליקציה ברקע
+ * או סגורה, הרטט נוסע כשדה ‎vibrate‎ *בתוך* ההתראה עצמה, וה-Service Worker
+ * מוציא אותו יחד איתה.
+ * רק במגע: במחשב אין מנוע רטט, והקריאה שם היא רעש לשווא.
+ */
+function haptic(pattern) {
+  if (!notifyOn()) return;   // אותו מתג — הרטט הוא חלק מאותה התראה
+  if (!navigator.vibrate || document.hidden) return;
+  if (!matchMedia('(pointer: coarse)').matches) return;
+  try { navigator.vibrate(pattern); } catch {}
+}
+const HAPTIC_ASK = [55, 45, 55];   // "משהו ממתין לך" — שתי נקישות
+const HAPTIC_DONE = [22];          // "נגמר" — נקישה אחת קצרה
+
+/* ==========================================================================
+   התקנה על מסך הבית
+   --------------------------------------------------------------------------
+   באנדרואיד הדפדפן יורה ‎beforeinstallprompt‎ כשהאפליקציה עומדת בתנאי
+   ההתקנה, ומציג באנר משלו — בתחתית המסך, בתזמון שלו, ובדרך כלל בדיוק כשלא
+   מתאים. ‎preventDefault‎ לוקח ממנו את זה ומעביר את ההזמנה לכפתור בהגדרות,
+   שם היא נמצאת כשמחפשים אותה.
+   באייפון אין אירוע כזה בכלל וגם אין API להתקנה — שם נשארות ההוראות, כי
+   בלעדיהן המסך פשוט שותק על שאלה שנשאלת הרבה.
+   ========================================================================== */
+let installPrompt = null;
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; renderInstallRow(); });
+addEventListener('appinstalled', () => { installPrompt = null; renderInstallRow(); toast('הותקנה על מסך הבית'); });
+
+function renderInstallRow() {
+  const row = $('installRow'); if (!row) return;
+  const btn = $('installBtn'), hint = $('installHint');
+  const standalone = isStandalone();
+  // שורה שאין לה מה לומר לא מוצגת: בדפדפן שכבר התקין, או כזה שאינו תומך
+  row.classList.toggle('hidden', !installPrompt && !standalone && !isIOS());
+  btn.classList.toggle('hidden', !installPrompt);
+  if (standalone) {
+    hint.textContent = '✓ פועלת כאפליקציה מותקנת';
+    hint.className = 'hint ok';
+  } else if (installPrompt) {
+    hint.textContent = 'חלון משלה, בלי סרגל הכתובת, ועם התראות שעובדות ברקע';
+    hint.className = 'hint';
+  } else {
+    hint.textContent = 'בספארי: כפתור השיתוף ← “הוספה למסך הבית”';
+    hint.className = 'hint';
+  }
+}
+$('installBtn').onclick = async () => {
+  if (!installPrompt) return;
+  const p = installPrompt;
+  // ההזמנה תקפה לשימוש אחד. גם אם המשתמש ביטל — אי-אפשר להציג אותה שוב,
+  // והדפדפן יירה אירוע חדש בביקור הבא אם הוא עדיין רוצה.
+  installPrompt = null;
+  try { p.prompt(); await p.userChoice; } catch {}
+  renderInstallRow();
+};
 
 /** כבוי התרעות מתוך ההגדרות. ברירת המחדל דלוק — השער האמיתי הוא הרשאת הדפדפן. */
 function notifyOn() { return store.settings.notify !== false; }
@@ -5210,18 +8471,23 @@ function notifyOn() { return store.settings.notify !== false; }
  * המסלול הישיר עדיף כי הוא עובד גם לפני שה-SW נרשם. מנסים SW קודם
  * ונופלים אחורה — כך אותה קריאה עובדת בשני המקרים.
  */
-function desktopNotify(title, body) {
+function desktopNotify(title, body, extra) {
   if (!notifyOn()) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const opts = {
     body, icon: '/icons/icon-192.png', badge: '/icons/icon-128.png',
     tag: 'rtl-claude', renotify: true, dir: 'rtl', lang: 'he',
-    data: { url: location.pathname + location.search },
+    ...extra,
+    data: { url: location.pathname + location.search, ...(extra && extra.data) },
   };
+  // actions נתמך אך ורק דרך ה-Service Worker. ב-‎new Notification()‎ הוא לא
+  // רק מתעלם — בחלק מהדפדפנים הבנאי זורק, כלומר ההתראה כולה נעלמת בגלל
+  // כפתור. לכן במסלול הישיר הוא מוסר, וההתראה יורדת לגרסה בלי כפתורים.
+  const plain = { ...opts }; delete plain.actions;
   const direct = () => {
     try {
-      const n = new Notification(title, opts);
-      n.onclick = () => { window.focus(); clearTitleBadge(); n.close(); };
+      const n = new Notification(title, plain);
+      n.onclick = () => { window.focus(); clearTitleBadge(); n.close(); if (pendingPerms && pendingPerms.size) jumpToPendingAsk(); };
       return true;
     } catch { return false; }
   };
@@ -5287,6 +8553,21 @@ function renderNotifyRow() {
   cb.checked = notifyOn();
   cb.disabled = !granted;
   test.disabled = !granted || !notifyOn();
+
+  // כפתורים בהתראה קיימים רק כשההתראה יוצאת מה-Service Worker. בדסקטופ
+  // ‎new Notification()‎ מתעלם מהם, ולכן המתג שם היה מבטיח משהו שלא קורה.
+  const canAct = !!navigator.serviceWorker && 'actions' in Notification.prototype;
+  const actBox = $('notifyActionsRow'), actHint = $('notifyActionsHint');
+  const actCb = $('notifyActionsOn');
+  actCb.checked = notifyActionsOn();
+  actCb.disabled = !granted || !notifyOn() || !canAct;
+  actBox.classList.toggle('off', actCb.disabled);
+  actHint.textContent = !canAct
+    ? 'הדפדפן הזה לא תומך בכפתורים בתוך התראה'
+    : notifyActionsOn()
+      ? '✓ אפשר לאשר או לדחות בלי לפתוח את האפליקציה'
+      : 'ההתראה תגיע בלי כפתורים — האישור נעשה במסך עצמו';
+  actHint.className = 'hint' + (canAct && notifyActionsOn() && granted && notifyOn() ? ' ok' : '');
   // ב-insecure הכפתור כן מוצג — הוא לא יבקש הרשאה אלא יפתח את ההסבר,
   // וזה המקום היחיד שממנו מגיעים אליו.
   ask.classList.toggle('hidden', granted || why === 'unsupported' || why === 'denied');
@@ -5336,6 +8617,8 @@ function renderNotifyChip() {
     unsupported: 'הדפדפן הזה לא תומך בהתרעות',
     ask: 'לא תקבלו הודעה בסיום משימה — לחצו כדי לאשר התרעות',
   }[why];
+  // מתחת ל־640px הטקסט מוסתר ב־CSS; בלי aria-label נשאר רק אייקון אילם.
+  chip.setAttribute('aria-label', $('notifyChipText').textContent + ' — ' + (chip.title || ''));
 }
 
 /**
@@ -5424,9 +8707,19 @@ function convToMarkdown(c) {
 }
 async function exportActiveConv() {
   const c = activeConv();
-  if (!c) return;
+  if (!c) { toast('אין שיחה לייצוא', true); return; }
   if (!c.loaded) await ensureLoaded(c.id);
-  const blob = new Blob([convToMarkdown(c)], { type: 'text/markdown;charset=utf-8' });
+  // דואט: התוצר חי ב-duetRun, לא ב-messages — אחרת הייצוא יוצא כמעט ריק
+  let md;
+  if (isDuet(c) && duetRun && duetRun.convId === c.id) {
+    const body = duetShownText() || '';
+    if (!body.trim()) { toast('אין תוצר דואט לייצוא עדיין', true); return; }
+    md = `# ${c.title || 'דואט'}\n\n${body}\n`;
+  } else {
+    if (!c.messages || !c.messages.length) { toast('אין מה לייצא — השיחה ריקה', true); return; }
+    md = convToMarkdown(c);
+  }
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -5453,6 +8746,10 @@ function runFind(q) {
   if (!q || q.length < 2) { updateFindCount(); return; }
   const needle = q.toLowerCase();
   const root = $('log');
+  // החיפוש סורק את הטקסט שב-DOM, ולכן גופי כרטיסים שעדיין לא נבנו היו
+  // נעלמים ממנו. בונים את כולם קודם — חיפוש הוא פעולה יזומה של המשתמש,
+  // ולשלם עליה פעם אחת עדיף על לשלם על כל ציור.
+  flushBodies(root);
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => (n.nodeValue && n.nodeValue.toLowerCase().includes(needle) && n.parentElement
       && !['SCRIPT', 'STYLE', 'MARK'].includes(n.parentElement.tagName)) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
@@ -5495,6 +8792,11 @@ function updateFindCount() {
   if (c) c.textContent = findState.marks.length ? `${findState.idx + 1}/${findState.marks.length}` : (findState.q.length >= 2 ? 'אין תוצאות' : '');
 }
 function openFind() {
+  if (!$('settings').classList.contains('hidden')) closeSettings();
+  if (isUsageModalOpen()) setUsageModalOpen(false);
+  if (!$('modal').classList.contains('hidden')) closeModal();
+  if (!$('modelPicker').classList.contains('hidden')) closeModelPicker();
+  closeModelDock({ restoreFocus: false });
   $('findBar').classList.remove('hidden');
   const i = $('findInput'); i.focus(); i.select();
 }
@@ -5502,6 +8804,12 @@ function closeFind() {
   $('findBar').classList.add('hidden');
   clearFindMarks(); findState.q = '';
   $('findInput').value = ''; updateFindCount();
+  // בדואט התיבה מוסתרת — פוקוס אליה הוא מלכודת מקלדת
+  if (document.body.classList.contains('duet-mode')) {
+    const t = $('findBtn') || $('moreBtn');
+    if (t) try { t.focus(); } catch {}
+    return;
+  }
   $('input').focus();
 }
 
@@ -5512,11 +8820,13 @@ const SHORTCUTS = [
   ['Ctrl/⌘ + Shift + F', 'חיפוש בכל השיחות (סרגל הצד)'],
   ['Ctrl/⌘ + N', 'שיחה חדשה'],
   ['Ctrl/⌘ + E', 'ייצוא השיחה ל-Markdown'],
+  ['Ctrl/⌘ + Shift + M', 'הכתבה קולית — התחלה ועצירה'],
   ['Enter', 'שליחה · Shift+Enter לשורה חדשה'],
   ['↑ / ↓ בתיבה ריקה', 'מעבר בהיסטוריית ההודעות'],
   ['/ בתחילת שורה', 'תפריט פקודות'],
   ['@', 'אזכור קובץ מתיקיית העבודה'],
   ['Esc', 'סגירת חלונית / תפריט'],
+  ['לחיצה ארוכה על שם שיחה', 'שינוי שם (בטלפון) · גם לחיצה על הכותרת'],
   ['?', 'המסך הזה'],
 ];
 function openShortcuts() {
@@ -5536,7 +8846,7 @@ $('limitResumeNow').onclick = () => {
   toast('מנסים להמשיך עכשיו…');
 };
 $('limitCancel').onclick = () => {
-  if (!sendQueueCmd('limit_cancel')) return;
+  if (!sendQueueCmd('limit_cancel')) { toast('אין חיבור לשרת', true); return; }
   setLimitState(null);
   toast('ההמשך האוטומטי בוטל');
 };
@@ -5545,6 +8855,15 @@ $('askBarGo').onclick = jumpToPendingAsk;
 $('askBar').onclick = (e) => { if (e.target === $('askBar')) jumpToPendingAsk(); };
 $('exportBtn').onclick = exportActiveConv;
 $('findBtn').onclick = openFind;
+(function wireConvTitleRename() {
+  const t = $('convTitle');
+  if (!t) return;
+  const go = (e) => { e.preventDefault(); renameConvPrompt(); };
+  t.addEventListener('click', go);
+  t.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') go(e);
+  });
+})();
 $('findClose').onclick = closeFind;
 $('findPrev').onclick = () => stepFind(-1);
 $('findNext').onclick = () => stepFind(1);
@@ -5559,14 +8878,36 @@ document.addEventListener('keydown', (e) => {
   const typing = ['INPUT', 'TEXTAREA'].includes((e.target.tagName || '')) || e.target.isContentEditable;
   if (mod && (e.key === 'f' || e.key === 'F')) {
     e.preventDefault();
-    if (e.shiftKey) { document.querySelector('.app').classList.remove('side-collapsed'); $('convSearch').focus(); $('convSearch').select(); }
-    else openFind();
+    if (e.shiftKey) {
+      // חיפוש בכל השיחות — במגירה צריך לפתוח את הסרגל, לא רק side-collapsed של דסקטופ
+      if (drawerMode()) document.querySelector('.app').classList.add('side-open');
+      else document.querySelector('.app').classList.remove('side-collapsed');
+      $('convSearch').focus(); $('convSearch').select();
+    } else {
+      if (!$('palette').classList.contains('hidden')) closePalette();
+      if (drawerMode()) closeDrawer();
+      openFind();
+    }
     return;
   }
   if (mod && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); $('newChat').click(); return; }
   if (mod && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); exportActiveConv(); return; }
+  if (mod && e.shiftKey && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); dictToggle(); return; }
   if (e.key === '?' && !typing && !mod) { e.preventDefault(); openShortcuts(); return; }
-  if (e.key === 'Escape' && !$('findBar').classList.contains('hidden')) { closeFind(); }
+  if (e.key === 'Escape' && dictOn) { e.preventDefault(); dictStop(); return; }
+  // סדר לפי שכבה ויזואלית (גבוה → נמוך)
+  if (e.key === 'Escape' && !$('palette').classList.contains('hidden')) { e.preventDefault(); closePalette(); return; }
+  if (e.key === 'Escape' && !$('modelPicker').classList.contains('hidden')) { e.preventDefault(); closeModelPicker(); return; }
+  if (e.key === 'Escape' && isModelDockOpen()) { e.preventDefault(); closeModelDock(); return; }
+  if (e.key === 'Escape' && !$('usageModal').classList.contains('hidden')) { e.preventDefault(); setUsageModalOpen(false); return; }
+  if (e.key === 'Escape' && !$('modal').classList.contains('hidden')) { e.preventDefault(); closeModal(); return; }
+  if (e.key === 'Escape' && !$('dropzone').classList.contains('hidden')) { e.preventDefault(); hideDropzone(); return; }
+  if (e.key === 'Escape' && !$('findBar').classList.contains('hidden')) { closeFind(); return; }
+  if (e.key === 'Escape' && $('godLivePanel') && !$('godLivePanel').classList.contains('hidden')) { e.preventDefault(); closeGodLive(); return; }
+  if (e.key === 'Escape' && !$('settings').classList.contains('hidden')) { e.preventDefault(); closeSettings(); return; }
+  if (e.key === 'Escape' && document.querySelector('.app')?.classList.contains('side-open')) {
+    e.preventDefault(); closeDrawer(); return;
+  }
 });
 
 /* ==========================================================================
@@ -5584,26 +8925,101 @@ document.addEventListener('keydown', (e) => {
   const apply = () => {
     const h = Math.round(composer.getBoundingClientRect().height);
     if (h) document.documentElement.style.setProperty('--composer-h', h + 'px');
+    layoutComposerOrbit();
+    if (typeof placeModelPop === 'function') placeModelPop();
+    /* כשהמחבר מתכווץ אחרי שליחה, אזור השיחה גדל והתחתית "בורחת".
+       מי שהיה צמוד לתחתית נשאר שם, בלי קפיצה באמצע. */
+    if (typeof autoScroll === 'function' && stick) autoScroll();
   };
   new ResizeObserver(apply).observe(composer);
+  const card = document.querySelector('.composer-card');
+  if (card) new ResizeObserver(() => layoutComposerOrbit()).observe(card);
   apply();
 })();
+
+/** מיישר את הגיבעה לבורדר וממרכז את השובל לשני הצדדים. */
+function layoutComposerOrbit() {
+  const svg = document.querySelector('.composer-orbit');
+  const run = svg && svg.querySelector('.orbit-run');
+  const glow = svg && svg.querySelector('.orbit-glow');
+  const bloom = svg && svg.querySelector('.orbit-bloom');
+  const card = svg && svg.closest('.composer-card');
+  if (!svg || !run || !glow || !bloom || !card) return;
+  const w = card.clientWidth, h = card.clientHeight;
+  if (w < 8 || h < 8) return;
+  const pad = 16;
+  const inset = 0.5;
+  svg.setAttribute('viewBox', `0 0 ${w + pad * 2} ${h + pad * 2}`);
+  const rad = Math.min(parseFloat(getComputedStyle(card).borderTopLeftRadius) || 24, w / 2, h / 2);
+  const x = String(pad + inset);
+  const y = String(pad + inset);
+  const rw = String(Math.max(0, w - inset * 2));
+  const rh = String(Math.max(0, h - inset * 2));
+  const rx = String(Math.max(0, rad - inset));
+  for (const el of [run, glow, bloom]) {
+    el.setAttribute('x', x);
+    el.setAttribute('y', y);
+    el.setAttribute('width', rw);
+    el.setAttribute('height', rh);
+    el.setAttribute('rx', rx);
+  }
+  const len = run.getTotalLength();
+  if (!len) return;
+  const core = 36;
+  const glowLen = 108;
+  const bloomLen = 190;
+  run.style.strokeDasharray = `${core} ${Math.max(1, len - core)}`;
+  glow.style.strokeDasharray = `${glowLen} ${Math.max(1, len - glowLen)}`;
+  bloom.style.strokeDasharray = `${bloomLen} ${Math.max(1, len - bloomLen)}`;
+  svg.style.setProperty('--orbit-len', String(len));
+  svg.style.setProperty('--orbit-glow-lead', String((glowLen - core) / 2));
+  svg.style.setProperty('--orbit-bloom-lead', String((bloomLen - core) / 2));
+}
 
 // גובה החלון שנשאר אחרי המקלדת -> --app-h.
 // ב-iOS המקלדת לא מקטינה את 100dvh, ולכן המחבר נדחף מתחת למקלדת בדיוק ברגע
 // שמתחילים להקליד. visualViewport הוא היחיד שיודע כמה מסך באמת נשאר.
 // רק במגע: בדסקטופ זום של הדפדפן משנה את visualViewport ויכווץ את הממשק לחינם.
+//
+// --app-top (= offsetTop): כשהמקלדת דוחפת את החלון החזותי למעלה בלי לשנות
+// את ה-layout, גובה לבדו משאיר פער מת בין תחתית האפליקציה למקלדת. מצמידים.
+//
+// compose-compact: *רק* כשהמקלדת באמת פתוחה. משווים לגובה המנוחה (הגבוה
+// ביותר שראינו), לא לפוקוס בשדה — אחרת המטא־נתונים נעלמים גם בלי מקלדת.
+// הסף 150px מבדיל מקלדת מצמצום סרגל הכתובת (~50–100).
 (function trackVisualViewport() {
   const vv = window.visualViewport;
   if (!vv || !matchMedia('(pointer: coarse)').matches) return;
+  let resting = vv.height;
   const apply = () => {
-    document.documentElement.style.setProperty('--app-h', Math.round(vv.height) + 'px');
+    const h = Math.round(vv.height);
+    const top = Math.round(vv.offsetTop);
+    document.documentElement.style.setProperty('--app-h', h + 'px');
+    document.documentElement.style.setProperty('--app-top', top + 'px');
     // ה-layout viewport עצמו נגלל כשהמקלדת נפתחת, והממשק "בורח" כלפי מעלה
-    if (vv.offsetTop > 0 || window.scrollY > 0) window.scrollTo(0, 0);
-    if (stick) autoScroll(true);
+    if (window.scrollY > 0) window.scrollTo(0, 0);
+    // בלי force: מי שגלל למעלה לקרוא באמצע סטרימינג לא ייזרק לתחתית כשהמקלדת נפתחת
+    if (stick) autoScroll();
+    if (h > resting) resting = h;
+    // פתיחת המקלדת וסגירתה משנות את הפריסה של שורת הכתיבה: החריץ שבו הטקסט
+    // צריך להיכנס, הריפוד, והתקרה לגובה התיבה. בלי חישוב מחדש כאן, המצב
+    // שנקבע לפני המקלדת נשאר עד ההקלדה הבאה — ורואים תיבה בגובה הלא נכון.
+    const wasCompact = document.body.classList.contains('compose-compact');
+    const keyboard = (resting - h) > 150;
+    /* תפריט המודל פתוח: לא מפילים את compact גם אם ה-<select> סגר את
+       המקלדת. אחרת הכפתור נעלם (display:none) והחלונית קופצת באמצע הבחירה. */
+    const compact = keyboard || (wasCompact && typeof isModelDockOpen === 'function' && isModelDockOpen());
+    document.body.classList.toggle('compose-compact', compact);
+    if (compact && !wasCompact && typeof closeModelDock === 'function') closeModelDock({ restoreFocus: false });
+    if (compact !== wasCompact) autoGrow();
+    if (typeof placeModelPop === 'function') placeModelPop();
   };
+  reflowComposerViewport = apply;
   vv.addEventListener('resize', apply);
   vv.addEventListener('scroll', apply);
+  addEventListener('orientationchange', () => {
+    setTimeout(() => { resting = vv.height; apply(); }, 400);
+  });
   apply();
 })();
 
@@ -5614,7 +9030,9 @@ document.addEventListener('keydown', (e) => {
   const input = $('input');
   if (!input) return;
   const full = input.placeholder;
-  const short = 'הודעה ל-Claude…';
+  /* ‎U+2066..U+2069‎ מבודדים את Claude כ-LTR בתוך משפט עברי, אחרת
+     «הודעה ל-Claude…» מוצג כ-«…Claude-ל הודעה». */
+  const short = 'הודעה ל\u2066Claude\u2069…';
   const mq = matchMedia('(max-width: 560px)');
   const apply = () => { input.placeholder = mq.matches ? short : full; };
   mq.addEventListener('change', apply);
@@ -5642,7 +9060,7 @@ function isDuet(c) { return !!(c && c.mode === 'duet'); }
 const ROLE_LABEL = { A: 'משתתף א׳', B: 'משתתף ב׳', S: 'מפקח', user: 'ממך' };
 const DUET_STATUS_LABEL = {
   setup: 'הגדרת ריצה', idle: 'מוכן', running: 'רצה', paused: 'מושהית',
-  error: 'נעצרה על שגיאה', done: 'הסתיימה',
+  error: 'נעצרה על שגיאה', done: 'הסתיימה', stopping: 'עוצר…',
 };
 const END_LABEL = {
   complete: 'המטרה הושגה', stalled: 'התכנסות — אין רווח נוסף',
@@ -5666,6 +9084,7 @@ function newDuetConv() {
   };
   store.convs.unshift(c);
   activeId = c.id;
+  c._awaitDuetSync = false;
   duetRun = null; duetLive = null; duetViewV = 0; duetVerCache.clear();
   subscribeActive();
   markSettings();
@@ -5788,9 +9207,16 @@ function renderDuetSetup(conv, log) {
   const acts = el('div', 'dt-setup-acts');
   const go = el('button', 'dt-go', 'התחל את הריצה');
   const err = el('span', 'dt-setup-err');
+  err.setAttribute('aria-live', 'polite');
+  goal.setAttribute('aria-describedby', 'dtGoalErr');
+  err.id = 'dtGoalErr';
   go.onclick = () => {
     const g = goal.value.trim();
     if (!g) { err.textContent = 'צריך מטרה כדי להתחיל.'; goal.focus(); return; }
+    let maxTurns = Number(turns.value);
+    if (!Number.isFinite(maxTurns)) maxTurns = 8;
+    maxTurns = Math.max(2, Math.min(30, Math.round(maxTurns)));
+    turns.value = String(maxTurns);
     err.textContent = '';
     go.disabled = true; go.textContent = 'מתחיל…';
     duetSetupBusy = { reset: (why) => { go.disabled = false; go.textContent = 'התחל את הריצה'; err.textContent = why || ''; } };
@@ -5802,12 +9228,11 @@ function renderDuetSetup(conv, log) {
         A: { model: rowA._model.value, effort: rowA._effort.value },
         B: { model: rowB._model.value, effort: rowB._effort.value },
         S: { model: rowS._model.value, effort: rowS._effort.value },
-        maxTurns: Number(turns.value) || 8,
+        maxTurns,
         noteVisibility: vis.value,
         cwd: conv.cwd,
       },
     });
-    // אם השרת לא ענה תוך כמה שניות, מחזירים את הכפתור במקום להשאיר מסך תקוע
     setTimeout(() => { if (!duetRun && go.isConnected && duetSetupBusy) duetSetupBusy.reset('השרת לא הגיב — נסה שוב.'); }, 8000);
   };
   acts.appendChild(go); acts.appendChild(err);
@@ -5876,8 +9301,8 @@ function renderDuetRun(log) {
   const noteBtn = el('button', 'dt-mini', 'שלח הערה');
   const sendNote = () => {
     const t = noteIn.value.trim();
-    if (!t) return;
-    duetSend('duet_note', { text: t });
+    if (!t) { toast('כתוב הערה לפני השליחה'); return; }
+    if (!duetSend('duet_note', { text: t })) return;
     noteIn.value = '';
   };
   noteBtn.onclick = sendNote;
@@ -5891,8 +9316,11 @@ function renderDuetRun(log) {
   duetDom = { root, artBody, verSel, verNote, prog, progBar: prog.querySelector('i'), progTxt, cards, lane, ctl, statusWrap, acts, costChip, goalChip, noteRow, noteIn, copyBtn, saveBtn, liveCard: null, liveBody: null };
 
   copyBtn.onclick = async () => {
-    const ok = await copyText(duetShownText());
+    const text = duetShownText();
+    if (!text) { toast('אין תוצר להעתקה עדיין', true); return; }
+    const ok = await copyText(text);
     copyBtn.textContent = ok ? 'הועתק ✓' : 'נכשל';
+    if (!ok) toast('ההעתקה נכשלה', true);
     setTimeout(() => { copyBtn.textContent = 'העתק'; }, 1400);
   };
   saveBtn.onclick = () => duetSaveFile();
@@ -5911,7 +9339,7 @@ function duetShownText() {
 
 function duetSaveFile() {
   const text = duetShownText();
-  if (!text) return;
+  if (!text) { toast('אין תוצר לשמירה עדיין', true); return; }
   const name = 'duet-v' + (duetViewV || (duetRun && duetRun.version) || 0) + '.md';
   const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
   const a = document.createElement('a');
@@ -5929,7 +9357,8 @@ async function duetShowVersion(v) {
   try {
     const r = await fetch('/api/duet/' + encodeURIComponent(activeId) + '/version/' + duetViewV);
     if (r.ok) { const d = await r.json(); duetVerCache.set(duetViewV, d.text || ''); }
-  } catch {}
+    else toast('טעינת הגרסה נכשלה', true);
+  } catch { toast('טעינת הגרסה נכשלה', true); }
   duetPaintArtifact();
 }
 
@@ -6012,8 +9441,10 @@ function duetTurnCard(t) {
   h.appendChild(roleBadge(t.speaker));
   h.appendChild(el('b', null, ROLE_LABEL[t.speaker] || t.speaker));
   h.appendChild(el('span', 'dt-vtag', 'גרסה ' + t.version));
-  const mdl = el('span', 'dt-model', t.model || 'ברירת מחדל');
-  mdl.dir = 'ltr';
+  const mdl = el('span', 'dt-model');
+  mdl.appendChild(brandMarkEl(t.model, 14));
+  mdl.appendChild(el('span', 'dt-model-name', t.model ? modelShort(t.model) : 'ברירת מחדל'));
+  mdl.title = brandTitle(t.model);
   h.appendChild(mdl);
   h.appendChild(el('span', 'dt-spacer'));
   if (t.done) h.appendChild(el('span', 'dt-flag', 'אין מה לשנות'));
@@ -6133,8 +9564,11 @@ function duetEndCard() {
   const acts = el('div', 'dt-end-acts');
   const copy = el('button', 'dt-go', 'העתק את התוצר הסופי');
   copy.onclick = async () => {
-    const ok = await copyText(duetRun.artifact || '');
+    const text = duetRun.artifact || '';
+    if (!text) { toast('אין תוצר להעתקה', true); return; }
+    const ok = await copyText(text);
     copy.textContent = ok ? 'הועתק ✓' : 'ההעתקה נכשלה';
+    if (!ok) toast('ההעתקה נכשלה', true);
     setTimeout(() => { copy.textContent = 'העתק את התוצר הסופי'; }, 1500);
   };
   const save = el('button', 'dt-mini', 'שמור לקובץ');
@@ -6189,8 +9623,10 @@ function duetMountLive() {
   h.appendChild(roleBadge(duetLive.role));
   h.appendChild(el('b', null, ROLE_LABEL[duetLive.role] || duetLive.role));
   h.appendChild(el('span', 'dt-vtag', 'גרסה ' + duetLive.version));
-  const mdl = el('span', 'dt-model', modelName(duetLive.model) || duetLive.model || 'ברירת מחדל');
-  mdl.dir = 'ltr';
+  const mdl = el('span', 'dt-model');
+  mdl.appendChild(brandMarkEl(duetLive.model, 14));
+  mdl.appendChild(el('span', 'dt-model-name', duetLive.model ? modelShort(duetLive.model) : 'ברירת מחדל'));
+  mdl.title = brandTitle(duetLive.model);
   h.appendChild(mdl);
   h.appendChild(el('span', 'dt-spacer'));
   h.appendChild(el('span', 'spinner sm'));
@@ -6219,9 +9655,11 @@ function duetPaintStatus() {
   const st = duetRun.status;
   const w = duetDom.statusWrap;
   w.innerHTML = '';
-  w.className = 'dt-state dt-state-' + st + (duetRun.pausing ? ' dt-pausing' : '');
-  if (st === 'running') w.appendChild(el('span', 'spinner sm'));
-  const label = el('b', null, st === 'running' && duetRun.pausing ? 'משהים בסוף התור' : (DUET_STATUS_LABEL[st] || st));
+  w.className = 'dt-state dt-state-' + st + (duetRun.pausing ? ' dt-pausing' : '') + (duetRun.stopping ? ' dt-stopping' : '');
+  if (st === 'running' || duetRun.stopping) w.appendChild(el('span', 'spinner sm'));
+  const label = el('b', null,
+    duetRun.stopping ? 'עוצר…'
+      : (st === 'running' && duetRun.pausing ? 'משהים בסוף התור' : (DUET_STATUS_LABEL[st] || st)));
   w.appendChild(label);
   const bits = [];
   if (duetRun.version) bits.push('גרסה ' + duetRun.version);
@@ -6372,7 +9810,7 @@ function duetAdopt(snap) {
   duetVerCache.clear();
   if (duetRun.artifact && duetRun.version) duetVerCache.set(duetRun.version, duetRun.artifact);
   const c = convById(snap.convId);
-  if (c) c.mode = 'duet';
+  if (c) { c.mode = 'duet'; c._awaitDuetSync = false; }
   if (activeId === snap.convId) renderConversation();
 }
 
@@ -6380,6 +9818,14 @@ function duetAdopt(snap) {
 function renderDuet(conv, log) {
   duetDom = null;
   log.classList.add('duet');
-  if (!duetRun || duetRun.convId !== conv.id) { renderDuetSetup(conv, log); return; }
-  renderDuetRun(log);
+  if (duetRun && duetRun.convId === conv.id) { renderDuetRun(log); return; }
+  // אחרי מעבר שיחה ה־duetRun מאופס עד הסנכרון — טופס "התחל" היה מזמין התחלה כפולה
+  if (conv._awaitDuetSync) {
+    const sk = el('div', 'conv-loading');
+    sk.appendChild(el('span', 'spinner sm'));
+    sk.appendChild(el('span', null, 'טוען את מצב הדואט…'));
+    log.appendChild(sk);
+    return;
+  }
+  renderDuetSetup(conv, log);
 }

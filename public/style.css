@@ -1,32 +1,77 @@
 /* ==========================================================================
-   ממשק עברית ל-Claude Code — בהשראת שפת העיצוב של Claude.ai
+   Sol — ממשק עברית ל-Claude Code
+   --------------------------------------------------------------------------
+   הפלטה כאן שייכת ל-Sol עצמו ולא לאף ספק שרץ דרכו. עד לאחרונה ‎--accent‎ היה
+   ‎#c2603a‎ — בדיוק הערך של ‎--claude‎ ושל ‎BRANDS.anthropic‎ ב-app.js — כלומר
+   הכרום של האפליקציה נצבע בצבע המותג של אחד מתוך עשרים הספקים, ותשובה של
+   Gemini ישבה בממשק טרקוטה. האקצנט הוא עכשיו פטרול עמוק.
+
+   הפרדה בגוון לבדה לא הייתה מספיקה כאן: רצועת הטורקיז תפוסה בערך כל 10 מעלות
+   (felo 153°, OpenAI 166°, Gemma 178°, Perplexity 187°, Cursor 196°), וכל
+   טורקיז שנבחר יושב ליד מישהו. ההפרדה היא לכן ברמת *הרגיסטר* ולא הגוון:
+   האקצנט כהה בהרבה מהם במצב הבהיר (בהירות 21% מול 31-35%) ודהוי בהרבה במצב
+   הכהה (רוויה 33% מול 51-57%). סימני המותג צווחניים ומופיעים כגליפים של
+   16‑22 פיקסלים; הכרום עמום ומופיע כמשטחים גדולים — ולכן הם לא מתחרים.
+
+   הנייטרלים הם נייר בסלייט קר, בלי נטייה לשום גוון מותג, ורחוקים מהקרם החם
+   שמזוהה עם ממשק אחר.
    ========================================================================== */
 :root {
-  /* בהיר (קרם חמים) */
-  --bg: #faf9f5;
-  --sidebar: #f2f0e9;
+  /* בהיר (נייר קריר) */
+  --bg: #fbfbfc;
+  --sidebar: #f1f2f4;
   --panel: #ffffff;
-  --panel-2: #f0eee7;
-  --border: #e7e4da;
-  --border-soft: #efece4;
-  --text: #2b2925;
-  --text-dim: #6d675c;
-  --text-faint: #9a9488;
-  --accent: #c2603a;
-  --accent-2: #d97757;
-  --accent-soft: #f6e7dd;
-  --user-bg: #f1efe8;
-  --user-border: #e5e2d8;
-  --code-bg: #f4f2ea;
-  --good: #3f8f5b; --good-soft: #e6f1e9;
-  --warn: #b5721f; --warn-soft: #fbf0dc; --danger: #c0453a; --danger-soft: #f7e4e1;
-  --add-bg: #e6f2e9; --add-fg: #1f6e3a; --del-bg: #fae5e2; --del-fg: #a53b30;
-  /* GOD — סגול, הצבע היחיד בערכה שאינו בגוונים החמים של השאר. זו הנקודה:
-     כשמצב ההרשאות מאשר הכול, אסור שהוא ייראה כמו עוד בחירה ברשימה. */
-  --god: #6d3ad4; --god-soft: #efe8fd;
-  --shadow-sm: 0 1px 2px rgba(60,50,40,.06);
-  --shadow: 0 1px 3px rgba(60,50,40,.06), 0 12px 32px rgba(60,50,40,.07);
-  --shadow-lg: 0 16px 48px rgba(40,30,20,.16);
+  --panel-2: #edeef1;
+  --border: #e2e4e8;
+  --border-soft: #eaecef;
+  --text: #232830;
+  --text-dim: #626a74;
+  /* הוכהה מ-‎#848c96‎: על המשטח הבהיר-הכהה ביותר (‎--user-bg‎) הוא נתן 3.03:1,
+     כלומר תוויות בכרטיסי הכלים לא עמדו בסף הקריאוּת. עכשיו 4.52:1. */
+  /* הובהר מ-‎#686f79‎: על ‎--panel-2‎ היה 4.37:1. עכשיו ≥4.5 על כל משטחי הטקסט העמומים. */
+  --text-faint: #646b75;
+  --accent: #0b5f5a;
+  --accent-2: #0f7d76;
+  --accent-soft: #e3f0ef;
+  /* הדיו שיושב *על* משטח ממולא באקצנט. הוא משתנה ולא ‎#fff‎ קשיח כי במצב
+     הכהה האקצנט עצמו בהיר — לבן עליו נותן 2.3:1, כלומר כפתור השליחה היה
+     נקרא רק למי שכבר יודע מה כתוב בו. דיו כהה שם נותן 7.3:1. */
+  --on-accent: #ffffff;
+  --user-bg: #f0f2f4;
+  --user-border: #e3e6ea;
+  --code-bg: #f3f4f7;
+  /* שלושת צבעי המצב הוכהו בערכה הבהירה. הם משמשים בשני תפקידים הפוכים —
+     דיו על הגוון הרך שלהם (תג «הצליח», «נכשל», «נדחה») ורקע מתחת ללבן
+     (כפתור «תמיד») — ובשניהם הם נפלו מתחת ל-4.5:1. הכהיה משפרת את שניהם
+     בבת אחת: התג עלה מ-3.4 ל-4.5, והלבן שעל הכפתור מ-3.97 ל-5.26.
+
+     ואז הוכהו שוב ב-5%. 4.5 בדיוק אינו מקום לשבת בו: מדידה בדפדפן החזירה
+     4.53 / 4.54 / 4.54 לשלושת התגים — כלומר הם עוברים או נכשלים לפי עיגול,
+     ותג «שגיאה» אכן נפל מתחת לסף במדידה אחת. עכשיו ‎4.91‎ בתפקיד הדיו
+     ו-‎5.7‎ בתפקיד הרקע, וההכהיה עצמה אינה נראית לעין. */
+  --good: #327349; --good-soft: #e6f1e9;
+  /* ‎--good‎ נדחף לירוק-דשא במצב הכהה. שם האקצנט הוא טורקיז עמום באותה
+     בהירות בדיוק, ו«אשר» ו«תמיד» יושבים צמודים בדיאלוג ההרשאות — שני
+     פסטלים ירקרקים זה לצד זה הם בדיוק המקום שבו אסור לנחש. */
+  /* ‎--danger‎ מוחזק באדום-כתום מובהק — רחוק גם מהפטרול וגם מהטרקוטה של
+     Claude, כדי שרגע של אזהרה לא ידרוש הבחנה בין שני גוונים שכנים. */
+  --warn: #925c19; --warn-soft: #fbf0dc; --danger: #b43829; --danger-soft: #f9e5e1;
+  --add-bg: #e6f2e9; --add-fg: #1f6e3a; --del-bg: #fae7e3; --del-fg: #a8402c;
+  /* הדגשת הקוד — ראו «הצבעים שהודלפו מהתמה» לקראת סוף הקובץ. */
+  --hl-keyword: #c11626; --hl-builtin: #8f4400; --hl-comment: #57606a;
+  --hl-name: #116329; --hl-section: #005cc5;
+  /* GOD — סגול, הצד הנגדי של הגלגל מול הפטרול. כשמצב ההרשאות מאשר הכול,
+     אסור שהוא ייראה כמו עוד בחירה ברשימה. */
+  --god: #5b34d6; --god-soft: #ebe6fd;
+  /* בידול המכסות: המדים של שני הסוכנים יושבים זה מול זה באותו חלון, ולכן
+     הצבע הוא מה שמזהה אותם לפני שקוראים מילה. אלה צבעי המותג של הספקים ולא
+     של Sol — Claude בטרקוטה שלו, Cursor בכחול-ים שלו — ומאז שהאקצנט יצא
+     מהטרקוטה שניהם גם נבדלים מהכרום של האפליקציה עצמה. */
+  --claude: #c2603a; --claude-soft: #f6e7dd;
+  --cursor: #1f6f8b; --cursor-soft: #dceef4;
+  --shadow-sm: 0 1px 2px rgba(30,38,44,.07);
+  --shadow: 0 1px 3px rgba(30,38,44,.07), 0 12px 32px rgba(30,38,44,.08);
+  --shadow-lg: 0 16px 48px rgba(20,28,34,.18);
   --radius: 16px;
   --serif: "Tiempos Text", "Frank Ruhl Libre", "Noto Serif Hebrew", "Noto Serif", Georgia, ui-serif, serif;
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
@@ -34,24 +79,36 @@
 }
 :root[data-theme="light"] { color-scheme: light; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #262624; --sidebar: #1f1e1c; --panel: #2f2e2b; --panel-2: #3a3936; --border: #3d3c38; --border-soft: #34332f;
-  --text: #f3f2ec; --text-dim: #b4afa4; --text-faint: #837e73;
-  --accent: #d97757; --accent-2: #e69a7f; --accent-soft: #392b23;
-  --user-bg: #35342f; --user-border: #43423d; --code-bg: #1f1e1c;
-  --good: #6cc088; --good-soft: #1e2a22; --warn: #d9a24e; --warn-soft: #2e2617; --danger: #e07064; --danger-soft: #32201d;
-  --add-bg: #17281c; --add-fg: #7fc894; --del-bg: #2f1a17; --del-fg: #e08277;
-  --god: #b98bff; --god-soft: #291f3d;
+  --bg: #212528; --sidebar: #1a1d20; --panel: #2a2e32; --panel-2: #353a3f; --border: #3a4046; --border-soft: #2f3438;
+  /* ‎--text-faint‎ הובהר מ-‎#7d848c‎: על ‎--panel-2‎ הוא נתן 3.04:1. עכשיו 4.51. */
+  --text: #f0f2f4; --text-dim: #aeb5bd; --text-faint: #9da3a9;
+  --accent: #6fb6ae; --accent-2: #97cdc6; --accent-soft: #16302d; --on-accent: #08201e;
+  --user-bg: #30353a; --user-border: #3e444a; --code-bg: #1a1d20;
+  --good: #74c775; --good-soft: #1e2a22; --warn: #d9a24e; --warn-soft: #2e2617; --danger: #ef7055; --danger-soft: #331e19;
+  /* בכהה רק ‎section‎ נפל (3.65:1 על ‎--code-bg‎); השאר עוברים כמות שהם. */
+  --hl-keyword: #ff7b72; --hl-builtin: #ffa657; --hl-comment: #8b949e;
+  --hl-name: #7ee787; --hl-section: #79c0ff;
+  --add-bg: #17281c; --add-fg: #7fc894; --del-bg: #301b15; --del-fg: #ef8069;
+  --god: #9d8cff; --god-soft: #262040;
+  --claude: #d97757; --claude-soft: #392b23;
+  --cursor: #6bb9d6; --cursor-soft: #172b33;
   --shadow-sm: 0 1px 2px rgba(0,0,0,.3); --shadow: 0 1px 3px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.32); --shadow-lg: 0 18px 52px rgba(0,0,0,.55);
   color-scheme: dark;
 } }
 :root[data-theme="dark"] {
-  --bg: #262624; --sidebar: #1f1e1c; --panel: #2f2e2b; --panel-2: #3a3936; --border: #3d3c38; --border-soft: #34332f;
-  --text: #f3f2ec; --text-dim: #b4afa4; --text-faint: #837e73;
-  --accent: #d97757; --accent-2: #e69a7f; --accent-soft: #392b23;
-  --user-bg: #35342f; --user-border: #43423d; --code-bg: #1f1e1c;
-  --good: #6cc088; --good-soft: #1e2a22; --warn: #d9a24e; --warn-soft: #2e2617; --danger: #e07064; --danger-soft: #32201d;
-  --add-bg: #17281c; --add-fg: #7fc894; --del-bg: #2f1a17; --del-fg: #e08277;
-  --god: #b98bff; --god-soft: #291f3d;
+  --bg: #212528; --sidebar: #1a1d20; --panel: #2a2e32; --panel-2: #353a3f; --border: #3a4046; --border-soft: #2f3438;
+  /* ‎--text-faint‎ הובהר מ-‎#7d848c‎: על ‎--panel-2‎ הוא נתן 3.04:1. עכשיו 4.51. */
+  --text: #f0f2f4; --text-dim: #aeb5bd; --text-faint: #9da3a9;
+  --accent: #6fb6ae; --accent-2: #97cdc6; --accent-soft: #16302d; --on-accent: #08201e;
+  --user-bg: #30353a; --user-border: #3e444a; --code-bg: #1a1d20;
+  --good: #74c775; --good-soft: #1e2a22; --warn: #d9a24e; --warn-soft: #2e2617; --danger: #ef7055; --danger-soft: #331e19;
+  /* בכהה רק ‎section‎ נפל (3.65:1 על ‎--code-bg‎); השאר עוברים כמות שהם. */
+  --hl-keyword: #ff7b72; --hl-builtin: #ffa657; --hl-comment: #8b949e;
+  --hl-name: #7ee787; --hl-section: #79c0ff;
+  --add-bg: #17281c; --add-fg: #7fc894; --del-bg: #301b15; --del-fg: #ef8069;
+  --god: #9d8cff; --god-soft: #262040;
+  --claude: #d97757; --claude-soft: #392b23;
+  --cursor: #6bb9d6; --cursor-soft: #172b33;
   --shadow-sm: 0 1px 2px rgba(0,0,0,.3); --shadow: 0 1px 3px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.32); --shadow-lg: 0 18px 52px rgba(0,0,0,.55);
   color-scheme: dark;
 }
@@ -64,7 +121,6 @@ body {
   -webkit-font-smoothing: antialiased; overflow: hidden;
 }
 ::selection { background: color-mix(in srgb, var(--accent) 26%, transparent); }
-.sun svg line { stroke: var(--accent); }
 
 .app {
   --side-w: 272px;
@@ -73,10 +129,13 @@ body {
   /* dvh ולא vh: בטלפון סרגל הכתובת מתכווץ ומתרחב, ו-100vh גולש מתחת למסך
      ומסתיר את שדה הכתיבה בדיוק כשצריך אותו.
      --app-h מגיע מ-visualViewport ב-JS ורלוונטי רק במגע: ב-iOS המקלדת *לא*
-     מקטינה את ה-dvh, ולכן בלי זה המחבר נדחף מתחת למקלדת ברגע שמתחילים להקליד. */
+     מקטינה את ה-dvh, ולכן בלי זה המחבר נדחף מתחת למקלדת ברגע שמתחילים להקליד.
+     --app-top מצמיד את האפליקציה לחלון החזותי כש-offsetTop > 0 (אחרת נשאר
+     פער כהה בין תחתית המחבר לראש המקלדת). */
   height: 100vh;
   height: 100dvh;
   height: var(--app-h, 100dvh);
+  margin-top: var(--app-top, 0px);
   transition: grid-template-columns .2s ease;
 }
 .app.side-collapsed { grid-template-columns: 0 0 1fr; }
@@ -103,7 +162,12 @@ body {
 }
 .app.side-collapsed .side-resizer { pointer-events: none; }
 .side-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 10px; }
-.wordmark { font-family: var(--serif); font-size: 24px; letter-spacing: .2px; color: var(--text); }
+.wordmark { display: flex; align-items: center; gap: 8px; font-family: var(--serif); font-size: 24px; letter-spacing: .2px; color: var(--text); }
+/* הסימן מיושר לגובה ה-x של השם ולא לגובה השורה — אחרת הוא צף מעל הבסיס */
+.wm-mark {
+  width: 23px; height: 23px; flex: none; margin-block-start: 1px;
+  fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round;
+}
 .side-nav { padding: 6px 8px; }
 .nav-row {
   width: 100%; display: flex; align-items: center; gap: 10px; text-align: start;
@@ -174,13 +238,16 @@ body {
 .topbar.tight #moreBtn { display: grid; }
 .topbar.tight .presence { font-size: 0; padding: 3px 7px; }
 .topbar.tight .presence::before { content: "⛓" attr(data-n); font-size: 11px; }
+.topbar.tight .presence[data-mode="view"]::before { content: "👁" attr(data-n); font-size: 11px; }
 .topbar.tight .save-dot:not(.error) { display: none; }
 .title-wrap { flex: 1; display: flex; align-items: center; gap: 9px; min-width: 0; }
-/* ‎flex: 1 1 auto‎ ולא ברירת המחדל: הצ׳יפ של תיקיית העבודה היה ‎flex:none‎,
-   ולכן הוא לקח את הרוחב לפני הכותרת — בנתיב ארוך (או במסך של 360px) הכותרת
-   הצטמצמה לרוחב *אפס* ולא נראתה בכלל. עכשיו הכותרת מקבלת את הרוחב הפנוי,
-   והצ׳יפ הוא זה שנחתך. */
-.title-wrap strong { flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; color: var(--text-dim); }
+/* הכותרת והנקודה נשארות ב-DOM (שינוי שם מלוח הפקודות / לחיצה ארוכה, ו-setStatus
+   עדיין מעדכן את הנקודה), אבל בסרגל העליון הן רעש ליד תיקיית העבודה. */
+.title-wrap #convTitle,
+.title-wrap #statusDot { display: none; }
+.title-wrap strong { flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; color: var(--text-dim); cursor: pointer; border-radius: 8px; }
+.title-wrap strong:hover { color: var(--text); }
+.title-wrap strong:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .icon-btn { border: none; background: transparent; color: var(--text-dim); font-size: 17px; cursor: pointer; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; flex: none; transition: background .12s, color .12s; }
 .icon-btn:hover { background: var(--panel-2); color: var(--text); }
 /* אייקוני קו אחידים — מחליפים אמוג'י צבעוני שלא הסתדר עם שאר השפה העיצובית */
@@ -203,7 +270,7 @@ body {
   transition: color .2s, background .2s, box-shadow .2s;
 }
 body.busy .status-pill {
-  color: #fff; background: var(--accent);
+  color: var(--on-accent); background: var(--accent);
   box-shadow: 0 0 0 1px var(--accent), 0 0 14px color-mix(in srgb, var(--accent) 60%, transparent);
   animation: pillPulse 1.1s ease-in-out infinite;
 }
@@ -225,7 +292,7 @@ body.busy .top-progress > span { animation: topSlide 1.15s cubic-bezier(.4,0,.2,
 @keyframes topSlide { 0% { inset-inline-start: -45%; } 100% { inset-inline-start: 105%; } }
 
 /* הגדרות */
-.settings { position: absolute; top: 54px; inset-inline-end: 16px; z-index: 20; width: min(340px, 90vw); display: flex; flex-direction: column; gap: 12px; padding: 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-lg); animation: pop .16s ease; }
+.settings { position: absolute; top: 54px; inset-inline-end: 16px; z-index: 20; width: min(340px, 90vw); max-height: min(72vh, calc(100dvh - 80px)); overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-lg); animation: pop .16s ease; }
 @keyframes pop { from { opacity: 0; transform: translateY(-6px); } }
 .settings label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-dim); font-weight: 600; }
 .settings input, .settings select { font-family: var(--ui); font-size: 14px; font-weight: 400; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; }
@@ -249,9 +316,16 @@ body.busy .top-progress > span { animation: topSlide 1.15s cubic-bezier(.4,0,.2,
 .settings .switch-row { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; }
 .settings .switch-row input { width: 16px; height: 16px; padding: 0; accent-color: var(--accent); cursor: pointer; flex: none; }
 .settings .switch-row input:disabled { cursor: not-allowed; opacity: .5; }
+/* מתג שאי-אפשר להפעיל אותו כרגע — נשאר קריא (ההסבר למה הוא כבוי יושב
+   ב-hint שמתחתיו) אבל מפסיק להיראות כמו משהו שמחכה ללחיצה */
+.settings .switch-row.off { cursor: default; color: var(--text-dim); }
+/* כותרת שורה שאין בה שדה קלט (ולכן אינה label) — אותה טיפוגרפיה בדיוק */
+.settings .set-label { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+.settings .set-actions .mini.hidden { display: none; }
 .settings .set-actions { display: flex; gap: 6px; }
 .settings .set-actions .mini { border: 1px solid var(--border); }
 .settings .set-actions .mini:disabled { opacity: .45; cursor: not-allowed; background: transparent; color: var(--text-dim); }
+.settings #localUrl { font-size: 12.5px; }
 /* ---------- מיקוד מקלדת ----------
    עד כה רק שדות קלט קיבלו טבעת מעוצבת, וכל *כפתור* בממשק נשאר עם טבעת
    ברירת המחדל של הדפדפן — צבע שאינו מהפלטה, עובי שמשתנה בין דפדפנים, ולפעמים
@@ -290,8 +364,45 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 }
 
 .assistant .role-tag { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text-dim); margin-bottom: 9px; font-weight: 600; }
-.assistant .avatar { width: 24px; height: 24px; flex: none; display: grid; place-items: center; color: var(--accent); }
-.assistant .avatar svg { width: 22px; height: 22px; }
+/* שם המודל הוא כמעט תמיד לטיני בתוך ממשק ימין-לשמאל — plaintext נותן לו
+   לשבת בכיוון שלו בלי להפוך את סדר הסימן והשם. */
+.assistant .role-name { unicode-bidi: plaintext; }
+
+/* ==========================================================================
+   סימני מותג לפי מודל
+   --------------------------------------------------------------------------
+   ‎.bmark‎ הוא עטיפה בגודל קבוע (‎--bm-size‎) שצובעת את ה-SVG שבתוכה בצבע
+   המותג. הצבע מגיע בשני משתנים — ‎--bm-l‎ לבהיר ו---bm-d‎ לכהה — שנכתבים
+   ב-style על האלמנט מתוך הרישום שב-app.js; הבחירה ביניהם נעשית כאן, פעם
+   אחת, ולא בכל מקום שמצייר סימן.
+
+   ‎.bmark-via‎ הוא התג הפינתי: מודל Claude שרץ דרך Cursor מקבל את הסימן של
+   Claude ואת התג של Cursor. טבעת בצבע הרקע מפרידה בין השניים גם כשהם
+   נוגעים.
+   ========================================================================== */
+.bmark, .bmark-tint {
+  color: var(--bm-l, var(--accent));
+}
+.bmark {
+  position: relative; flex: none;
+  display: inline-grid; place-items: center;
+  width: var(--bm-size, 22px); height: var(--bm-size, 22px);
+}
+.bmark > svg { display: block; width: 100%; height: 100%; }
+.bmark-via {
+  position: absolute; inset-block-end: -2px; inset-inline-end: -3px;
+  display: grid; place-items: center;
+  width: 56%; height: 56%; border-radius: 50%;
+  background: var(--bmark-ring, var(--bg));
+  box-shadow: 0 0 0 1.5px var(--bmark-ring, var(--bg));
+  color: var(--bm-l, var(--accent));
+}
+.bmark-via > svg { display: block; width: 100%; height: 100%; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) :is(.bmark, .bmark-via, .bmark-tint)
+  { color: var(--bm-d, var(--bm-l, var(--accent))); } }
+:root[data-theme="dark"] :is(.bmark, .bmark-via, .bmark-tint) { color: var(--bm-d, var(--bm-l, var(--accent))); }
+/* טבעת ההפרדה של התג הפינתי לובשת את רקע המשטח שמתחתיו */
+.palette-card, .mp-card, .dt-turn, .dt-cards { --bmark-ring: var(--panel); }
 .assistant .content { display: flex; flex-direction: column; gap: 2px; }
 
 /* BIDI */
@@ -312,14 +423,23 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .code-wrap { position: relative; margin: 0 0 .85em; }
 .md pre { direction: ltr; text-align: left; background: var(--code-bg); border: 1px solid var(--border); border-radius: 13px; padding: 14px 16px; margin: 0; overflow-x: auto; }
 .md pre code { background: none; border: none; padding: 0; unicode-bidi: embed; display: block; white-space: pre; line-height: 1.55; font-family: var(--mono); font-size: 13px; }
-.copy-btn { position: absolute; inset-inline-end: 9px; inset-block-start: 9px; font-family: var(--ui); font-size: 11px; background: var(--panel); color: var(--text-dim); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; cursor: pointer; opacity: 0; transition: opacity .14s, color .12s; z-index: 2; }
-.code-wrap:hover .copy-btn { opacity: 1; }
+/* הקוד LTR ותחילת השורה משמאל. inset-inline-end בממשק עברי נוחת משמאל
+   ומכסה את התווים הראשונים. right פיזי + ריפוד עליון משאירים את הכפתור
+   בפינה בלי לדרוס טקסט — בטלפון הוא תמיד גלוי, לא רק בריחוף. */
+.copy-btn { position: absolute; top: 9px; right: 9px; font-family: var(--ui); font-size: 11px; background: var(--panel); color: var(--text-dim); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; cursor: pointer; opacity: 0; transition: opacity .14s, color .12s; z-index: 2; }
+.code-wrap > pre, .code-wrap > .mermaid-box { padding-top: 40px; }
+.code-wrap:hover .copy-btn, .code-wrap:focus-within .copy-btn { opacity: 1; }
 .copy-btn:hover { color: var(--text); border-color: var(--accent); }
 .copy-btn.done { color: var(--good); border-color: var(--good); }
 
 .md .table-wrap { overflow-x: auto; margin: 0 0 .85em; }
 .md table { border-collapse: collapse; font-size: .94em; }
-.md th, .md td { border: 1px solid var(--border); padding: 7px 11px; unicode-bidi: plaintext; text-align: start; }
+.md th, .md td {
+  border: 1px solid var(--border); padding: 7px 11px; unicode-bidi: plaintext; text-align: start;
+  /* ‎.overflow-wrap: anywhere‎ על ‎.md‎ היה שובר תאים במקום לגלול את העטיפה —
+     בטלפון זה נראה כמו עמודה שנמעכה באמצע המסך, עם כפתור «לתחתית» עליה. */
+  white-space: nowrap; overflow-wrap: normal; word-break: normal;
+}
 .md th { background: var(--panel-2); font-weight: 600; }
 .mermaid-box { background: var(--panel); border: 1px solid var(--border); border-radius: 13px; padding: 16px; margin: 0 0 .85em; overflow-x: auto; text-align: center; direction: ltr; }
 
@@ -348,7 +468,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .tool-rej-note { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
 .tool-rej-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px; }
 .tool-rej-btn { font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
-  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
   border-radius: 8px; padding: 5px 11px; }
 .tool-rej-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .tool-rej-btn:disabled { opacity: .6; cursor: default; }
@@ -367,7 +487,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
    הפקודה ולא את תחילתה. בכרטיס שכל תפקידו הוא "אשר או דחה את זה" זו בדיוק
    השורה שאסור להסתיר. בדרך הוא גם קיבל ריפוד, מסגרת, גלישת שורות ותקרת גובה. */
 .tool pre, .perm-body pre { direction: ltr; text-align: left; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; background: var(--code-bg); border: 1px solid var(--border-soft); border-radius: 9px; padding: 10px 11px; margin: 0; overflow: auto; white-space: pre-wrap; word-break: break-word; max-height: 360px; }
-.term { background: #17160f !important; color: #d8d2c4; border-color: #2a281f !important; }
+.term { background: #14181a !important; color: #d3d9db; border-color: #262c2f !important; }
 
 .diff { border: 1px solid var(--border-soft); border-radius: 9px; overflow: auto; max-height: 360px; direction: ltr; }
 .diff pre { border: none; border-radius: 0; margin: 0; max-height: none; }
@@ -384,53 +504,55 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .todo .st-in_progress { color: var(--accent); font-weight: 600; }
 
 /* ===== עבודה + גלילה ===== */
-/* בר "מעבד" בולט — כרטיס אקצנט מלא עם זוהר פועם, יושב מעל הקלט */
-/* --composer-h נמדד ב-JS מגובה ה-<footer> בפועל. הערך היה קבוע (132px), וכל דבר
+/* חיווי העבודה הוא מסגרת נעה סביב תיבת הכתיבה — לא כרטיס אקצנט שצף באמצע.
+   --composer-h נמדד ב-JS מגובה ה-<footer> בפועל. הערך היה קבוע (132px), וכל דבר
    שמגדיל את המחבר — רצועת המכסה, צרופות, תור הודעות, ובעיקר עטיפת הבוררים
    בטלפון — הקפיץ את הבר הזה אל *מעל* תיבת הכתיבה והסתיר את "שלח". */
-.working {
+.work-dock {
   position: absolute; bottom: calc(var(--composer-h, 132px) + 12px); inset-inline: 0; z-index: 6;
-  /* wrap: הבר צובר פריטים במצב תקוע (חיווי + "סנכרן" + "עצור"), ובלי זה הם
-     נדחסים החוצה מהמסך הצר בדיוק כשהכי צריך אותם. */
-  display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  pointer-events: none;
+}
+.work-dock > * { pointer-events: auto; }
+.working {
+  /* wrap: במצב תקוע מצטברים «סנכרן» + GOD, ובלי זה הם נדחסים מהמסך הצר. */
+  display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;
   width: max-content; max-width: calc(100% - 48px); margin: 0 auto;
-  padding: 10px 16px; border-radius: 14px; font-size: 14px; font-weight: 650;
-  color: #fff; background: linear-gradient(120deg, var(--accent), var(--accent-2));
-  box-shadow: 0 6px 22px color-mix(in srgb, var(--accent) 45%, transparent);
-  pointer-events: none; animation: workGlow 1.5s ease-in-out infinite;
+  padding: 0; border-radius: 12px; font-size: 13px; font-weight: 650;
+  color: var(--text); background: transparent; box-shadow: none;
 }
-@keyframes workGlow {
-  0%,100% { box-shadow: 0 6px 22px color-mix(in srgb, var(--accent) 40%, transparent); }
-  50%     { box-shadow: 0 6px 30px color-mix(in srgb, var(--accent) 72%, transparent); }
-}
-.working > * { pointer-events: auto; }
 .working.hidden { display: none; }
+/* הספינר והטקסט נשארים ל-aria-live; הרמז הוויזואלי הוא המסגרת הנעה. */
+.working > .spinner,
+.working > #workingText {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 #workingText { unicode-bidi: plaintext; }
-.spinner { width: 17px; height: 17px; border-radius: 50%; flex: none; border: 2.5px solid rgba(255,255,255,.35); border-top-color: #fff; animation: spin .7s linear infinite; }
+.spinner { width: 17px; height: 17px; border-radius: 50%; flex: none; border: 2.5px solid color-mix(in srgb, currentColor 35%, transparent); border-top-color: currentColor; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation-duration: 2.4s; }
   .app, .working, body.busy .status-pill, body.busy .top-progress > span { animation: none; }
+  .orbit-bloom, .orbit-glow, .orbit-run, .send.stopping { animation: none; }
 }
-.stop { margin-inline-start: 4px; background: rgba(255,255,255,.18); color: #fff; border: 1px solid rgba(255,255,255,.5); padding: 5px 15px; font-size: 12.5px; font-weight: 650; border-radius: 9px; cursor: pointer; font-family: var(--ui); transition: background .12s; }
-.stop:hover { background: rgba(255,255,255,.3); }
 
 /* ---------- קרוס־צ'ק: כשהתור נראה תקוע ---------- */
-/* הבר מפסיק לפעום ועובר לצבע אזהרה. "עובד" ו"אין קשר" נראו עד עכשיו זהים
-   לחלוטין, וזו כל הסיבה שאפשר היה לשבת מול מסך תקוע בלי לדעת שהוא תקוע. */
-body.stale .working {
-  animation: none;
-  background: linear-gradient(120deg, var(--warn), color-mix(in srgb, var(--warn) 74%, #000));
-  box-shadow: 0 6px 22px color-mix(in srgb, var(--warn) 45%, transparent);
+/* הצ׳יפ מופיע רק כשאין סנכרון — קומפקטי, לא הריבוע הגדול שהיה כאן. */
+body.stale .working, body.nosync .working {
+  padding: 6px 8px 6px 12px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--border));
 }
 body.stale .spinner { animation-duration: 2.4s; opacity: .7; }
 .stale-note { font-size: 12.5px; font-weight: 600; opacity: .95; white-space: nowrap; unicode-bidi: plaintext; }
 .resync {
-  background: rgba(255,255,255,.94); color: var(--warn); border: none;
+  background: var(--panel); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border));
   padding: 6px 14px; font-size: 12.5px; font-weight: 700; border-radius: 9px;
   cursor: pointer; font-family: var(--ui); white-space: nowrap; transition: background .12s, opacity .12s;
 }
-.resync:hover { background: #fff; }
+.resync:hover { background: var(--danger-soft); }
 .resync:disabled { opacity: .6; cursor: default; }
 
 /* כפתור הקרוס־צ'ק שבסרגל העליון — קיים גם כשאין תור פעיל. מסתובב בזמן
@@ -438,11 +560,90 @@ body.stale .spinner { animation-duration: 2.4s; opacity: .7; }
    בצבע האזהרה כשהמסך ממילא נראה תקוע. */
 #syncBtn.checking { pointer-events: none; }
 #syncBtn.checking svg { animation: spin .9s linear infinite; }
-body.stale #syncBtn { color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); }
+body.stale #syncBtn, body.nosync #syncBtn { color: var(--danger); background: color-mix(in srgb, var(--danger) 15%, transparent); }
 
-/* ---------- זוהר סביב תיבת הקלט בזמן עבודה ---------- */
-body.busy .composer-card { box-shadow: 0 0 0 2px var(--accent), 0 8px 28px color-mix(in srgb, var(--accent) 28%, transparent); }
-.composer-card { transition: box-shadow .3s; }
+/* ---------- דגש שנע *בתוך* קו המסגרת בזמן עבודה ---------- */
+.composer { overflow: visible; }
+.composer-card { position: relative; overflow: visible; }
+.composer-orbit {
+  --orbit-len: 1600;
+  --orbit-glow-lead: 36;
+  --orbit-bloom-lead: 77;
+  position: absolute; inset: -16px;
+  display: block; overflow: visible; pointer-events: none; z-index: 4;
+  opacity: 0; visibility: hidden;
+}
+body.busy .composer-orbit { opacity: 1; visibility: visible; transition: opacity .35s ease; }
+body.busy .composer-card,
+body.busy .composer-card:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+}
+body.busy.stale .composer-card,
+body.busy.nosync .composer-card,
+body.busy.stale .composer-card:focus-within,
+body.busy.nosync .composer-card:focus-within {
+  border-color: var(--danger);
+}
+/* אותו מלבן כמו הבורדר: גבעה במרכז, שובל סימטרי לשני הצדדים. */
+.orbit-bloom,
+.orbit-glow,
+.orbit-run {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.orbit-run {
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-dasharray: 36 4000;
+  animation: composerOrbit 2.8s linear infinite;
+}
+.orbit-glow {
+  stroke: var(--accent);
+  stroke-width: 4.5;
+  stroke-dasharray: 108 4000;
+  opacity: .4;
+  filter: blur(1.6px);
+  animation: composerOrbitGlow 2.8s linear infinite;
+}
+.orbit-bloom {
+  stroke: var(--accent);
+  stroke-width: 8;
+  stroke-dasharray: 190 4000;
+  opacity: .22;
+  filter: blur(5px);
+  animation: composerOrbitBloom 2.8s linear infinite;
+}
+html[data-theme="dark"] .orbit-run { stroke: var(--accent-2); }
+body.stale .orbit-bloom,
+body.nosync .orbit-bloom,
+body.stale .orbit-glow,
+body.nosync .orbit-glow,
+body.stale .orbit-run,
+body.nosync .orbit-run { stroke: var(--danger); }
+@keyframes composerOrbit {
+  from { stroke-dashoffset: 0px; }
+  to { stroke-dashoffset: calc(var(--orbit-len) * -1px); }
+}
+@keyframes composerOrbitGlow {
+  from { stroke-dashoffset: calc(var(--orbit-glow-lead) * 1px); }
+  to { stroke-dashoffset: calc((var(--orbit-glow-lead) - var(--orbit-len)) * 1px); }
+}
+@keyframes composerOrbitBloom {
+  from { stroke-dashoffset: calc(var(--orbit-bloom-lead) * 1px); }
+  to { stroke-dashoffset: calc((var(--orbit-bloom-lead) - var(--orbit-len)) * 1px); }
+}
+body.compose-compact .composer-orbit {
+  position: absolute; inset: -16px;
+  width: auto; height: auto; flex: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.busy .composer-card { box-shadow: var(--shadow), 0 0 0 1px var(--accent); }
+  body.busy.stale .composer-card,
+  body.busy.nosync .composer-card { box-shadow: var(--shadow), 0 0 0 1px var(--danger); }
+}
 
 /* ---------- הבזק "הסתיים" — סימן חיובי בולט בסיום תור ---------- */
 .done-flash {
@@ -475,7 +676,14 @@ body.just-done .composer-card { animation: doneRing 1.3s ease-out; }
   @keyframes doneFlashRM { 0%,85% { opacity: 1; visibility: visible; } 100% { opacity: 0; visibility: hidden; } }
   body.just-done .composer-card { animation: none; }
 }
-.jump { position: absolute; bottom: calc(var(--composer-h, 132px) + 12px); inset-inline-start: 50%; transform: translateX(50%); width: 38px; height: 38px; border-radius: 50%; background: var(--panel); border: 1px solid var(--border); color: var(--text-dim); box-shadow: var(--shadow); cursor: pointer; font-size: 18px; z-index: 5; }
+.jump {
+  position: absolute; bottom: calc(var(--composer-h, 132px) + 12px);
+  /* left פיזי + translateX(-50%): inset-inline-start:50% עם translateX(50%)
+     ב-RTL שם את הכפתור ימין למרכז (right:50% מזיז את הקצה הימני למרכז,
+     ואז +50% רוחב דוחף אותו עוד ימינה). */
+  left: 50%; right: auto; transform: translateX(-50%);
+  width: 38px; height: 38px; border-radius: 50%; background: var(--panel); border: 1px solid var(--border); color: var(--text-dim); box-shadow: var(--shadow); cursor: pointer; font-size: 18px; z-index: 5;
+}
 .jump:hover { color: var(--text); }
 
 /* ===== קלט (כרטיס בסגנון Claude) ===== */
@@ -483,34 +691,63 @@ body.just-done .composer-card { animation: doneRing 1.3s ease-out; }
 .composer-card { max-width: 740px; margin: 0 auto; background: var(--panel); border: 1px solid var(--border); border-radius: 24px; padding: 8px 8px 8px 8px; box-shadow: var(--shadow); transition: border-color .15s, box-shadow .15s; }
 .composer-card:focus-within { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); box-shadow: var(--shadow), 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 
-/* רצועת מכסה ויזואלית — מתחת לתיבת הטקסט, באותו רוחב */
+/* רצועת מכסה ויזואלית — מתחת לתיבת הטקסט, באותו רוחב.
+   הרצועה מחזיקה שני כפתורים: שבב הסוכן (מחליף תצוגה) והשאר (פותח את החלון). */
 .usage-strip {
-  appearance: none; display: block; width: 100%; max-width: 740px;
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; max-width: 740px;
   margin: 10px auto 0; padding: 10px 14px;
   border: 1px solid var(--border-soft); border-radius: 14px;
   background: color-mix(in srgb, var(--panel) 78%, var(--bg));
-  box-shadow: none; font: inherit; color: inherit; cursor: pointer;
-  text-align: start; font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums;
   transition: border-color .15s, background .15s;
 }
 .usage-strip:hover {
   border-color: var(--border);
   background: var(--panel);
 }
-.usage-strip[aria-expanded="true"] {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+.usage-strip.open {
+  border-color: color-mix(in srgb, var(--src) 45%, var(--border));
 }
 .usage-strip.warn { border-color: color-mix(in srgb, var(--warn) 35%, var(--border)); }
 .usage-strip.hot { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+
+/* ‎--src‎ הוא צבע הסוכן המוצג כרגע. הוא נקבע פעם אחת על הרצועה (ועל כל קטע
+   בחלון הצף), וכל מה שבתוכה — שבב, מד, אחוז — יורש ממנו. כך אין ולו כלל אחד
+   שמכיר את השמות "Claude" או "Cursor" יותר מפעם אחת. */
+.src-claude { --src: var(--claude); --src-soft: var(--claude-soft); }
+.src-cursor { --src: var(--cursor); --src-soft: var(--cursor-soft); }
+
+.cu-src {
+  flex: none; appearance: none; cursor: pointer; font: inherit;
+  font-size: 12px; font-weight: 650; line-height: 1;
+  padding: 6px 11px; border-radius: 999px;
+  /* ‎--src‎ נקי על ‎--src-soft‎ נותן 3.46:1 בבהיר ו-4.38:1 בכהה — מתחת ל-4.5
+     שדורש טקסט של 11‑12px. צבעי המותג לא נבחרו להיות קריאים על הגוון שלהם
+     עצמם. הדחיפה אל ‎--text‎ (כהה בבהיר, בהיר בכהה) מחזירה את הקריאוּת ועדיין
+     נשארת ברור בצבע של הספק. */
+  color: color-mix(in srgb, var(--src) 75%, var(--text)); background: var(--src-soft);
+  border: 1px solid color-mix(in srgb, var(--src) 30%, transparent);
+  transition: background .15s, border-color .15s, color .15s;
+}
+.cu-src:hover { border-color: color-mix(in srgb, var(--src) 60%, transparent); }
+.cu-src:focus-visible { outline: 2px solid var(--src); outline-offset: 2px; }
+.cu-open {
+  flex: 1; min-width: 0; appearance: none; border: none; background: none;
+  padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: start;
+}
+.cu-open:focus-visible { outline: 2px solid var(--src); outline-offset: 3px; border-radius: 8px; }
 .cu-meters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px 18px; align-items: end;
 }
 .cu-row { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+/* השם הארוך («מודלים של קרסר») יושב לבדו בשורה התחתונה, על כל הרוחב. */
+.cu-row.cu-span { grid-column: 1 / -1; }
 .cu-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .cu-label { font-size: 12.5px; font-weight: 600; color: var(--text); min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  line-height: 1.25; }
 .cu-pct { font-size: 12.5px; font-weight: 650; color: var(--text-dim); flex: none; }
 .cu-row.warn .cu-pct { color: var(--warn); }
 .cu-row.hot .cu-pct { color: var(--danger); }
@@ -521,44 +758,104 @@ body.just-done .composer-card { animation: doneRing 1.3s ease-out; }
 }
 .cu-fill {
   display: block; height: 100%; width: 0%; border-radius: inherit;
-  background: #6ea8e8;
+  background: var(--src, #6ea8e8);
   transition: width .45s ease, background .25s;
 }
 .cu-row.warn .cu-fill { background: var(--warn); }
 .cu-row.hot .cu-fill { background: var(--danger); }
 .cu-sub { font-size: 11px; color: var(--text-faint); line-height: 1.3; }
 .cu-sub:empty { display: none; }
+.cu-empty { font-size: 12px; color: var(--text-faint); }
 textarea#input { display: block; width: 100%; resize: none; font-family: var(--ui); font-size: 15.5px; line-height: 1.55; color: var(--text); background: transparent; border: none; padding: 11px 14px 6px; max-height: 40vh; unicode-bidi: plaintext; }
 textarea#input:focus { outline: none; }
 textarea#input::placeholder { color: var(--text-faint); }
 .composer-bar { display: flex; align-items: center; gap: 8px; padding: 2px 6px 2px 6px; }
 .attach { width: 34px; height: 34px; border-radius: 10px; border: none; background: transparent; color: var(--text-dim); font-size: 20px; cursor: pointer; flex: none; display: grid; place-items: center; transition: background .12s, color .12s; }
 .attach:hover { background: var(--panel-2); color: var(--text); }
+.attach svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.attach.hidden { display: none; }
+.attach:disabled, .attach[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+.attach:disabled:hover, .attach[aria-disabled="true"]:hover { background: transparent; color: var(--text-dim); }
+#schedBtn.on { color: var(--accent); }
+
+/* ---------- הכתבה קולית ----------
+   המיקרופון בזמן הקשבה הוא המקום היחיד במסך שזז מעצמו בלי שקורה שם משהו
+   (אין סטרימינג, אין תור) — ולכן הוא לא צריך להיות חזק, רק חי. עיגול
+   באקצנט שנושם, ומעליו הילה שמתפוגגת החוצה. */
+.mic.on { background: var(--accent); color: var(--on-accent); }
+.mic.on:hover { background: var(--accent); color: var(--on-accent); }
+.mic.on::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  border: 2px solid var(--accent); animation: micHalo 1.6s ease-out infinite;
+}
+.mic { position: relative; }
+@keyframes micHalo { 0% { transform: scale(1); opacity: .55; } 100% { transform: scale(1.75); opacity: 0; } }
+
+.dict-strip { display: flex; align-items: center; gap: 10px; padding: 8px 10px 2px; }
+.dict-strip.hidden { display: none; }
+.dk-text { font-size: 12.5px; color: var(--accent); font-weight: 600; }
+/* ארבעה פסים בגבהים שונים ובפאזות שונות. זה חיווי "המיקרופון פתוח", לא
+   מד עוצמה — קריאת עוצמת שמע אמיתית דורשת getUserMedia מקביל שיתחרה על
+   אותו התקן, ומחיר כזה על אנימציה הוא לא עסקה. */
+.dk-wave { display: inline-flex; align-items: center; gap: 2.5px; height: 14px; }
+.dk-wave i { width: 2.5px; border-radius: 2px; background: var(--accent); animation: dkWave 1s ease-in-out infinite; }
+.dk-wave i:nth-child(1) { height: 5px;  animation-delay: 0s; }
+.dk-wave i:nth-child(2) { height: 11px; animation-delay: .15s; }
+.dk-wave i:nth-child(3) { height: 8px;  animation-delay: .3s; }
+.dk-wave i:nth-child(4) { height: 13px; animation-delay: .45s; }
+@keyframes dkWave { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+
+.dk-lang, .dk-stop {
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--text-dim);
+  border-radius: 999px; padding: 2px 9px; font: inherit; font-size: 11.5px; font-weight: 600;
+  cursor: pointer; flex: none; transition: background .12s, color .12s, border-color .12s;
+}
+.dk-lang:hover, .dk-stop:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.dk-stop { margin-inline-start: auto; }
+
+/* התיבה עצמה מקבלת קו אקצנט בזמן הכתבה: מה שנאמר נכנס לכאן, וזה הרמז
+   שהמילים שצצות מעצמן אינן תקלה. */
+body.dictating .composer-card { box-shadow: 0 0 0 1.5px var(--accent), var(--shadow); }
+@media (prefers-reduced-motion: reduce) {
+  .mic.on::after, .dk-wave i { animation: none; }
+  .model-dock-pop { animation: none; }
+}
 .bar-spacer { flex: 1; }
-/* הבוררים הם רצועה אחת שאפשר לכווץ ולגלול, בכל רוחב.
-   הסדר ב-DOM: צירוף → בוררים → spacer → שלח. ב-RTL זה שם את הבוררים
-   מימין (ליד צירוף), ואת "שלח" משמאל. קודם הבוררים היו אחרי ה-spacer
-   ונדבקו לשליחה בצד שמאל.
-   כרצועה אחת עם ‎min-width:0‎ היא זו שמתכווצת, ו"צרף"/"שלח" מעוגנים תמיד. */
+/* במחשב הבוררים פרוסים בשורת הכתיבה: הרשאות · מודל · מאמץ, כל אחד כפתור.
+   בטלפון (בלוק ה-media למטה) הם נכנסים לתפריט של כפתור אחד, כדי שלא
+   יישברו שורה ברוחב 360. */
+.model-dock {
+  position: relative; display: flex; align-items: center;
+  flex: 0 1 auto; min-width: 0;
+}
+.model-dock .model-dock-btn { display: none; }
+.model-dock-trigger { display: contents; }
+.model-dock-pop,
+.model-dock-pop.hidden {
+  display: flex !important;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  position: static;
+  min-width: 0;
+  max-width: none;
+  width: auto;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  animation: none;
+  overflow: visible;
+}
+.model-dock-pop .pill-wrap { width: auto; }
 .pill-row {
   display: flex; align-items: center; gap: 8px;
   flex: 0 1 auto; min-width: 0;
   overflow-x: auto; overscroll-behavior-x: contain;
   scrollbar-width: none; -ms-overflow-style: none;
-  /* ‎overflow-x: auto‎ הופך לפי ההגדרה גם את ציר ה-Y לגלילה, ובלי מרווח
-     הטבעת של בורר *ממוקד במקלדת* נחתכת בדיוק בגובה הזה. השוליים השליליים
-     מחזירים את הגובה החיצוני, כך שהשורה לא זזה. */
   padding-block: 4px; margin-block: -4px;
 }
 .pill-row::-webkit-scrollbar { display: none; }
-/* רמז שאפשר לגלול: הקצה שממנו נשאר תוכן מתפוגג, במקום שבורר ייחתך באמצע
-   מילה וייראה כמו פריסה שבורה. המחלקות נקבעות ב-JS לפי מיקום הילדים בפועל,
-   כי ‎scrollLeft‎ ב-RTL שלילי בחלק מהדפדפנים וחיובי באחרים. */
-.pill-row.ovf-left  { mask-image: linear-gradient(to right, transparent 0, #000 20px); }
-.pill-row.ovf-right { mask-image: linear-gradient(to left,  transparent 0, #000 20px); }
-.pill-row.ovf-left.ovf-right {
-  mask-image: linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
-}
 .pill-wrap { position: relative; display: inline-flex; flex: none; }
 /* ריפוד לוגי: מקום לחץ ⌄ ב־inline-end (שמאל ב־RTL). ריפוד פיזי
    ‎26px מימין‎ השאיר את הטקסט והחץ בכיוון LTR. */
@@ -578,14 +875,26 @@ textarea#input::placeholder { color: var(--text-faint); }
    בלי plaintext: שם לטיני ("Claude Opus") היה מקבל כיוון פסקה LTR ונדחף
    לשמאל — מול בורר ההרשאות העברי שיושר לימין. */
 .mp-native { display: none !important; }
-.mp-btn { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; direction: rtl; unicode-bidi: isolate; }
+.mp-btn { max-width: 230px; overflow: hidden; white-space: nowrap; text-align: start; direction: rtl; unicode-bidi: isolate;
+  display: inline-flex; align-items: center; gap: 7px; }
+.mp-btn .mp-btn-name { overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
 .dt-pick-ctl .pill-wrap { flex: 1 1 180px; min-width: 0; }
 .dt-pick-ctl .mp-btn { flex: 1; min-width: 0; max-width: none; }
-.send { width: 38px; height: 38px; border-radius: 12px; border: none; background: var(--accent); color: #fff; cursor: pointer; flex: none; display: grid; place-items: center; transition: filter .15s, transform .05s, opacity .15s; }
-.send svg { transform: scaleX(-1); }
+.send { width: 38px; height: 38px; border-radius: 12px; border: none; background: var(--accent); color: var(--on-accent); cursor: pointer; flex: none; display: grid; place-items: center; transition: filter .15s, transform .05s, opacity .15s, border-radius .22s cubic-bezier(.2,.8,.2,1), box-shadow .18s, background .18s, color .18s; }
+.send .send-go, .send .send-stop {
+  grid-area: 1 / 1;
+  transition: opacity .2s ease, transform .22s cubic-bezier(.2,.8,.2,1);
+}
+.send .send-go { transform: scaleX(-1); }
+.send .send-stop { opacity: 0; transform: scale(.55); }
 .send:hover { filter: brightness(1.06); }
 .send:active { transform: translateY(1px); }
 .send:disabled { opacity: .4; cursor: not-allowed; }
+/* תור חי ובלי טקסט — אותו כפתור אקצנט, האייקון מתחלף לריבוע. */
+.send.stopping { border-radius: 11px; }
+.send.stopping .send-go { opacity: 0; transform: scaleX(-1) scale(.55); }
+.send.stopping .send-stop { opacity: 1; transform: scale(1.12); }
+.send.stopping:hover { filter: brightness(1.06); }
 
 .statusbar { max-width: 740px; margin: 9px auto 0; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 11.5px; color: var(--text-faint); flex-wrap: wrap; }
 /* ‎isolate‎ ולא ‎plaintext‎: עם plaintext הפריט מקבל כיוון פסקה משל עצמו, ו-‎$0.42‎
@@ -601,6 +910,10 @@ textarea#input::placeholder { color: var(--text-faint); }
    ‎updateStatusbar‎ לפי ‎display‎ בפועל, וזה תופס את שני סוגי ההסתרה. */
 .statusbar > .sb-item.sep::before { content: "·"; opacity: .5; margin-inline-end: 8px; }
 .sb-item.warn { color: var(--warn); } .sb-item.hot { color: var(--danger); }
+/* פריט המודל נושא עכשיו סימן לצד השם, ולכן הוא שורת flex ולא טקסט. ה-‎::before‎
+   של המפריד הופך לפריט flex ראשון — ולכן הוא עדיין נוחת לפני הסימן. */
+#sbModel { display: inline-flex; align-items: center; gap: 5px; }
+#sbModel .sb-model-name { unicode-bidi: plaintext; }
 
 /* ===== מודאל ניצול מכסה — חלון צף גדול במרכז ===== */
 .usage-overlay {
@@ -644,17 +957,73 @@ textarea#input::placeholder { color: var(--text-faint); }
   color: var(--text); letter-spacing: -.01em; line-height: 1.2;
 }
 .usage-plan {
-  font-size: 13px; font-weight: 600; color: var(--text-dim);
-  background: var(--panel-2); border: 1px solid var(--border-soft);
+  font-size: 13px; font-weight: 600; color: var(--src, var(--text-dim));
+  background: var(--src-soft, var(--panel-2));
+  border: 1px solid color-mix(in srgb, var(--src, var(--border-soft)) 28%, transparent);
   border-radius: 999px; padding: 3px 10px; text-transform: capitalize;
+}
+
+/* ---------- קטע סוכן בחלון הצף ----------
+   שני הקטעים נראים אותו דבר חוץ מהצבע, וזו כל הכוונה: מה שמבדיל ביניהם
+   במבט הוא הפס הצדדי, הנקודה והמדים — לא הפריסה. */
+.usage-agent {
+  position: relative;
+  padding: 16px 18px 18px;
+  margin-bottom: 16px;
+  border: 1px solid color-mix(in srgb, var(--src) 22%, var(--border-soft));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--src-soft) 40%, transparent);
+}
+.usage-agent::before {
+  content: ""; position: absolute; inset-block: 14px; inset-inline-start: 0;
+  width: 3px; border-radius: 999px; background: var(--src);
+}
+.usage-agent:last-child { margin-bottom: 0; }
+.usage-agent-head { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.usage-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--src); flex: none; }
+.usage-agent-name {
+  margin: 0; font-size: 15px; font-weight: 700; color: var(--src);
+  letter-spacing: .01em;
+}
+.usage-empty { margin: 0; font-size: 13px; color: var(--text-faint); line-height: 1.55; }
+.usage-empty code {
+  font-family: var(--mono); font-size: 12px;
+  background: var(--code-bg); border-radius: 5px; padding: 1px 5px;
 }
 .usage-block { margin-bottom: 28px; }
 .usage-block:last-child { margin-bottom: 0; }
-#usageWeeklyMeters { display: flex; flex-direction: column; gap: 18px; }
-#usageSessionBlock:empty { display: none; }
+#usageWeeklyMeters, #usageCursorMeters { display: flex; flex-direction: column; gap: 18px; }
+#usageSessionBlock:empty, #usageCursorMeters:empty { display: none; }
+.usage-agent .usage-block { margin-bottom: 20px; }
+.usage-agent .usage-block:last-of-type { margin-bottom: 0; }
+.usage-agent .usage-block:last-of-type + .usage-empty:not([hidden]) { margin-top: 14px; }
 .usage-sec {
   margin: 0 0 14px; font-size: 16px; font-weight: 600; color: var(--text);
 }
+
+/* ---------- קבוצת מדים בתוך קטע סוכן ----------
+   ‎Cursor‎ מחזיר דליים משלושה מחזורים שונים באותה רשימה. הכותרת היא מה
+   שאומר מה שייך למה, ותאריך האיפוס יושב בה ולא בשורה — הוא נכון לכל הקבוצה. */
+.ug { display: flex; flex-direction: column; gap: 12px; }
+.ug > .usage-sec {
+  margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+}
+.ug-when { font-size: 12px; font-weight: 500; color: var(--text-faint); }
+/* הפירוק של הסה״כ — נסוג פנימה ומסומן בקו, כדי שייקרא כתת-שורות
+   של המד שמעליו ולא כשלושה מדים שווי מעמד שמתחרים על אותה תשומת לב. */
+.ug-parts {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-inline-start: 11px; padding-inline-start: 13px;
+  border-inline-start: 1.5px solid color-mix(in srgb, var(--src) 26%, var(--border-soft));
+}
+.ug-note { margin: 0; font-size: 11.5px; color: var(--text-faint); line-height: 1.45; }
+.um-meter.um-sm { gap: 10px 16px; padding: 0; }
+.um-sm .um-label { font-size: 13px; font-weight: 500; color: var(--text-dim); }
+.um-sm .um-track { height: 7px; }
+.um-sm .um-pct { font-size: 12.5px; color: var(--text-faint); }
+/* שבריר אחוז הוא עדיין שימוש: בלי רוחב מזערי הפס נראה ריק לגמרי. */
+.um-fill.on { min-width: 7px; }
+.cu-fill.on { min-width: 5px; }
 
 .um-meter {
   display: grid;
@@ -673,7 +1042,7 @@ textarea#input::placeholder { color: var(--text-faint); }
 }
 .um-fill {
   display: block; height: 100%; width: 0%; border-radius: inherit;
-  background: #6ea8e8;
+  background: var(--src, #6ea8e8);
   transition: width .45s ease, background .25s;
 }
 .um-meter.warn .um-fill { background: var(--warn); }
@@ -688,11 +1057,13 @@ textarea#input::placeholder { color: var(--text-faint); }
 @media (max-width: 560px) {
   .usage-card { padding: 22px 18px 24px; border-radius: 16px; }
   .usage-head h2 { font-size: 22px; }
+  .usage-agent { padding: 14px 14px 16px; }
   .um-meter {
     grid-template-columns: 1fr auto;
     grid-template-areas: "meta pct" "track track";
     gap: 8px 12px;
   }
+  .ug-parts { margin-inline-start: 6px; padding-inline-start: 10px; }
   .um-meta { grid-area: meta; }
   .um-pct { grid-area: pct; align-self: start; }
   .um-track { grid-area: track; }
@@ -702,7 +1073,7 @@ textarea#input::placeholder { color: var(--text-faint); }
 .welcome { flex: 1; display: grid; place-items: center; text-align: center; padding: 32px 24px; }
 .hero { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .hero .sun { width: 60px; height: 60px; display: grid; place-items: center; margin-bottom: 8px; }
-.hero .sun svg { width: 60px; height: 60px; }
+.hero .sun .bmark { --bm-size: 60px; }
 .hero h1 { font-family: var(--serif); font-size: 40px; font-weight: 400; margin: 0; color: var(--text); letter-spacing: .3px; unicode-bidi: plaintext; }
 .hero .sub { color: var(--text-faint); font-size: 15px; margin-top: 4px; }
 
@@ -754,9 +1125,41 @@ textarea#input::placeholder { color: var(--text-faint); }
 .q-chip .q-text { min-width: 0; font-size: 12.5px; color: var(--text-dim, var(--text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
 .q-chip .q-rm { flex: none; border: none; background: transparent; color: var(--text-faint); font-size: 16px; line-height: 1; cursor: pointer; border-radius: 6px; width: 22px; height: 22px; }
 .q-chip .q-rm:hover { color: var(--danger); background: var(--danger-soft); }
-/* כפתור שליחה במצב "הוספה לתור" בזמן עבודה */
+/* כפתור שליחה במצב "הוספה לתור" בזמן עבודה — יש טקסט בתיבה */
 .send.queueing { background: var(--panel-2); color: var(--accent); box-shadow: inset 0 0 0 1px var(--border); }
 .send.queueing:hover { filter: none; background: var(--bg); }
+.send.queueing .send-go { opacity: 1; transform: scaleX(-1); }
+.send.queueing .send-stop { opacity: 0; transform: scale(.55); }
+
+/* הודעות מתוזמנות — אותה רצועה כמו התור, עם השעה במקום המספר הסידורי. */
+.sched-strip .q-chip { border-style: solid; }
+.sched-strip .q-ic { width: auto; min-width: 17px; padding: 0 5px; border-radius: 8px; font-variant-numeric: tabular-nums; }
+.sched-form { display: grid; gap: 12px; }
+.sched-form textarea {
+  width: 100%; min-height: 88px; resize: vertical; font: inherit; font-size: 15px; line-height: 1.5;
+  color: var(--text); background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 12px; unicode-bidi: plaintext;
+}
+.sched-form textarea:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+.sched-when { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sched-field { display: grid; gap: 5px; min-width: 0; }
+.sched-field span { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+.sched-field input, .sched-field select {
+  font: inherit; font-size: 14px; color: var(--text); background: var(--panel-2);
+  border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; min-width: 0;
+}
+.sched-field input:focus, .sched-field select:focus {
+  outline: none; border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+.sched-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.sched-pills .pill-wrap { flex: 1 1 140px; min-width: 0; }
+.sched-pills .pill, .sched-pills .mp-btn { width: 100%; }
+.sched-go {
+  font: inherit; font-size: 14.5px; font-weight: 650; cursor: pointer; padding: 10px 16px;
+  border-radius: 11px; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent);
+}
+.sched-go:hover { filter: brightness(1.05); }
+.sched-go:disabled { opacity: .55; cursor: default; }
 
 /* צירופים בתוך בועת המשתמש */
 .bubble .msg-atts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
@@ -784,7 +1187,8 @@ textarea#input::placeholder { color: var(--text-faint); }
 
 /* ---------- כרטיס אישור הרשאה ---------- */
 .perm { border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent-soft) 55%, var(--panel)); border-radius: 12px; margin: 8px 0; overflow: hidden; box-shadow: var(--shadow-sm); }
-.perm-head { display: flex; align-items: center; gap: 9px; padding: 10px 13px 8px; font-size: 13.5px; }
+.perm-head { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 10px 13px 8px; font-size: 13.5px; }
+.perm-head b { min-width: 0; }
 .perm-head b { font-weight: 600; }
 .perm-ic { flex: none; display: grid; place-items: center; color: var(--accent); font-size: 14px; width: 22px; height: 22px; }
 .perm-ic svg {
@@ -798,8 +1202,8 @@ textarea#input::placeholder { color: var(--text-faint); }
 .perm-actions { display: flex; gap: 8px; padding: 8px 13px 12px; flex-wrap: wrap; }
 .pbtn { font-family: inherit; font-size: 13px; font-weight: 550; padding: 8px 16px; border-radius: 9px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; transition: filter .12s, transform .08s; }
 .pbtn:active { transform: scale(.96); }
-.pbtn.allow { background: var(--accent); border-color: var(--accent); color: #fff; }
-.pbtn.always { background: var(--good); border-color: var(--good); color: #fff; }
+.pbtn.allow { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.pbtn.always { background: var(--good); border-color: var(--good); color: var(--on-accent); }
 .pbtn.deny { background: var(--panel); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
 .pbtn:hover { filter: brightness(1.05); }
 .perm-verdict { font-size: 13px; font-weight: 600; color: var(--text-dim); }
@@ -825,15 +1229,50 @@ option.opt-god { color: var(--god); font-weight: 700; }
 .god-row { background: var(--panel); }
 .god-row .god-time { flex: none; font-size: 11px; color: var(--text-faint); font-family: var(--mono); direction: ltr; }
 
+/* כפתור חי בפס «עובד…» — נפתח בלייב, לא מחכים לסוף התור */
+.god-live-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-inline-start: 2px; padding: 5px 12px; border-radius: 9px; cursor: pointer;
+  font-family: var(--ui); font-size: 12.5px; font-weight: 700;
+  color: var(--god); background: var(--god-soft);
+  border: 1.5px solid color-mix(in srgb, var(--god) 45%, transparent);
+}
+.god-live-btn:hover { filter: brightness(1.08); }
+.god-live-btn .god-ic { width: 18px; height: 18px; font-size: 11px; background: color-mix(in srgb, var(--god) 22%, transparent); }
+.god-live-btn .god-chev { font-size: 11px; transition: transform .15s; }
+.god-live-btn[aria-expanded="true"] .god-chev { transform: rotate(180deg); }
+.god-live-panel {
+  display: flex; flex-direction: column;
+  width: min(560px, calc(100% - 48px)); max-height: min(48vh, 420px);
+  background: var(--panel); border-radius: 14px; overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--god) 45%, var(--border));
+  box-shadow: var(--shadow-lg);
+}
+.god-live-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; flex: none;
+  color: var(--god); background: color-mix(in srgb, var(--god-soft) 70%, var(--panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--god) 22%, var(--border-soft));
+}
+.god-live-head strong { font-size: 13.5px; font-weight: 700; }
+.god-live-x {
+  width: 32px; height: 32px; border: 0; border-radius: 8px; cursor: pointer;
+  background: transparent; color: var(--text-dim); font-size: 15px; font-family: inherit;
+}
+.god-live-x:hover { background: color-mix(in srgb, var(--god) 12%, transparent); color: var(--god); }
+.god-live-body { overflow-y: auto; padding: 8px 10px 10px; min-height: 0; }
+.god-live-body .god-row { margin: 6px 0; }
+
 /* ---------- תפריט השלמה (סלאש / קבצים) ---------- */
 .composer-card { position: relative; }
 .ac-menu { position: absolute; inset-inline: 6px; bottom: calc(100% + 8px); max-height: 300px; overflow-y: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-lg); padding: 6px; z-index: 60; }
 .ac-head { font-size: 10.5px; letter-spacing: .04em; color: var(--text-faint); padding: 4px 10px 6px; text-transform: uppercase; }
+.ac-empty { padding: 10px 12px; font-size: 13px; color: var(--text-dim); }
 .ac-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; cursor: pointer; font-size: 13.5px; }
 .ac-item.sel, .ac-item:hover { background: var(--accent-soft); }
-.ac-name { font-weight: 550; color: var(--text); white-space: nowrap; }
-.ac-name.mono { font-family: var(--mono); direction: ltr; font-size: 12.5px; }
-.ac-desc { color: var(--text-dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.ac-name { font-weight: 550; color: var(--text); white-space: nowrap; direction: ltr; unicode-bidi: isolate; }
+.ac-name.mono { font-family: var(--mono); font-size: 12.5px; }
+.ac-desc { color: var(--text-dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; unicode-bidi: isolate; }
 .ac-badge { font-size: 10px; color: var(--text-faint); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; margin-inline-start: auto; flex: none; }
 
 /* ---------- מודאל ---------- */
@@ -841,8 +1280,8 @@ option.opt-god { color: var(--god); font-weight: 700; }
 .modal-card { width: min(560px, 100%); max-height: 80vh; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow-lg); overflow: hidden; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border-soft); }
 .modal-head strong { font-size: 15.5px; }
-.modal-body { overflow-y: auto; padding: 14px 18px 18px; }
-.modal-note { font-size: 12.5px; color: var(--text-dim); margin-bottom: 12px; line-height: 1.5; }
+.modal-body { overflow-x: clip; overflow-y: auto; padding: 14px 18px 18px; min-width: 0; }
+.modal-note { font-size: 12.5px; color: var(--text-dim); margin-bottom: 12px; line-height: 1.5; unicode-bidi: isolate; direction: rtl; text-align: start; }
 .modal-empty { font-size: 13px; color: var(--text-faint); text-align: center; padding: 24px 0; font-family: var(--mono); direction: ltr; }
 
 /* סשנים */
@@ -854,7 +1293,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
    אותה לג׳יבריש ברגע שהיא נשברה לשתי שורות. plaintext נותן לאלגוריתם הדו־כיווני
    לגזור כיוון מהתחלת הטקסט ולבודד את מזהה הסשן בתוכו. */
 .sess-meta { font-size: 11px; color: var(--text-faint); font-family: var(--mono); direction: rtl; unicode-bidi: plaintext; text-align: start; margin-top: 3px; }
-.sess-resume { font-family: inherit; font-size: 12.5px; font-weight: 550; padding: 7px 15px; border-radius: 9px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; flex: none; }
+.sess-resume { font-family: inherit; font-size: 12.5px; font-weight: 550; padding: 7px 15px; border-radius: 9px; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); cursor: pointer; flex: none; }
 .sess-resume:hover { filter: brightness(1.05); }
 .sess-resume:active { transform: scale(.96); }
 
@@ -869,6 +1308,35 @@ option.opt-god { color: var(--god); font-weight: 700; }
 .mcp-status { font-size: 11px; font-weight: 600; flex: none; }
 .mcp-status.on { color: var(--good); }
 .mcp-status.off { color: var(--text-faint); }
+.mcp-name-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mcp-name-line .mcp-name { flex: 1; }
+.mcp-agent {
+  flex: none; font-size: 10px; font-weight: 700; letter-spacing: .02em;
+  border-radius: 999px; padding: 1px 7px; border: 1px solid var(--border);
+}
+.mcp-agent.claude { color: var(--claude); border-color: color-mix(in srgb, var(--claude) 45%, var(--border)); background: var(--claude-soft); }
+.mcp-agent.cursor { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: var(--accent-soft); }
+.mcp-add {
+  display: grid; gap: 8px; margin-bottom: 14px; padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.mcp-add-title { font-size: 12px; font-weight: 650; color: var(--text-dim); margin: 2px 0; }
+.mcp-add-kinds, .mcp-add-agents, .mcp-add-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mcp-add-lbl { font-size: 12px; color: var(--text-dim); }
+.mcp-field { display: grid; gap: 4px; }
+.mcp-field input {
+  font: inherit; font-size: 13px; font-family: var(--mono); direction: ltr; text-align: start;
+  padding: 8px 10px; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--panel); color: var(--text); min-width: 0;
+}
+.mcp-field input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); border-color: var(--accent); }
+.mcp-kind, .mcp-target {
+  font: inherit; font-size: 12px; font-weight: 600; padding: 4px 11px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text-dim);
+}
+.mcp-kind.on, .mcp-target.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.mcp-msg { flex: 1; min-width: 0; font-size: 12px; color: var(--danger); line-height: 1.4; }
+.mcp-rm { padding: 5px 10px; }
 
 /* גישה מרחוק */
 .icon-btn.on { color: var(--good); background: var(--good-soft); }
@@ -880,7 +1348,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
 }
 .remote-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .remote-meta { font-size: 11.5px; color: var(--text-faint); }
-.rm-lbl { font-size: 12.5px; color: var(--text-dim); }
+.rm-lbl { font-size: 12.5px; color: var(--text-dim); unicode-bidi: isolate; direction: rtl; }
 .rm-sel { font: inherit; font-size: 12.5px; padding: 6px 9px; border-radius: 9px; border: 1px solid var(--border); background: var(--panel); color: var(--text); }
 .rm-btn {
   font: inherit; font-size: 12.5px; font-weight: 550; cursor: pointer; padding: 7px 13px;
@@ -889,7 +1357,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
 }
 .rm-btn:hover { border-color: var(--accent); }
 .rm-btn:disabled { opacity: .55; cursor: default; }
-.rm-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.rm-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .rm-btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
 .rm-btn.danger { color: var(--danger); }
 .rm-btn.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
@@ -948,6 +1416,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
   font-family: var(--mono); font-size: 21px; font-weight: 650; letter-spacing: .16em;
   direction: ltr; cursor: pointer; user-select: all; padding: 8px 14px;
   border-radius: 10px; border: 1px dashed var(--border); background: var(--panel-2);
+  color: inherit; appearance: none; -webkit-appearance: none;
 }
 .pair-code:hover { border-color: var(--accent); color: var(--accent); }
 
@@ -964,15 +1433,18 @@ option.opt-god { color: var(--god); font-weight: 700; }
 .dev-meta { font-size: 11.5px; color: var(--text-faint); margin-top: 2px; }
 
 /* ---------- בורר תיקיות שרץ בדפדפן ---------- */
-.dirpick { display: flex; flex-direction: column; gap: 10px; }
+.dirpick { display: flex; flex-direction: column; gap: 10px; min-width: 0; max-width: 100%; }
 .dp-cur {
   font-family: var(--mono); font-size: 12px; direction: ltr; text-align: start; word-break: break-all;
   padding: 10px 11px; border: 1px solid var(--border-soft); border-radius: 11px; background: var(--panel-2);
+  overflow-wrap: anywhere;
 }
-.dp-list { display: flex; flex-direction: column; gap: 1px; max-height: 46vh; overflow-y: auto; }
+.dp-list { display: flex; flex-direction: column; gap: 1px; max-height: 46vh; overflow-y: auto; overflow-x: clip; min-width: 0; max-width: 100%; }
 .dp-row {
-  display: block; width: 100%; text-align: start; cursor: pointer;
-  font-family: var(--mono); font-size: 13px; direction: ltr;
+  /* flex: none — בלי זה הרשימה (עמודת flex עם max-height) מכווצת את השורות
+     במקום לגלול, והטקסט נחתך מלמעלה ומלמטה. */
+  display: block; flex: none; width: 100%; min-width: 0; max-width: 100%; text-align: start; cursor: pointer;
+  font-family: var(--mono); font-size: 13px; line-height: 1.4; direction: ltr;
   color: var(--text); background: transparent; border: none; border-radius: 9px; padding: 9px 11px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: background .12s, color .12s;
@@ -985,6 +1457,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
 /* ---------- מצב רחב: הגדלת שטח העבודה ---------- */
 .app.wide .wrap,
 .app.wide .working,
+.app.wide .god-live-panel,
 .app.wide .composer-card,
 .app.wide .usage-strip,
 .app.wide .statusbar,
@@ -1054,13 +1527,14 @@ option.opt-god { color: var(--god); font-weight: 700; }
    העמודות היו גולשות הצידה. כותרת נשארת דבוקה לפריט הראשון שאחריה
    (‎break-after: avoid‎), ושורה לא נחתכת באמצע בין שתי עמודות. */
 .mp-card { width: min(1120px, 96vw); display: flex; flex-direction: column; max-height: 80vh; }
+.mp-card input { unicode-bidi: isolate; direction: rtl; }
 .mp-list { max-height: none; flex: 1; }
 /* מועדפים — שורה אופקית לכל רוחב החלונית, מעל העמודות */
 .mp-favs { padding: 4px 2px 10px; border-bottom: 1px solid var(--border-soft); margin-bottom: 4px; }
-.mp-favs-label { padding-top: 4px; }
+.mp-favs-label { padding-top: 4px; direction: rtl; unicode-bidi: isolate; }
 .mp-favs-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
   gap: 6px;
   width: 100%;
   padding: 2px 4px 4px;
@@ -1075,15 +1549,24 @@ option.opt-god { color: var(--god); font-weight: 700; }
 .mp-fav-chip .mp-name { flex: 1; min-width: 0; }
 .mp-fav-chip .mp-fav { flex: none; }
 .mp-cols { column-width: 250px; column-gap: 18px; column-rule: 1px solid var(--border-soft); }
-.mp-cols .pl-group { break-after: avoid; break-inside: avoid; padding-top: 12px; }
+.mp-cols .pl-group { break-after: avoid; break-inside: avoid; padding-top: 12px; direction: rtl; unicode-bidi: isolate; }
 /* בעמודה צרה אין מקום לשם ולמזהה זה לצד זה — השם מקבל את כל הרוחב והמזהה
    יורד לשורה שנייה. בלי זה שני השדות היו נלחמים על אותם 250 פיקסלים ושניהם
    היו נחתכים. */
 .mp-cols .pl-item { break-inside: avoid; display: grid; grid-template-columns: 18px 1fr 20px; align-items: center; column-gap: 8px; padding: 7px 10px; }
 .mp-cols .pl-item .pl-ic { width: auto; }
-.mp-cols .pl-item .pl-sub { grid-column: 2; margin-inline-start: 0; max-width: 100%; white-space: nowrap; }
+.mp-cols .pl-item .pl-sub { grid-column: 2; margin-inline-start: 0; max-width: 100%; white-space: nowrap;
+  unicode-bidi: isolate; text-align: start; }
 .mp-item { gap: 8px; }
-.mp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
+/* המודל הפעיל היה מסומן ב-✓ במשבצת האייקון; שם יושב עכשיו הסימן של המותג,
+   ולכן הסימון עבר לפס אקצנט בקצה השורה ולשם מודגש — בלי לגזול עמודה. */
+.mp-cur { box-shadow: inset -2px 0 0 var(--accent); }   /* ‎-2px‎ = הקצה הימני, כלומר קצה ההתחלה ב-RTL */
+.mp-cur .mp-name { font-weight: 650; color: var(--text); }
+.mp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* isolate ולא plaintext: plaintext הופך שם לטיני ("Claude Opus") לפסקה LTR
+     בתוך עמודת ‎1fr‎ רחבה, והשם נדבק לכוכב בשמאל במקום לסימן מימין. isolate
+     משאיר את האותיות LTR אבל את היישור ל-start של השורה (ימין ב-RTL). */
+  unicode-bidi: isolate; text-align: start; }
 .mp-item .pl-sub { max-width: 42%; overflow: hidden; text-overflow: ellipsis; }
 .mp-fav {
   appearance: none; border: 0; background: transparent; padding: 0; margin: 0;
@@ -1095,7 +1578,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
 .mp-fav:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .mp-fav.on { color: var(--accent); }
 .mp-cols .pl-item .mp-fav { grid-column: 3; grid-row: 1 / span 2; }
-.mp-foot { border-top: 1px solid var(--border-soft); padding: 8px 14px; font-size: 11.5px; color: var(--text-faint); }
+.mp-foot { border-top: 1px solid var(--border-soft); padding: 8px 14px; font-size: 11.5px; color: var(--text-faint); unicode-bidi: isolate; }
 
 /* ==========================================================================
    שכבת עידון עיצובי — עומק, תנועה ומיקרו־אינטראקציות
@@ -1123,9 +1606,12 @@ option.opt-god { color: var(--god); font-weight: 700; }
 /* ---------- בועת משתמש: מעט עומק ---------- */
 .bubble { box-shadow: var(--shadow-sm); }
 
-/* ---------- אווטאר Claude: חיות עדינה בריחוף ---------- */
-.assistant .avatar svg { transition: transform .35s cubic-bezier(.34,1.56,.64,1); }
-.assistant .role-tag:hover .avatar svg { transform: rotate(45deg); }
+/* ---------- סימן המודל: חיות עדינה בריחוף ----------
+   קודם היה כאן סיבוב של 45° — הוא עבד כי הסימן היה תמיד שמש בעלת סימטריה
+   רדיאלית. סימן של מותג אחר (הרשת של Mistral, הקובייה של Cursor) נראה
+   מסובב ושבור, ולכן התנועה היא הגדלה קלה: מתאימה לכל צורה. */
+.assistant .role-tag .bmark > svg { transition: transform .35s cubic-bezier(.34,1.56,.64,1); }
+.assistant .role-tag:hover .bmark > svg { transform: scale(1.11); }
 
 /* ---------- כפתורי אקצנט אחידים: גרדיאנט עדין + הצללה תואמת ---------- */
 .send, .sess-resume, .pbtn.allow {
@@ -1145,6 +1631,12 @@ option.opt-god { color: var(--god); font-weight: 700; }
 .send.queueing {
   background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--border);
 }
+.send.stopping {
+  animation: sendStopPulse 1.55s ease-in-out infinite;
+}
+@keyframes sendStopPulse {
+  50% { box-shadow: 0 2px 9px color-mix(in srgb, var(--accent) 32%, transparent), 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
+}
 
 /* ---------- סמן שיחה פעילה: פס אקצנט מובהק ---------- */
 .conv { position: relative; }
@@ -1162,14 +1654,18 @@ option.opt-god { color: var(--god); font-weight: 700; }
 .welcome .hero { animation: heroIn .55s cubic-bezier(.2,.7,.3,1) both; }
 @keyframes heroIn { from { opacity: 0; transform: translateY(12px); } }
 .hero .sun { position: relative; isolation: isolate; }
+/* ההילה לוקחת את צבע המודל שנבחר (‎currentColor‎ של הסימן שבתוכה) במקום את
+   האקצנט הקבוע — פתיחה מול Gemini זוהרת כחול, מול Mistral כתום. */
 .hero .sun::before {
   content: ""; position: absolute; inset: -55%; z-index: -1; border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 24%, transparent), transparent 66%);
+  background: radial-gradient(circle, color-mix(in srgb, currentColor 24%, transparent), transparent 66%);
   animation: sunAura 5.5s ease-in-out infinite;
 }
 @keyframes sunAura { 0%,100% { opacity: .55; transform: scale(.92); } 50% { opacity: 1; transform: scale(1.06); } }
 @media (prefers-reduced-motion: no-preference) {
-  .hero .sun svg { animation: sunSpin 120s linear infinite; }
+  /* סיבוב מתמיד מתאים לצורה בעלת סימטריה רדיאלית בלבד. שאר הסימנים נשארים
+     במקומם — קובייה מסתובבת נראית כמו תקלה, לא כמו חיים. */
+  .hero .sun .bm-anthropic > svg { animation: sunSpin 120s linear infinite; }
   @keyframes sunSpin { to { transform: rotate(360deg); } }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1219,13 +1715,29 @@ option.opt-god { color: var(--god); font-weight: 700; }
   white-space: nowrap;
 }
 .presence.hidden { display: none; }
+/* מכשיר משני — הלחיצה היא הדרך לקחת את כתיבת הדיסק בלי לשלוח הודעה */
+.presence[data-mode="view"] {
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  transition: background .12s, border-color .12s;
+}
+.presence[data-mode="view"]:hover {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  border-color: var(--accent);
+}
+.presence[data-mode="view"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* ---------- "ההתרעות לא יעבדו" ---------- */
 /* בגוון אזהרה ולא סכנה: שום דבר לא נשבר, פשוט לא תקבל הודעה בסיום. */
 .notify-chip {
   display: inline-flex; align-items: center; gap: 6px; flex: none;
   font-size: 11px; font-weight: 600; white-space: nowrap;
-  color: var(--warn); background: color-mix(in srgb, var(--warn) 13%, transparent);
+  /* ‎--warn‎ נקי נתן 4.19:1 על הגוון שלו ב-11px — ראו ‎.cu-src‎ לאותו נימוק. */
+  color: color-mix(in srgb, var(--warn) 80%, var(--text));
+  background: color-mix(in srgb, var(--warn) 13%, transparent);
   border: 1px solid color-mix(in srgb, var(--warn) 34%, transparent);
   border-radius: 999px; padding: 3px 9px; cursor: pointer;
   transition: background .12s, border-color .12s;
@@ -1251,9 +1763,8 @@ option.opt-god { color: var(--god); font-weight: 700; }
 
 /* ---------- תיקיית העבודה של השיחה — תמיד גלויה בסרגל העליון ---------- */
 .cwd-chip {
-  /* ‎0 1 auto‎ + תקרה יחסית: הצ׳יפ אף פעם לא לוקח יותר מכשליש מהסרגל,
-     כדי שכותרת השיחה — מה שמזהה איפה אתה — תישאר קריאה גם בנתיב עמוק. */
-  flex: 0 1 auto; min-width: 0; max-width: min(34ch, 34%); overflow: hidden; white-space: nowrap;
+  /* בלי כותרת השיחה בסרגל, הצ׳יפ הוא מה שמזהה את הפרויקט — מותר לו לקחת רוחב. */
+  flex: 0 1 auto; min-width: 0; max-width: min(40ch, 72%); overflow: hidden; white-space: nowrap;
   display: inline-flex; align-items: center; gap: 6px;
   font-family: var(--mono); font-size: 11.5px; direction: ltr; unicode-bidi: isolate;
   color: var(--text-dim); background: var(--panel-2); border: 1px solid var(--border-soft);
@@ -1287,7 +1798,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
 .ask-bar {
   flex: none; z-index: 8; display: flex; align-items: center; gap: 11px;
   margin: 0 18px 8px; padding: 10px 15px; border-radius: 13px; cursor: pointer;
-  font-size: 13.5px; font-weight: 650; color: #fff;
+  font-size: 13.5px; font-weight: 650; color: var(--on-accent);
   background: linear-gradient(120deg, var(--accent), var(--accent-2));
   box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 42%, transparent);
   animation: askPulse 1.6s ease-in-out infinite;
@@ -1298,10 +1809,12 @@ option.opt-god { color: var(--god); font-weight: 700; }
   width: 18px; height: 18px; fill: none; stroke: currentColor;
   stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
 }
-.ask-bar #askBarText { flex: 1; min-width: 0; unicode-bidi: plaintext; }
+/* isolate+rtl ולא plaintext: "Claude שאל…" מתחיל באות לטינית, plaintext
+   הופך את כל הפס ל-LTR, ו-Claude נצמד לכפתור בשמאל במקום לתחילת המשפט. */
+.ask-bar #askBarText { flex: 1; min-width: 0; unicode-bidi: isolate; direction: rtl; text-align: start; }
 .ab-go {
   flex: none; font-family: var(--ui); font-size: 12.5px; font-weight: 700; cursor: pointer;
-  color: var(--accent); background: #fff; border: none; border-radius: 9px; padding: 6px 14px;
+  color: var(--accent); background: var(--on-accent); border: none; border-radius: 9px; padding: 6px 14px;
 }
 .ab-go:hover { filter: brightness(.96); }
 @keyframes askPulse {
@@ -1430,7 +1943,8 @@ option.opt-god { color: var(--god); font-weight: 700; }
   flex: 1; min-width: 0; font-family: var(--ui); font-size: 13.5px; color: var(--text);
   background: transparent; border: none; padding: 4px 6px; unicode-bidi: plaintext;
 }
-.find-bar input:focus { outline: none; }
+.find-bar input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--accent); border-radius: 6px; }
+.find-bar input:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
 .find-count { font-size: 11.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; flex: none; white-space: nowrap; }
 .find-nav {
   flex: none; width: 28px; height: 28px; border-radius: 8px; border: none;
@@ -1438,7 +1952,7 @@ option.opt-god { color: var(--god); font-weight: 700; }
 }
 .find-nav:hover { background: var(--panel-2); color: var(--text); }
 mark.find-hit { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
-mark.find-hit.cur { background: var(--accent); color: #fff; }
+mark.find-hit.cur { background: var(--accent); color: var(--on-accent); }
 
 /* ---------- מקשי קיצור ---------- */
 .sc-list { display: flex; flex-direction: column; gap: 2px; }
@@ -1474,9 +1988,13 @@ body.awaiting .working { opacity: .55; }
      להעתיק בלוק קוד או לערוך הודעה. */
   .msg-actions { opacity: 1; }
   .conv .c-del { opacity: 1; }
-  /* 25px גובה זה יעד שמפספסים באגודל. לא 44 — הכפתור מרחף מעל הקוד עצמו
-     ושם כל פיקסל מכסה שורה — אבל 34 כבר נלחץ בפעם הראשונה. */
+  /* :hover נדבק אחרי נגיעה. השעה נעלמת וההמלצה נשארת מורמת — גליטץ. */
+  .conv:hover .c-time { opacity: 1; }
+  .suggest:hover { transform: none; }
+  /* 25px גובה זה יעד שמפספסים באגודל. לא 44 — הכפתור יושב בפס הריפוד
+     העליון, ו־34 כבר נלחץ בפעם הראשונה בלי לדרוס שורת קוד. */
   .copy-btn { opacity: .9; min-height: 34px; padding: 8px 12px; }
+  .code-wrap > pre, .code-wrap > .mermaid-box { padding-top: 52px; }
 }
 
 /* ======================================================================
@@ -1488,17 +2006,30 @@ body.awaiting .working { opacity: .55; }
    של 29px גובה, כולם באצבע. ‎pointer: coarse‎ שואל בדיוק את השאלה הנכונה.
    ====================================================================== */
 @media (hover: none), (pointer: coarse) {
-  .icon-btn { width: 42px; height: 42px; }
+  .icon-btn { width: 44px; height: 44px; }
   .attach, .send { width: 46px; height: 46px; }
+  .jump { width: 44px; height: 44px; }
   .pbtn, .rm-btn, .sess-resume { min-height: 44px; padding: 11px 16px; font-size: 14px; }
   .ma-btn { min-height: 40px; padding: 8px 11px; font-size: 12.5px; }
-  .pill, select.pill { min-height: 40px; font-size: 13.5px; }
+  /* 16px: מתחת לזה iOS מזנק זום על select, והמסך כולו קופץ באמצע התפריט. */
+  .pill, select.pill { min-height: 40px; font-size: 16px; }
+  .settings input:not([type="checkbox"]), .settings select, .settings #localUrl,
+  .conv .c-rename { font-size: 16px; }
+  button, .conv, .dp-row, .pl-item, .ac-item, .suggest {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mcp-kind, .mcp-target { min-height: 44px; padding: 8px 14px; }
   .conv .c-del { width: 40px; height: 40px; padding: 0; display: grid; place-items: center; }
   .mini { min-height: 42px; }
   .find-nav { width: 42px; height: 42px; font-size: 16px; }
   .find-bar input { min-height: 44px; }
   .usage-close { width: 44px; height: 44px; top: 10px; inset-inline-end: 10px; }
-  .stop { min-height: 40px; padding: 9px 16px; }
+  .stop { min-height: 44px; padding: 10px 16px; }
+  .send.stopping { border-radius: 12px; }
+  .god-live-btn { min-height: 44px; padding: 10px 14px; }
+  .god-live-x { width: 44px; height: 44px; }
+  .resync { min-height: 44px; padding: 10px 16px; font-size: 13.5px; }
   .ask-opt { padding-block: 13px; }
   .ac-item { min-height: 46px; }
   .pl-item { min-height: 48px; }
@@ -1506,17 +2037,118 @@ body.awaiting .working { opacity: .55; }
      min-height רק מוסיף שטח ריק מתחת לטקסט במקום למרכז אותו. */
   .dp-row { padding-block: 13px; font-size: 14px; }
   .att-chip .ac-rm { width: 34px; height: 34px; }
+  .q-chip .q-rm { width: 36px; height: 36px; }
+  .sched-go { min-height: 44px; }
+  .dk-lang, .dk-stop { min-height: 40px; padding: 8px 12px; font-size: 13px; }
   #convSearch { min-height: 44px; }
-  .cwd-chip { min-height: 34px; padding: 7px 10px; }
+  .cwd-chip { min-height: 44px; padding: 10px 12px; }
   /* שני פסי הקריאה שמופיעים כשמשהו ממתין לך — הכפתור בהם הוא הפעולה,
      ו-29px גובה היה יעד שמפספסים בדיוק כשהכי חשוב לא לפספס. */
-  .ab-go, .lb-go { min-height: 38px; padding: 9px 16px; }
+  .ab-go, .lb-go { min-height: 44px; padding: 10px 16px; }
   .lb-x { width: 38px; height: 38px; }
+  .notify-chip { min-height: 44px; min-width: 44px; padding: 8px 12px; }
+  .anon-tools, .anon-exit { min-height: 44px; padding: 10px 14px; }
+  .tool-rej-btn { min-height: 40px; padding: 10px 14px; }
+  .dt-mini, .dt-go { min-height: 44px; padding: 10px 14px; }
+  .dt-note-in { min-height: 44px; font-size: 16px; }
+  .mp-fav { width: 36px; height: 36px; }
 
   /* 16px = בלי זום אוטומטי של iOS בפוקוס (גם באייפד, לא רק בטלפון) */
   textarea#input, #convSearch, #findInput, #cwd, #paletteInput,
-  .ask-other-input, .rm-sel, .modal-body input, .modal-body select { font-size: 16px; }
+  .ask-other-input, .rm-sel, .modal-body input, .modal-body select, .modal-body textarea { font-size: 16px; }
 }
+
+/* ---------- כתיבה עם מקלדת: רק תיבת הטקסט מול האצבע ----------
+   ‎body.compose-compact‎ מוגדר ב-app.js *רק* כש-visualViewport יורד (מקלדת
+   פתוחה), לא בגלל פוקוס בשדה. רצועת המכסה, שורת ההקשר וכפתור המודל
+   נעלמים; צירוף · תיבה · שלח עוברים לשורה אופקית אחת.
+   ‎body.compose-tall‎ נדלק כשהטקסט עובר שורה אחת: התיבה עולה לרוחב מלא מעל
+   הכפתורים, וכפתור המודל חוזר — לחיצה פותחת את שלושת הבוררים מעליו. */
+body.compose-compact .usage-strip,
+body.compose-compact .statusbar:not(.has-hot),
+body.compose-compact .model-dock,
+body.compose-compact .bar-spacer { display: none !important; }
+/* כשהקשר לוהט — לא מסתירים את האזהרה גם עם מקלדת פתוחה */
+body.compose-compact .statusbar.has-hot {
+  display: flex !important;
+  padding-block: 2px 0;
+  font-size: 12px;
+}
+body.compose-compact .statusbar.has-hot .sb-item:not(.hot) { display: none; }
+/* ריפוד תחתון קטן בלבד: בלי safe-area (המקלדת כבר תופסת את התחתית),
+   אבל לא צמוד לגמרי — נשימה קלה בין התיבה למקלדת. */
+body.compose-compact .composer {
+  padding-block: 4px 24px;
+  padding-inline: 12px;
+}
+
+/* ‎display:contents‎ על שורת הפקדים מרים את צירוף/שלח לכרטיס עצמו, כדי
+   שאפשר לסדר: צירוף | תיבת טקסט | שלח באותו מישור (ב-RTL מימין לשמאל). */
+body.compose-compact .composer-card {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px;
+}
+body.compose-compact .composer-orbit { flex: none; }
+body.compose-compact .ac-menu,
+body.compose-compact .att-strip,
+body.compose-compact .queue-strip,
+body.compose-compact .sched-strip,
+body.compose-compact .dict-strip { flex: 1 1 100%; }
+body.compose-compact .composer-bar { display: contents; }
+/* כשהמקלדת פתוחה: מיקרופון החוצה (ימין ב-RTL) ופלוס פנימה — הפוך מסדר
+   ה-DOM הרגיל (＋ ואז mic) שבמצב סגור. */
+body.compose-compact #micBtn { order: 1; flex: none; }
+body.compose-compact #attachBtn { order: 2; flex: none; }
+body.compose-compact #schedBtn { order: 3; flex: none; }
+/* בחריץ הצר אין מקום לארבעה עיגולים של 46px ולמשפט עברי. התזמון חוזר
+   ב-tall, יחד עם כפתור המודל — שם יש שורה שלמה לפקדים. */
+body.compose-compact:not(.compose-tall) #schedBtn { display: none !important; }
+body.compose-compact textarea#input {
+  order: 4; flex: 1 1 0; min-width: 0;
+  padding: 10px 8px;
+  /* ‎--app-h‎ ולא ‎dvh‎: ב-iOS המקלדת אינה מקטינה את ‎dvh‎, ולכן 28dvh הם 28%
+     מהמסך *כולו* — תיבה שגולשת אל מתחת למקלדת יחד עם כפתור השליחה. */
+  max-height: calc(var(--app-h, 100dvh) * 0.28);
+}
+/* בחריץ הצר שבירה לשתי שורות היא בדיוק מה שנראה שבור. אם חישוב החריץ
+   מפספס פיקסלים (גופן, כפתור חדש), עדיף לחתוך מאשר שורה חצויה מעל הכפתורים. */
+body.compose-compact:not(.compose-tall) textarea#input {
+  white-space: nowrap;
+  overflow-x: hidden;
+}
+body.compose-compact #sendBtn { order: 5; flex: none; }
+
+/* כמה שורות: התיבה בשורה עליונה לרוחב מלא; מתחתיה הכפתורים + כפתור המודל.
+   שלושת הבוררים נפתחים בחלונית מעל הכפתור, בלי לגזול שורה בהחלקה. */
+body.compose-compact.compose-tall textarea#input {
+  order: 1;
+  flex: 1 1 100%;
+  width: 100%;
+  padding: 10px 12px 4px;
+}
+body.compose-compact.compose-tall #micBtn { order: 2; }
+body.compose-compact.compose-tall #attachBtn { order: 3; }
+body.compose-compact.compose-tall #schedBtn { order: 4; }
+body.compose-compact.compose-tall .model-dock {
+  display: flex !important;
+  order: 5;
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+}
+body.compose-compact.compose-tall .model-dock-trigger {
+  flex: 1; min-width: 0; max-width: none;
+}
+body.compose-compact.compose-tall .model-dock-btn {
+  max-width: none;
+  width: 100%;
+  background: var(--panel-2);
+  border-radius: 999px;
+  padding-block: 8px;
+}
+body.compose-compact.compose-tall #sendBtn { order: 6; }
+
+/* שיבוט זמני של בורר המודל במעבר tall→צר — נעלם באנימציה במקום לקפוץ. */
+.cc-ghost { contain: layout style; touch-action: none; }
 
 /* התנאי השני הוא טלפון בשכיבה: ‎844×390‎ עובר את 760px לרוחב, ולכן קיבל את
    פריסת הדסקטופ — סרגל שיחות קבוע שגזל 272px מתוך 844, סרגל עליון עמוס
@@ -1599,20 +2231,35 @@ body.awaiting .working { opacity: .55; }
   /* תיקיית העבודה נשארת — היא הדבר שחייבים לדעת *לפני* ששולחים פקודה, והיא
      גם הכפתור היחיד שמוביל אליה בטלפון (#settingsToggle מוסתר כאן). מוצג רק
      זנב הנתיב, ו-updateCwdChip חותך אותו בהתאם. */
-  /* הגובה מגיע מבלוק המגע; כאן רק התקרה — הצ׳יפ לא לוקח יותר מ-40% מהסרגל,
-     כדי שכותרת השיחה תישאר קריאה. */
-  .cwd-chip { max-width: min(16ch, 46%); }
+  .cwd-chip { max-width: min(22ch, 62%); }
   /* שתי נקודות זהות זו ליד זו (מצב חיבור + מצב שמירה) הן רעש, לא מידע.
      חיווי השמירה נשאר רק כשיש מה לומר — כלומר כשהשמירה נכשלה. */
   .save-dot:not(.error) { display: none; }
+  /* השבב המלא (רקע אזהרה + עיגול 44) נראה כמו כפתור ראשי ליד התפריט,
+     וברוחב 360 הוא בולע את תיקיית העבודה. אותה פעולה, בלי המילוי. */
+  .notify-chip {
+    min-width: 44px; min-height: 44px; padding: 0; gap: 0;
+    background: transparent; border-color: transparent; border-radius: 9px;
+  }
+  .notify-chip svg { width: 17px; height: 17px; }
 
   /* ======================================================================
      4. אזורים בטוחים (נאץ׳ / פס הבית) ומקלדת
      ====================================================================== */
   .composer { padding: 6px 12px calc(10px + env(safe-area-inset-bottom)); }
   .side-foot { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
-  /* השכבות הצפות חייבות להיצמד לחלון *החזותי*, אחרת המקלדת מכסה אותן */
-  .modal-overlay, .usage-overlay, .palette-overlay { height: var(--app-h, 100dvh); }
+  /* השכבות הצפות חייבות להיצמד לחלון *החזותי*, אחרת המקלדת מכסה אותן.
+     inset:0 שם את התחתית בתחתית ה-layout viewport — ב-iOS זה מאחורי המקלדת.
+     top + height של החלון החזותי, ו-bottom:auto כדי שהגובה לא יידרס. */
+  .modal-overlay, .usage-overlay, .palette-overlay {
+    top: var(--app-top, 0px);
+    bottom: auto;
+    height: var(--app-h, 100dvh);
+    max-height: var(--app-h, 100dvh);
+    overflow: hidden;
+  }
+  /* המסגרת הנעה חורגת 16px מהכרטיס; הריפוד כאן הוא 12px, והעודף מזיז את הדף. */
+  .composer-orbit { inset: -4px; }
 
   /* ======================================================================
      5. פריסה צרה שנגזרת מהרוחב (גדלי המגע עצמם יושבים בבלוק pointer:coarse
@@ -1621,6 +2268,28 @@ body.awaiting .working { opacity: .55; }
   .nav-row { padding: 13px 10px; }
   .conv { padding: 12px 10px; }
   .dp-list { max-height: 52dvh; }
+  /* בורר התיקיות הייעודי: רשימה אחת נגללת, הנתיב והכפתור נשארים.
+     max-height על הרשימה עצמה יצר שתי גלילות שנלחמות, ושם ארוך (nowrap)
+     מתח את הגיליון לרוחב וגרם להחלקה אופקית. */
+  .modal-body > .dirpick .dp-list { max-height: none; overflow-x: clip; overflow-y: visible; }
+  .modal-body > .dirpick .dp-cur,
+  .modal-body > .dirpick .dp-actions {
+    position: sticky; z-index: 1; background: var(--panel);
+  }
+  .modal-body > .dirpick .dp-cur { top: 0; }
+  /* הריפוד התחתון של הגוף הוא מתחת לכפתור הדביק, ושם שורה מציצה.
+     הריפוד עובר לכפתור עצמו, כולל אזור הבית. */
+  .modal-body:has(> .dirpick) { padding-bottom: 0; }
+  .modal-body > .dirpick .dp-actions {
+    bottom: 0; z-index: 2;
+    margin-inline: -16px;
+    padding: 10px 16px calc(14px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border-soft);
+  }
+  .dp-cur {
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
   /* כפתורי אישור הרשאה נמתחים על השורה — זו ההחלטה הכי קריטית בממשק */
   .perm-actions { gap: 8px; }
   .perm-actions .pbtn { flex: 1 1 auto; }
@@ -1629,18 +2298,63 @@ body.awaiting .working { opacity: .55; }
   /* ======================================================================
      6. המחבר: שורה אחת, פקדים עגולים, בלי שבירות
      ----------------------------------------------------------------------
-     שלושה בוררים ברוחב טבעי + צירוף + שליחה לא נכנסים ל-360px: הם נשברו לשתי
-     ושלוש שורות ודחפו את "שלח" למקום אקראי בכל פעם. הפתרון הוא זה שכל
-     אפליקציית צ׳אט בטלפון מגיעה אליו: הפעולות (צרף / שלח) מעוגנות בקצוות
-     בשורה אחת, והבוררים — שהם הגדרה ולא פעולה — נגללים אופקית ביניהם.
+     שלושה בוררים ברוחב טבעי + צירוף + שליחה לא נכנסים ל-360px. הכפתור האחד
+     של המודל יושב בין צירוף לשליחה, ושלושת הבוררים נפתחים מעליו.
      ====================================================================== */
   .composer-card { border-radius: 26px; padding: 6px; }
   .composer-bar { flex-wrap: nowrap; gap: 6px; padding: 2px; }
   .bar-spacer { display: none; }
 
-  /* בטלפון הרצועה תופסת את כל מה שנשאר בין "צרף" ל"שלח" (אין spacer;
-     הרצועה ‎flex:1‎ גדלה ביניהם). מימין: צירוף, משמאל: שלח. */
-  .pill-row { flex: 1; gap: 6px; }
+  /* בטלפון הכפתור תופס את כל מה שנשאר בין "צרף" ל"שלח" (אין spacer).
+     מימין: צירוף, משמאל: שלח. שלושת הבוררים נפתחים מעליו, לא בשורה. */
+  .model-dock { flex: 1; min-width: 0; }
+  .model-dock.open { z-index: 8; }
+  .model-dock-trigger {
+    display: inline-flex; position: relative;
+    flex: 1; min-width: 0; max-width: 100%;
+  }
+  .model-dock.open > .model-dock-trigger::after {
+    transform: translateY(-60%) rotate(180deg);
+  }
+  .model-dock .model-dock-btn { display: inline-flex; width: 100%; max-width: 100%; }
+  .model-dock-pop.hidden { display: none !important; }
+  /* בלי min-width:228px ובלי 100vw: שניהם גלשו מהמסך הצר והזיזו את כל הדף.
+     placeModelPop נועל את החלונית הפתוחה לרוחב הכרטיס (‎.docked-fixed‎). */
+  .model-dock-pop {
+    position: absolute;
+    inset-inline-start: 0;
+    bottom: calc(100% + 8px);
+    display: flex; flex-direction: column; gap: 6px;
+    min-width: 0; width: 100%; max-width: 100%;
+    padding: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow-lg);
+    z-index: 45;
+    animation: none;
+    overflow-x: hidden; overflow-y: auto;
+    overscroll-behavior: contain;
+    max-height: min(320px, calc(var(--app-h, 100dvh) - var(--composer-h, 150px) - 24px));
+  }
+  .model-dock-pop .pill-wrap { width: 100%; }
+  .model-dock-pop .pill, .model-dock-pop .mp-btn {
+    width: 100%; max-width: none;
+    background: var(--panel-2); border-color: transparent; border-radius: 10px;
+  }
+  .model-dock-pop.docked-fixed {
+    position: fixed; z-index: 80;
+    /* ב-RTL ‎inset-inline-start:0‎ של הבסיס הופך ל-right:0 וגובר על left,
+       והחלונית נצמדת לקצה המסך במקום לכרטיס. הלוגי מאופס במפורש. */
+    inset-inline-start: auto !important;
+    inset-inline-end: auto !important;
+    top: auto; right: auto !important;
+    left: var(--pop-left) !important;
+    bottom: var(--pop-bottom);
+    width: var(--pop-w) !important; min-width: 0; max-width: none;
+    max-height: var(--pop-max-h);
+    transform: none; animation: none;
+  }
   .pill {
     border-radius: 999px;
     padding-block: 8px; padding-inline: 12px 26px;
@@ -1651,18 +2365,16 @@ body.awaiting .working { opacity: .55; }
   .attach, .send { border-radius: 50%; flex: none; }
   .attach { background: var(--panel-2); font-size: 22px; }
   .send svg { width: 19px; height: 19px; }
+  /* במצב עצירה הכפתור חייב להישאר ריבוע — אחרת העיגול של המובייל בולע את הסימן. */
+  .send.stopping { border-radius: 12px; }
 
-  /* הטבעת הכתומה הזוהרת סביב תיבת הכתיבה לאורך כל התור היא רעש במסך קטן;
-     פס ההתקדמות העליון כבר אומר את אותו הדבר בלי לצעוק. */
-  body.busy .composer-card {
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent);
-  }
   body.just-done .composer-card { animation: none; }
 
   /* ---------- מדדי מכסה ושורת מצב: שליש מסך על מטא־נתונים ----------
      רצועת המכסה תפסה בטלפון גובה של שלוש הודעות, ושורת המצב נשברה לשתי שורות
      של חמישה שדות. שניהם נשארים — רק מצטמצמים למה שקוראים במבט: אחוז ומד. */
-  .usage-strip { margin-top: 8px; padding: 8px 12px; border-radius: 12px; }
+  .usage-strip { margin-top: 8px; padding: 8px 12px; border-radius: 12px; gap: 8px; }
+  .cu-src { padding: 5px 9px; font-size: 11px; }
   .cu-meters { grid-template-columns: 1fr 1fr; gap: 4px 14px; }
   .cu-sub { display: none; }              /* "מתאפס בעוד 4 שע׳ 24 דק׳" — לא במבט */
   .cu-label, .cu-pct { font-size: 11.5px; }
@@ -1671,6 +2383,8 @@ body.awaiting .working { opacity: .55; }
   .statusbar { margin-top: 7px; flex-wrap: nowrap; gap: 6px; }
   /* המודל כבר מופיע כבורר בשורה שמעל, ומשך התור הוא נתון לניפוי באגים */
   #sbModel, #sbTurn { display: none; }
+  #sbContext { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #sbCost { flex: none; }
 
   /* ======================================================================
      7. שכבות: מודאלים ולוח הפקודות כגיליון תחתון
@@ -1680,7 +2394,8 @@ body.awaiting .working { opacity: .55; }
      ====================================================================== */
   .modal-overlay, .usage-overlay { padding: 0; place-items: end stretch; }
   .modal-card, .usage-card {
-    width: 100%; max-width: 100%; max-height: 88dvh;
+    width: 100%; max-width: 100%; max-height: min(88dvh, 100%);
+    min-width: 0;
     border-radius: 20px 20px 0 0; border-bottom: none;
     animation: sheetIn .22s cubic-bezier(.2,.8,.2,1);
   }
@@ -1691,16 +2406,17 @@ body.awaiting .working { opacity: .55; }
     border-radius: 999px; background: color-mix(in srgb, var(--text) 22%, transparent);
   }
   .modal-head { padding: 10px 16px 14px; }
-  .modal-body { padding: 14px 16px calc(18px + env(safe-area-inset-bottom)); }
+  /* basis:auto — ‎flex:1‎ (basis 0) מכווץ את גוף המודאל לאפס כשהגובה נגזר מהתוכן. */
+  .modal-body { padding: 14px 16px calc(18px + env(safe-area-inset-bottom)); flex: 1 1 auto; min-height: 0; }
   .usage-card { padding: 22px 18px calc(24px + env(safe-area-inset-bottom)); }
 
   .palette-overlay { padding: 0; align-items: end; justify-items: stretch; }
   .palette-card {
-    width: 100%; border-radius: 20px 20px 0 0;
-    display: flex; flex-direction: column; max-height: 84dvh;
+    width: 100%; min-width: 0; border-radius: 20px 20px 0 0;
+    display: flex; flex-direction: column; max-height: min(84dvh, 100%);
     animation: sheetIn .22s cubic-bezier(.2,.8,.2,1);
   }
-  .palette-list { max-height: none; flex: 1; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+  .palette-list { max-height: none; flex: 1; min-height: 0; overflow-x: clip; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
   @media (prefers-reduced-motion: reduce) {
     .modal-card, .usage-card, .palette-card { animation: none; }
   }
@@ -1711,7 +2427,7 @@ body.awaiting .working { opacity: .55; }
   .rc-sess-act { flex: 1 1 100%; white-space: normal; }
   .rc-cwd { flex: 1 1 100%; }
   .sess-info, .mcp-info, .dev-info { flex: 1 1 100%; }
-  .sess-resume, .dev-row .rm-btn { margin-inline-start: auto; }
+  .sess-resume, .dev-row .rm-btn, .mcp-rm { margin-inline-start: auto; }
   .sess-meta { white-space: normal; overflow-wrap: anywhere; }
   .remote-actions { gap: 8px 10px; }
   .remote-actions .rm-btn { flex: 1 1 auto; }
@@ -1726,14 +2442,25 @@ body.awaiting .working { opacity: .55; }
   /* ======================================================================
      8. זרימת השיחה
      ====================================================================== */
-  .row, .composer-card, .usage-strip, .statusbar, .working { max-width: 100%; }
+  .row, .composer-card, .usage-strip, .statusbar, .working, .god-live-panel { max-width: 100%; }
   .row { padding: 0 14px; }              /* 24px זה 13% מהמסך שהולך על ריק */
   .note { padding-inline: 14px; }
   .log { gap: 20px; overscroll-behavior-y: contain; }
   .hero h1 { font-size: 32px; }
   .sc-row kbd { min-width: 116px; }
-  .ask-bar { margin-inline: 12px; }
-  .ac-menu { max-height: 42dvh; }
+  .ask-bar { margin-inline: 12px; flex-wrap: wrap; row-gap: 8px; }
+  .ask-bar #askBarText { flex: 1 1 8em; }
+  .ac-menu { max-height: min(42dvh, calc(var(--app-h, 100dvh) - var(--composer-h, 160px) - 64px)); overscroll-behavior: contain; }
+  .find-bar { margin-inline: 12px; }
+  .stale-note { white-space: normal; max-width: 100%; text-align: center; }
+  .palette-card.mp-card { width: 100%; max-width: 100%; }
+  .mp-cols .pl-item { grid-template-columns: 22px minmax(0, 1fr) 40px; }
+  .mp-foot { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+  /* עמודה אחת רק כשהרוחב עצמו צר. בשכיבה (844×390) התנאי החיצוני נדלק בגלל
+     הגובה, ו-columns:1 השאיר שורה אחת על פני כל המסך עם שמות חתוכים. */
+  @media (max-width: 760px) {
+    .mp-cols { column-width: auto; columns: 1; column-rule: none; column-gap: 0; }
+  }
 
   /* פס המכסה בטלפון: הכיתוב נושם על שתי שורות במקום להידחס, והפעולות
      עוברות לשורה משלהן — כך "המשך עכשיו" נשאר יעד מגע מלא ולא נחתך. */
@@ -1741,15 +2468,18 @@ body.awaiting .working { opacity: .55; }
   .lb-body { flex: 1 1 60%; }
   .lb-body small { white-space: normal; }
   .lb-acts { flex: 1 1 100%; justify-content: flex-end; }
-  .lb-go { flex: 1; min-height: 40px; font-size: 13.5px; }
+  .lb-go { flex: 1; min-height: 44px; font-size: 13.5px; }
   .lb-x { width: 40px; height: 40px; }
 
-  /* צ'יפ בתור: 22px זה יעד מגע שמפספסים. גם הרוחב נפתח למסך הצר. */
-  .q-chip { max-width: 100%; padding: 6px 9px; }
-  .q-chip .q-rm { width: 30px; height: 30px; font-size: 18px; }
+  /* צ'יפ בתור: רוחב מלא במסך צר; גודל ה-× נשאר מיעד המגע (לא לרדת מתחת ל-36) */
+  .att-chip, .q-chip { max-width: 100%; }
+  .q-chip { padding: 6px 9px; }
+  .q-chip .q-rm { width: 36px; height: 36px; font-size: 18px; }
   .q-clear { padding: 6px 10px; font-size: 12.5px; }
   /* גלישה אופקית עדיפה על שבירת הפריסה */
-  .perm-body pre, .tool pre, .md pre, .md .table-wrap { max-width: 100%; overflow-x: auto; }
+  .perm-body pre, .tool pre, .md pre, .md .table-wrap, .diff {
+    max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain;
+  }
 
   /* ---------- הודעות מערכת צפות ----------
      ‎bottom:20px‏ הניח מחבר נמוך; בטלפון הן נחתו בדיוק על "שלח" ועל שורת המצב.
@@ -1778,9 +2508,9 @@ body.awaiting .working { opacity: .55; }
   textarea#input { max-height: 26dvh; padding-block: 8px 4px; }
   .topbar { padding-block: 4px; padding-top: calc(4px + env(safe-area-inset-top)); }
   .log { gap: 14px; }
-  /* גיליון שנפתח מלמטה על מסך של 390px גובה חייב כמעט את כולו */
-  .modal-card, .usage-card, .palette-card { max-height: 94dvh; }
-  .ac-menu { max-height: 46dvh; }
+  /* גיליון שנפתח מלמטה על מסך של 390px גובה חייב כמעט את כולו — אבל לא יותר מהחלון החזותי */
+  .modal-card, .usage-card, .palette-card { max-height: min(94dvh, 100%); }
+  .ac-menu { max-height: min(46dvh, calc(var(--app-h, 100dvh) - var(--composer-h, 120px) - 48px)); }
 }
 
 /* ---------- הסרגל העליון: מה שנשאר כשאין רוחב ----------
@@ -1788,6 +2518,7 @@ body.awaiting .working { opacity: .55; }
 @media (max-width: 560px) {
   .presence { font-size: 0; padding: 3px 7px; }
   .presence::before { content: "⛓" attr(data-n); font-size: 11px; }
+  .presence[data-mode="view"]::before { content: "👁" attr(data-n); font-size: 11px; }
   .suggests { grid-template-columns: 1fr; max-width: 100%; }
 }
 
@@ -1847,7 +2578,9 @@ body.duet-mode #working, body.duet-mode #jumpBtn { display: none !important; }
 .dt-turn-A { border-inline-start: 3px solid var(--accent); }
 .dt-turn-B { border-inline-start: 3px solid var(--good); }
 .dt-vtag { font-size: 11px; color: var(--text-dim); background: var(--panel-2); border-radius: 6px; padding: 1px 6px; }
-.dt-model { font-size: 10.5px; color: var(--text-faint); unicode-bidi: isolate; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 190px; }
+.dt-model { font-size: 10.5px; color: var(--text-faint); unicode-bidi: isolate; overflow: hidden; white-space: nowrap; max-width: 190px;
+  display: inline-flex; align-items: center; gap: 5px; }
+.dt-model .dt-model-name { overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
 .dt-time { font-size: 10.5px; color: var(--text-faint); }
 .dt-flag { font-size: 10.5px; color: var(--warn); border: 1px solid currentColor; border-radius: 6px; padding: 0 5px; }
 .dt-chg { margin: 7px 0 0; padding-inline-start: 1.15em; font-size: 13.5px; }
@@ -1900,7 +2633,7 @@ body.duet-mode #working, body.duet-mode #jumpBtn { display: none !important; }
 
 .dt-mini, .dt-go { border-radius: 10px; font: inherit; font-size: 13px; cursor: pointer; padding: 6px 13px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); transition: background .13s, border-color .13s; }
 .dt-mini:hover { background: var(--border-soft); }
-.dt-go { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.dt-go { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 .dt-go:hover { background: var(--accent-2); border-color: var(--accent-2); }
 .dt-go:disabled { opacity: .55; cursor: default; }
 .dt-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
@@ -1985,6 +2718,17 @@ body.duet-mode #working, body.duet-mode #jumpBtn { display: none !important; }
   color: var(--text-dim); cursor: pointer;
 }
 .halt-btn:hover { color: var(--text); border-color: var(--text-faint); }
+
+/* חיווי המתנה לשרת שנפל באמצע תור — יושב על ההודעה עצמה */
+.await-server {
+  display: flex; align-items: center; gap: 9px;
+  margin: 10px 0 2px; padding: 9px 12px; border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 65%, var(--panel));
+  color: var(--text); font-size: 13px; font-weight: 600;
+}
+.await-server-text { unicode-bidi: plaintext; }
+#workingText.awaiting { color: var(--warn); }
 
 /* חיווי "מנסה שוב" בפס העבודה — הסבר לשקט בזמן שהוא נמשך */
 #workingText.retrying { color: var(--warn); }
@@ -2087,7 +2831,7 @@ body.anon-mode .composer-card {
 
 /* CLI שלא מכיר --no-session-persistence: הכפתור נשאר גלוי כדי שאפשר יהיה
    לקרוא למה הוא כבוי (title), אבל אינו לחיץ. */
-.nav-row.disabled { opacity: .45; pointer-events: none; }
+.nav-row.disabled { opacity: .45; cursor: not-allowed; }
 
 /* פס הצ'אט האנונימי בטלפון — ההפך המכוון מפס המכסה. שם הפעולות יורדות לשורה
    משלהן; כאן זו בדיוק הייתה התקלה: הכיתוב הארוך נדחס לעמודה של כ-100px, גלש
@@ -2107,7 +2851,37 @@ body.anon-mode .composer-card {
   .anon-tools .t-long, .anon-exit .t-long { display: none; }
   .anon-tools .t-short, .anon-exit .t-short { display: inline; }
   .anon-acts { gap: 5px; }
-  /* התוויות מתקצרות, יעד המגע לא: "מחק ויצא" הוא פעולה בלתי הפיכה,
-     ו-34px זה המינימום שעוד אפשר לפגוע בו בלי לכוון. */
-  .anon-tools, .anon-exit { font-size: 11.5px; padding: 6px 9px; border-radius: 8px; }
+  /* התוויות מתקצרות, יעד המגע לא: "מחק ויצא" הוא פעולה בלתי הפיכה. */
+  .anon-tools, .anon-exit { font-size: 11.5px; padding: 6px 9px; min-height: 44px; border-radius: 8px; }
 }
+
+/* ==========================================================================
+   הצבעים שהודלפו מהתמה של highlight.js
+   --------------------------------------------------------------------------
+   ערכות ‎github‎ ו-‎github-dark‎ נבנו מול הרקעים של GitHub — ‎#fff‎ ו-‎#0d1117‎.
+   כאן הקוד יושב על ‎--code-bg‎, שהוא נייר בסלייט קר ולא לבן, וההזזה הזאת
+   מפילה חלק מהאסימונים מתחת ל-4.5:1. נמדד על ‎#f3f4f7‎:
+
+     built_in ‎#e36209‎  3.17    ← הגרוע ביותר: ‎console‎, ‎require‎, ‎JSON‎
+     keyword  ‎#d73a49‎  4.16
+     name/tag ‎#22863a‎  4.21
+     comment  ‎#6a737d‎  4.38
+
+   בכהה (‎#1a1d20‎) כולם עוברים חוץ מ-‎section‎ (3.65). לכן ההחלפה אינה "תמה
+   חדשה" אלא חמישה אסימונים בלבד, באותם גוונים ורק כהים/בהירים די הצורך:
+   ‎6.38 · 5.60 · 6.72 · 5.81‎ בבהיר, ו-‎8.70‎ ל-‎section‎ בכהה.
+
+   הקובץ הזה נטען *אחרי* ערכות ה-vendor ב-‎index.html‎, ולכן הוא גובר עליהן
+   בלי ‎!important‎ — ראו את שלושת ה-‎<link>‎ שם. */
+.hljs-doctag, .hljs-keyword, .hljs-meta .hljs-keyword,
+.hljs-template-tag, .hljs-template-variable, .hljs-type,
+.hljs-variable.language_ { color: var(--hl-keyword); }
+
+.hljs-built_in, .hljs-symbol { color: var(--hl-builtin); }
+
+.hljs-code, .hljs-comment, .hljs-formula { color: var(--hl-comment); }
+
+.hljs-name, .hljs-quote, .hljs-selector-pseudo,
+.hljs-selector-tag { color: var(--hl-name); }
+
+.hljs-section { color: var(--hl-section); }

@@ -28,22 +28,101 @@ const qrcode = require('qrcode');
   } catch { /* אין .env — התנהגות רגילה */ }
 })();
 
-const { loadProviders } = require('./openai-bridge');
+const {
+  loadProviders,
+  normalizeLocalUrl,
+} = require('./openai-bridge');
 const cursor = require('./cursor-bridge');
+const {
+  CLAUDE_PERM_MODES,
+  isGodMode, withGod, parsePermissionModes, claudeCliPerm,
+} = require('./lib/perm-mode');
+const { inspectBash } = require('./lib/bash-guard');
+const {
+  MAX_SCHEDULES, buildItem: buildScheduleItem, scheduleView, persistShape: persistSchedules,
+} = require('./lib/schedule');
+
+// הגדרות הספק המקומי נשמרות בדיסק, נפרדות מ-.env — כדי שאפשר יהיה לשנות
+// כתובת/טמפרטורה מהממשק בלי לערוך קובץ ולהפעיל מחדש.
+const LOCAL_CFG_FILE = path.join(os.homedir(), '.claude', 'rtl-claude', 'local-provider.json');
+function readLocalCfg() {
+  try {
+    const j = JSON.parse(fs.readFileSync(LOCAL_CFG_FILE, 'utf8'));
+    return j && typeof j === 'object' ? j : {};
+  } catch { return {}; }
+}
+function writeLocalCfg(cfg) {
+  try {
+    fs.mkdirSync(path.dirname(LOCAL_CFG_FILE), { recursive: true });
+    fs.writeFileSync(LOCAL_CFG_FILE, JSON.stringify(cfg));
+  } catch (e) { console.warn('[local] שמירת ההגדרות נכשלה:', e.message); }
+}
+const localSaved = readLocalCfg();
 
 // ספקים תואמי-OpenAI (OmniRoute, שרת מודלים מקומי ברשת). נבנים מהסביבה אחרי
-// טעינת .env, כדי שכתובות הבסיס שבקובץ ייתפסו.
-const oaiProviders = loadProviders();
+// טעינת .env, כדי שכתובות הבסיס שבקובץ ייתפסו. קובץ ההגדרות של הספק המקומי
+// גובר על ברירת המחדל — זו בדיוק ההפרדה מהספקים האחרים.
+const oaiProviders = loadProviders({ local: localSaved });
+const localProvider = oaiProviders.find((p) => p.id === 'local') || null;
+if (localProvider && localSaved.extras) localProvider.setExtras(localSaved.extras);
+
+function localPublicStatus() {
+  if (!localProvider) return { enabled: false };
+  return { enabled: true, ...localProvider.getStatus() };
+}
+function persistLocalCfg(patch = {}) {
+  if (!localProvider) return;
+  const prev = readLocalCfg();
+  const st = localProvider.getStatus();
+  const next = { baseUrl: st.baseUrl, extras: st.extras };
+  if (patch.timeoutMs === null || patch.timeoutMs === '') { /* איפוס לברירת המחדל */ }
+  else if (patch.timeoutMs != null) next.timeoutMs = patch.timeoutMs;
+  else if (prev.timeoutMs != null) next.timeoutMs = prev.timeoutMs;
+  if (patch.apiKey != null && String(patch.apiKey).trim()) next.apiKey = String(patch.apiKey).trim();
+  else if (prev.apiKey) next.apiKey = prev.apiKey;
+  writeLocalCfg(next);
+}
+function applyLocalTurnExtras(msg) {
+  if (!localProvider || !msg) return;
+  if (!String(msg.model || '').startsWith(localProvider.PREFIX || 'local/')) return;
+  if (!msg.local || typeof msg.local !== 'object') return;
+  localProvider.setExtras({ ...localProvider.getExtras(), ...msg.local });
+  if (msg.local.timeoutMs != null) localProvider.reconfigure({ timeoutMs: msg.local.timeoutMs });
+}
 
 const PORT = process.env.PORT || 4173;
 const app = express();
 
-app.use(express.static(path.join(__dirname, 'public')));
-// ספריות צד-לקוח (אפליקציה מקומית — אין הגבלת CSP)
-app.use('/vendor/marked', express.static(path.join(__dirname, 'node_modules/marked')));
-app.use('/vendor/dompurify', express.static(path.join(__dirname, 'node_modules/dompurify/dist')));
-app.use('/vendor/highlight', express.static(path.join(__dirname, 'node_modules/@highlightjs/cdn-assets')));
-app.use('/vendor/mermaid', express.static(path.join(__dirname, 'node_modules/mermaid/dist')));
+// הנכסים הסטטיים ומקורותיהם. הרשימה משותפת לשכבת הדחיסה ול-‎express.static‎
+// כדי ששתיהן לא יוכלו להיפרד: שורש שנרשם רק באחת מהן היה מוגש בלי דחיסה
+// (או גרוע מזה, נדחס בלי להיות מוגש).
+const STATIC_MOUNTS = [
+  { prefix: '/', dir: path.join(__dirname, 'public') },
+  // ספריות צד-לקוח (אפליקציה מקומית — אין הגבלת CSP)
+  { prefix: '/vendor/marked', dir: path.join(__dirname, 'node_modules/marked') },
+  { prefix: '/vendor/dompurify', dir: path.join(__dirname, 'node_modules/dompurify/dist') },
+  { prefix: '/vendor/highlight', dir: path.join(__dirname, 'node_modules/@highlightjs/cdn-assets') },
+  { prefix: '/vendor/mermaid', dir: path.join(__dirname, 'node_modules/mermaid/dist') },
+];
+
+// brotli/gzip לפני ההגשה הרגילה. טעינה קרה של הקליפה ירדה מ-819KB ל-199KB.
+// ‎express.static‎ נשאר מאחוריו ומטפל בכל מה שהוא מוותר עליו: קבצים קטנים,
+// לקוח בלי ‎Accept-Encoding‎, ‎Range‎, ומה שעדיין לא נדחס.
+const staticCompress = require('./lib/static-compress')({
+  mounts: STATIC_MOUNTS,
+  onError: (e) => dbg('static-compress', { err: String(e && e.message || e) }),
+});
+app.use(staticCompress);
+for (const m of STATIC_MOUNTS) {
+  if (m.prefix === '/') app.use(express.static(m.dir));
+  else app.use(m.prefix, express.static(m.dir));
+}
+
+// תשובות ה-API נבנות בזמן ריצה, ולכן שכבת הקבצים לא יכולה לגעת בהן — ושם
+// נמצאים המספרים הגדולים: השיחה הגדולה כאן היא גוף של 887KB שיורד ל-73KB.
+app.use('/api', require('./lib/api-compress')({
+  onError: (e) => dbg('api-compress', { err: String(e && e.message || e) }),
+}));
 
 // בדיקת קיום תיקייה (לוולידציה של שדה "תיקיית עבודה")
 app.get('/api/check-dir', (req, res) => {
@@ -134,6 +213,8 @@ function readOauthToken() {
 // אבל השמות עצמם חייבים להישאר בתפריט. בלי זה כשל רשת ל-/v1/models
 // משאיר רק את מודלי Gemini מהשער, או רק "מודל ברירת מחדל".
 const FALLBACK_MODELS = [
+  { id: 'claude-opus-5-5', name: 'Claude Opus 5.5', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
+  { id: 'claude-fable-5-1', name: 'Claude Fable 5.1', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
   { id: 'claude-opus-5', name: 'Claude Opus 5', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
   { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
   { id: 'claude-fable-5', name: 'Claude Fable 5', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
@@ -189,13 +270,7 @@ function fetchModels() {
 function fetchPermissionModes() {
   return new Promise((resolve) => {
     execFile('claude', ['--help'], { timeout: 8000 }, (err, stdout) => {
-      if (err || !stdout) return resolve(null);
-      const i = stdout.indexOf('--permission-mode');
-      if (i < 0) return resolve(null);
-      const m = stdout.slice(i, i + 500).match(/choices:([\s\S]*?)\)/);
-      if (!m) return resolve(null);
-      const modes = [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
-      resolve(modes.length ? modes : null);
+      resolve(parsePermissionModes(stdout) || null);
     });
   });
 }
@@ -203,22 +278,18 @@ function fetchPermissionModes() {
 /* ==========================================================================
    מצב GOD — אישור אוטומטי לכל בקשה, ויומן של מה שבאמת רץ
    --------------------------------------------------------------------------
-   ‎god‎ אינו מצב של ה-CLI אלא של הממשק. ה-CLI מופעל דווקא ב-‎default‎ — המצב
-   שבו *כל* כלי שאינו ברשימת ההיתר נעצר ושואל — והשרת עונה "אשר" מיד. זה מה
-   שמבדיל אותו מ-‎bypassPermissions‎: שם ה-CLI לא שואל בכלל, ולכן אין מה לרשום
-   ואין מה להראות. כאן כל בקשה עוברת דרכנו, נענית בתוך פריים אחד, ונרשמת —
-   וסוף התור מקבל כפתור שפותח את הרשימה המלאה.
+   ‎god‎ אינו מצב של ה-CLI אלא של הממשק. ה-CLI מופעל ב-‎manual‎ — המצב שבו
+   *כל* כלי נעצר ושואל — והשרת עונה "אשר" מיד. זה מה שמבדיל אותו מ-
+   ‎bypassPermissions‎: שם ה-CLI לא שואל בכלל, ולכן אין מה לרשום ואין מה
+   להראות. כאן כל בקשה עוברת דרכנו, נענית בתוך פריים אחד, ונרשמת — וסוף
+   התור מקבל כפתור שפותח את הרשימה המלאה. שמות ישנים (‎default‎, או ‎force‎
+   של Cursor) ממופים כאן ולא נשלחים כמו שהם: ה-CLI דוחה אותם ונופל מיד.
    ========================================================================== */
-const GOD_MODE = 'god';
-const GOD_CLI_MODE = 'default';
 // AskUserQuestion אינה בקשת רשות לעשות משהו אלא שאלה שהתשובה עליה היא התוכן.
 // "אישור" בלי תשובה היה מחזיר למודל שאלה ריקה, ולכן היא נשארת על המסך גם כאן.
 const GOD_KEEP_TOOLS = new Set(['AskUserQuestion']);
-const isGodMode = (m) => m === GOD_MODE;
-/** מה באמת נשלח ל---permission-mode: ‎god‎ הוא שלנו, ה-CLI לא מכיר אותו. */
-const cliPermMode = (m) => (isGodMode(m) ? GOD_CLI_MODE : m);
-/** ‎god‎ לא יכול להגיע מ---help של ה-CLI, ולכן הוא נוסף לרשימה כאן. */
-const withGod = (modes) => (modes.includes(GOD_MODE) ? modes : [...modes, GOD_MODE]);
+/** מה באמת נשלח ל---permission-mode: ‎god‎ הוא שלנו, וה-CLI כבר לא מכיר ‎default‎. */
+const cliPermMode = (m) => claudeCliPerm(m, cfgCache.perms);
 /** קלט מקוצר ליומן — מה שמוצג בכרטיס, בלי לגרור תוכן קובץ שלם לכל מכשיר. */
 function godInput(input) {
   if (!input || typeof input !== 'object') return {};
@@ -419,6 +490,36 @@ app.get('/api/usage', async (req, res) => {
   }
 });
 
+/* ---------- מכסת Cursor ----------
+   אותה סכמה ואותה מדיניות מטמון כמו מכסת Claude, כדי שהמסך יצייר את שתיהן
+   באותו קוד. השדה שמבדיל ביניהן הוא `connected`: בלעדיו אי-אפשר להבחין בין
+   "אין תוכנית Cursor" לבין "יש, אבל הדשבורד לא ענה עכשיו", ועל ההבדל הזה
+   נשענת ההודעה שמוצגת בחלון הצף. */
+const CURSOR_USAGE_CACHE_FILE = path.join(os.tmpdir(), 'rtl-claude-cursor-usage.json');
+function loadCursorUsageCache() { try { return JSON.parse(fs.readFileSync(CURSOR_USAGE_CACHE_FILE, 'utf8')); } catch { return null; } }
+function saveCursorUsageCache(data) { try { fs.writeFileSync(CURSOR_USAGE_CACHE_FILE, JSON.stringify(data)); } catch {} }
+let cursorUsageCache = { t: 0, lastTry: 0, data: loadCursorUsageCache() };
+app.get('/api/usage/cursor', async (req, res) => {
+  const connected = cursor.usageConnected();
+  try {
+    const now = Date.now();
+    const fresh = cursorUsageCache.data && now - cursorUsageCache.t < 60000;
+    // מחזור החיוב של Cursor חודשי, לא חמש-שעתי — אין טעם לדפוק על הדשבורד
+    // באותו קצב שבו נמשכת מכסת הסשן של Claude.
+    const mayTry = now - cursorUsageCache.lastTry > 30000;
+    if (connected && !fresh && mayTry) {
+      cursorUsageCache.lastTry = now;
+      const u = await cursor.fetchUsage();
+      if (u) { cursorUsageCache.data = u; cursorUsageCache.t = now; saveCursorUsageCache(u); }
+    }
+    const data = cursorUsageCache.data || { windows: [], plan: null };
+    res.json({ ...data, connected });
+  } catch {
+    const data = cursorUsageCache.data || { windows: [], plan: null };
+    res.json({ ...data, connected });
+  }
+});
+
 /**
  * מצרף למודלים את הקבוצה שאליה הם שייכים בבורר.
  *
@@ -500,6 +601,7 @@ function categoryOf(m) {
   // מחדש לפי שם היה מפזר אותם בין מודלי Anthropic הישירים, ואת ההבחנה
   // היחידה שבאמת חשובה כאן — איזה סוכן ירוץ — אי אפשר היה לראות בבורר.
   if (String(m.group || '').startsWith(cursor.CURSOR_GROUP)) return m.group;
+  if (String(m.group || '').startsWith('OmniRoute')) return m.group;
   const id = String(m.id || '');
   for (const [re, group] of SOURCE_CATEGORIES) if (re.test(id)) return group;
   // רק החלק האחרון של המזהה: שם השער עצמו (`gemini/`, `aug/`) היה מטה כל מודל
@@ -566,14 +668,38 @@ async function getConfig() {
       ...grouped(cfgCache.gateway, 'Gemini · Google'),
       ...oaiProviders.flatMap((p) => p.getModels()),
     ]),
-    permissionModes: withGod(cfgCache.perms || ['acceptEdits', 'plan', 'bypassPermissions']),
+    permissionModes: withGod(cfgCache.perms || CLAUDE_PERM_MODES),
     // מצבי ההרשאה של Cursor אינם אותם מצבים, והבורר מחליף ביניהם לפי המודל
     // שנבחר. שליחת שתי הרשימות מראש חוסכת סיבוב נוסף בכל החלפת מודל.
     cursorPermissionModes: cursor.PERM_MODES,
     cursorPermissionDefault: cursor.PERM_DEFAULT,
     cursorPrefix: cursor.PREFIX,
+    local: localPublicStatus(),
   };
 }
+// כל החיבורים הפתוחים, בלי קשר לשיחה שהם צופים בה — לשידור שינויים ברמת
+// רשימת השיחות (שיחה חדשה, שינוי שם, מחיקה) ועדכוני קונפיג/מודלים חיים לכל המכשירים.
+const allClients = new Set();
+function broadcastAll(obj) {
+  const raw = JSON.stringify(obj);
+  for (const ws of allClients) {
+    if (ws.readyState === ws.OPEN) { try { ws.send(raw); } catch {} }
+  }
+}
+
+let broadcastConfigTimer = null;
+function broadcastConfig() {
+  if (broadcastConfigTimer) clearTimeout(broadcastConfigTimer);
+  broadcastConfigTimer = setTimeout(async () => {
+    broadcastConfigTimer = null;
+    try {
+      const cfg = await getConfig();
+      broadcastAll({ kind: 'config', ...cfg });
+    } catch {}
+  }, 100);
+  broadcastConfigTimer.unref?.();
+}
+
 // חימום מוקדם כדי ש-ccrModelIds יהיה מאוכלס גם אם מריצים לפני שה-UI ביקש /api/config
 getConfig().catch(() => {});
 // גשר לכל ספק תואם-OpenAI — עולה פעם אחת ומשרת את כל השיחות. ספק שגשרו לא
@@ -582,14 +708,16 @@ const oaiBridges = new Map();   // id של ספק → { url, token }
 for (const p of oaiProviders) {
   p.startBridge().then((b) => { if (b) oaiBridges.set(p.id, b); }).catch(() => {});
   // מעקב זמינות: הבדיקה הראשונה יוצאת מיד ולא חוסמת את העלייה. אם הספק עדיין
-  // עולה (docker compose, או מחשב שעוד לא דלוק), המודלים ייכנסו לתפריט מעצמם.
-  p.startModelWatcher(() => {});
+  // עולה (docker compose, או מחשב שעוד לא דלוק), המודלים ייכנסו לתפריט מעצמם ויוזרמו בלייב.
+  p.startModelWatcher(() => {
+    broadcastConfig();
+  });
 }
 app.get('/api/config', async (req, res) => {
   // anonymous: האם הכפתור "צ׳אט אנונימי" בכלל יכול לעבוד כאן. הבדיקה היא על
   // ה-CLI המותקן, ולכן היא שייכת לשרת — ראו anonCapable.
   try { res.json({ ...(await getConfig()), anonymous: anonCapable }); }
-  catch { res.json({ models: FALLBACK_MODELS, permissionModes: withGod(['acceptEdits', 'plan', 'bypassPermissions']), anonymous: anonCapable }); }
+  catch { res.json({ models: FALLBACK_MODELS, permissionModes: withGod(CLAUDE_PERM_MODES), anonymous: anonCapable }); }
 });
 
 // ---------- העלאת תמונות (נשמרות זמנית ב-temp ומנוקות אוטומטית) ----------
@@ -633,6 +761,12 @@ app.post('/api/upload', express.json({ limit: '30mb' }), (req, res) => {
     res.json({ ok: true, path: full, name: `${base}.${ext}` });
   } catch (e) { res.status(500).json({ ok: false, error: String((e && e.message) || e) }); }
 });
+
+/* ‎/share‎ שייך ל-Service Worker ולא לשרת: ‎share_target‎ שולח לכאן POST
+   רב-חלקי, וה-SW קולט אותו לפני שהוא יוצא לרשת (ראו takeShare ב-sw.js).
+   הנתיב הזה הוא רק הרשת הביטחון למקרה שאין SW פעיל — שיתוף בהתקנה הראשונה,
+   או דפדפן שמחק את הרישום. במקום 404 הוא פשוט פותח את האפליקציה. */
+app.all('/share', (req, res) => res.redirect(303, '/'));
 
 // ---------- עזרי נתיבים ----------
 /* ------------------------------------------------------------------------
@@ -908,8 +1042,14 @@ const LOG_ROTATE_BYTES = 4 * 1024 * 1024;
 let logBytes = 0;
 try { logBytes = fs.statSync(LOG_FILE).size; } catch {}
 
-function logLine(text) {
-  const line = text.replace(/\n+$/, '') + '\n';
+// שעון מקומי ולא UTC: היומן נקרא מול השעון שבפינת המסך ומול הרגע שבו ראית את התקלה
+const logStamp = () => {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+};
+const HHMMSS = /^\d{2}:\d{2}:\d{2}\.\d{3}$/;
+
+function logWrite(line) {
   try {
     // סיבוב לפני הכתיבה ולא אחריה, כדי שהמידה תיבדק מול הקובץ שאליו כותבים
     if (logBytes > LOG_ROTATE_BYTES) { fs.renameSync(LOG_FILE, LOG_FILE + '.1'); logBytes = 0; }
@@ -918,12 +1058,44 @@ function logLine(text) {
   } catch {}   // יומן שנכשל לעולם לא יפיל את השרת
 }
 
-// שעון מקומי ולא UTC: היומן נקרא מול השעון שבפינת המסך ומול הרגע שבו ראית את התקלה
-const logStamp = () => {
-  const d = new Date();
-  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
-};
-const HHMMSS = /^\d{2}:\d{2}:\d{2}\.\d{3}$/;
+/* ---------- קיפול שורות חוזרות ----------
+   תקלה שחוזרת בלולאה כותבת את עצמה ליומן בלי סוף. ספק מקומי שכתובתו כבר לא
+   קיימת ברשת, למשל, נכשל כל 30 שנ׳ — 2,880 שורות זהות ביום. היומן מסתובב
+   ב-4MB, ולכן התקלה החוזרת לא רק מרעישה: היא *מוחקת* את מה שהיומן נועד לשמר.
+   במדידה על יומן אמיתי כאן 60% מהשורות היו שורה אחת כזו.
+
+   לכן שורה שזהה לקודמת נספרת ולא נכתבת, ובנוסח syslog: כשמגיעה שורה אחרת
+   נכתב לפניה סיכום של מה שנבלע. ההשוואה מתעלמת מחותמת הזמן — היא מה שמבדיל
+   בין שתי הופעות של אותו אירוע בדיוק.
+
+   הקיפול לא שותק לנצח: תקלה שחוזרת שעה שלמה בלי ששום דבר אחר נכתב ביניים
+   הייתה נעלמת מהיומן לגמרי, ולכן כל LOG_REPEAT_MS יוצא סיכום ביניים. כך
+   "עדיין קורה" נשאר גלוי, בלי לשלם עליו שורה לכל ניסיון. */
+const LOG_REPEAT_MS = 5 * 60 * 1000;
+const LOG_STAMP_PREFIX = /^\d{2}:\d{2}:\d{2}\.\d{3} /;
+let repeatBody = null, repeatCount = 0, repeatSince = 0;
+
+function logFlushRepeats() {
+  if (!repeatCount) return;
+  const n = repeatCount, mins = Math.round((Date.now() - repeatSince) / 60000);
+  repeatCount = 0;
+  repeatSince = Date.now();
+  logWrite(logStamp() + ` ↑ חזר עוד ${n} פעמים${mins ? ` במשך ${mins} דק׳` : ''}\n`);
+}
+
+function logLine(text) {
+  const line = text.replace(/\n+$/, '') + '\n';
+  const body = line.replace(LOG_STAMP_PREFIX, '');
+  if (body === repeatBody) {
+    repeatCount += 1;
+    if (Date.now() - repeatSince >= LOG_REPEAT_MS) logFlushRepeats();
+    return;
+  }
+  logFlushRepeats();           // הסיכום מופיע לפני השורה ששברה את הרצף
+  repeatBody = body;
+  repeatSince = Date.now();
+  logWrite(line);
+}
 const logFmt = (v) => {
   if (v instanceof Error) return v.stack || v.message;
   if (typeof v === 'string') return v;
@@ -967,6 +1139,10 @@ app.post('/api/client-log', express.json({ limit: '256kb' }), (req, res) => {
 
 /* קריאת היומן מהמכשיר שבו התקלה קרתה, בלי SSH ובלי כבל. */
 app.get('/api/logs', (req, res) => {
+  // ריצת חזרות פתוחה נסגרת לפני הקריאה. בלי זה מי שמסתכל ביומן *בזמן* שהתקלה
+  // חוזרת היה רואה אותה פעם אחת בלי שום רמז לכך שהיא קורית עכשיו שוב ושוב —
+  // כלומר בדיוק המצב שבשבילו פותחים את המסך הזה.
+  logFlushRepeats();
   const n = Math.min(Math.max(parseInt(req.query.n, 10) || 300, 1), 5000);
   const grep = String(req.query.grep || '');
   let text = '';
@@ -1056,7 +1232,11 @@ function sanitizeConv(c) {
       }
       return null;
     }).filter(Boolean);
-    return { role: 'assistant', blocks };
+    // המודל שכתב את התשובה נשמר בהודעה עצמה ולא נגזר מהבורר בזמן הצגה: שיחה
+    // שעברה בין מודלים באמצע חייבת להראות ליד כל תשובה את מי שבאמת כתב אותה,
+    // גם אחרי רענון. ראו brandOf ב-app.js.
+    // awaiting: התור נקטע כי השרת נפל — החיווי על ההודעה חייב לשרוד רענון.
+    return { role: 'assistant', blocks, ...(m.model ? { model: String(m.model).slice(0, 120) } : {}), ...(m.awaiting ? { awaiting: true } : {}) };
   }).filter(Boolean);
   const now = Date.now();
   return {
@@ -1085,35 +1265,39 @@ function convMeta(c) {
   }
   return meta;
 }
+/* הקריאה, הכתיבה והמטמון יושבים ב-lib/conv-store.js — ראו שם למה הם ירדו
+   מה-event loop ומה זה עשה להזרמה. כאן נשארת רק ההגנה על הצ'אט האנונימי,
+   כי היא מדיניות של השרת ולא של האחסון: זו הבדיקה האחרונה לפני הדיסק, ואם
+   מזהה אנונימי הגיע עד לכאן — זה באג, והוא נעצר ברעש ולא בשקט. */
+const store = require('./lib/conv-store')({
+  dir: CONV_DIR,
+  guard: (c) => { if (isAnonId(c && c.id)) throw new Error('anon conversation must never reach disk'); },
+  dbg,
+});
+const { readConv, writeConv } = store;
+const listConvIds = store.listIds;
+
 // בניית האינדקס דורשת פענוח JSON של כל קובץ. השרת חי לאורך זמן ורענון דף הוא
-// פעולה נפוצה, לכן שומרים את התקציר במטמון לפי mtime — רק קובץ שהשתנה נקרא שוב.
+// פעולה נפוצה, לכן שומרים את התקציר במטמון — ומתיישנים לפי אסימון הגרסה של
+// האחסון ולא לפי mtime, שמפגר אחרי כתיבה שעדיין בדרך לדיסק.
 const metaCache = new Map();
 function convMetaCached(id) {
-  let st;
-  try { st = fs.statSync(convPath(id)); } catch { metaCache.delete(id); return null; }
-  const hit = metaCache.get(id);
-  if (hit && hit.mtimeMs === st.mtimeMs) return hit.meta;
   const c = readConv(id);
-  if (!c || !c.id) return null;
+  if (!c || !c.id) { metaCache.delete(id); return null; }
+  const st = store.stamp(id);
+  const hit = metaCache.get(id);
+  if (hit && hit.stamp === st) return hit.meta;
   const meta = convMeta(c);
-  metaCache.set(id, { mtimeMs: st.mtimeMs, meta });
+  metaCache.set(id, { stamp: st, meta });
   return meta;
 }
-function readConv(id) {
-  try { return JSON.parse(fs.readFileSync(convPath(id), 'utf8')); } catch { return null; }
-}
-function writeConv(c) {
-  // הבדיקה האחרונה לפני הדיסק. כל מסלול כתיבה כבר סינן מזהה אנונימי; אם
-  // בכל זאת הגיע לכאן אחד — זה באג, והוא נעצר ברעש ולא בשקט.
-  if (isAnonId(c.id)) throw new Error('anon conversation must never reach disk');
-  const tmp = convPath(c.id) + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(c));
-  fs.renameSync(tmp, convPath(c.id));
-}
-function listConvIds() {
-  try { return fs.readdirSync(CONV_DIR).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)); }
-  catch { return []; }
-}
+
+/* כתיבה שהלקוח כבר קיבל עליה ok עדיין יכולה להיות בדרך לדיסק. יציאה בלי
+   ניקוז הייתה מאבדת בדיוק את מה שהובטח לו.
+   ‎exit‎ ולא ‎SIGINT/SIGTERM‎ במכוון: הסיגנלים כבר נתפסים למטה (עצירת המאזין
+   המרוחק), ומטפל נוסף כאן היה רץ לפניהם ומסיים את התהליך במקומם. ‎exit‎ יורה
+   גם כשהם קוראים ל-‎process.exit‎, והוא סינכרוני — בדיוק מה ש-flushSync צריך. */
+process.on('exit', () => { store.flushSync(); });
 function readSettings() {
   try {
     const s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
@@ -1159,7 +1343,7 @@ app.get('/api/conversations/:id', (req, res) => {
 // ולכן כתיבה בו-זמנית בדרך כלל זהה — אבל מכשיר שהיה מנותק ופספס חלק מהזרם
 // עלול לכתוב תמליל ישן על החדש. baseRev חוסם בדיוק את המקרה הזה: אם הגרסה
 // בדיסק התקדמה מאז הקריאה, הכתיבה נדחית והקליינט קורא מחדש במקום לדרוס.
-app.put('/api/conversations/:id', storeJson, (req, res) => {
+app.put('/api/conversations/:id', storeJson, async (req, res) => {
   try {
     const id = req.params.id;
     if (!VALID_ID.test(id)) return res.status(400).json({ ok: false, error: 'bad id' });
@@ -1180,8 +1364,25 @@ app.put('/api/conversations/:id', storeJson, (req, res) => {
     if (body.baseRev !== undefined && Number(body.baseRev) !== curRev) {
       return res.status(409).json({ ok: false, error: 'stale', rev: curRev, conversation: cur });
     }
+    /* כתיבה חלקית. בזמן תור חי משתנה רק ההודעה האחרונה, ולכן הלקוח שולח אותה
+       בלבד עם ‎fromIndex‎ — כמה הודעות מההתחלה להשאיר כמו שהן. מה שמתיר את זה
+       הוא בדיוק ‎baseRev‎ שנבדק שורה למעלה: גרסה זהה פירושה שהקידומת שבדיסק
+       היא בדיוק זו שהלקוח מחזיק, ואין מה לשלוח אותה שוב.
+       קובץ קצר מהצפוי אינו התנגשות בין מכשירים אלא חוסר התאמה בין השניים,
+       ולכן הוא מבקש שמירה מלאה במקום לשלוח את הלקוח לקרוא מחדש. */
+    const from = Number(body.fromIndex) || 0;
+    if (from > 0) {
+      const prefix = (cur && Array.isArray(cur.messages)) ? cur.messages : [];
+      if (!Number.isInteger(from) || from > prefix.length) {
+        dbg('store.gap', { convId: id, from, have: prefix.length, rev: curRev });
+        return res.status(409).json({ ok: false, error: 'gap', needFull: true, rev: curRev });
+      }
+      c.messages = prefix.slice(0, from).concat(c.messages);
+    }
     c.rev = curRev + 1;
-    writeConv(c);
+    // ההמתנה כאן אינה חוסמת: ה-event loop פנוי להזרים לשאר המכשירים בזמנה.
+    // מה שהיא כן מבטיחה הוא ש-‎ok‎ נאמר על מה שכבר על הדיסק, ולא על הבטחה.
+    await writeConv(c);
     broadcastAll({ kind: 'conv_meta', meta: convMeta(c) });
     res.json({ ok: true, rev: c.rev, meta: convMeta(c) });
   } catch (e) {
@@ -1195,10 +1396,13 @@ app.delete('/api/conversations/:id', (req, res) => {
   if (!VALID_ID.test(id)) return res.status(400).json({ ok: false });
   // אנונימית: אין קובץ למחוק, יש רק תהליך וזיכרון להשמיד.
   if (isAnonId(id)) { destroyAnon(sessions.get(id)); return res.json({ ok: true, anon: true }); }
-  try { fs.unlinkSync(convPath(id)); } catch {}
+  // דרך האחסון ולא דרך fs: מחיקה צריכה לבטל גם כתיבה שעוד ממתינה, אחרת היא
+  // הייתה נוחתת רגע אחרי המחיקה ומחזירה את השיחה לחיים.
+  store.remove(id);
+  metaCache.delete(id);
   duet.dispose(id);
   const s = sessions.get(id);
-  if (s) { killChild(s); sessions.delete(id); }
+  if (s) { disarmSchedules(s); killChild(s); sessions.delete(id); saveResumeState(); }
   broadcastAll({ kind: 'conv_deleted', id });
   res.json({ ok: true });
 });
@@ -1215,8 +1419,47 @@ app.put('/api/settings', storeJson, (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: String(e.message || e) }); }
 });
 
+app.get('/api/local', (req, res) => {
+  res.json(localPublicStatus());
+});
+
+app.put('/api/local', storeJson, (req, res) => {
+  if (!localProvider) return res.status(404).json({ ok: false, error: 'הספק המקומי כבוי' });
+  const b = req.body && typeof req.body === 'object' ? req.body : {};
+  localProvider.setExtras({
+    ...localProvider.getExtras(),
+    ...(b.extras && typeof b.extras === 'object' ? b.extras : {}),
+    ...b,
+  });
+  const rec = {};
+  if (b.baseUrl != null) {
+    const url = normalizeLocalUrl(b.baseUrl);
+    if (!url) return res.status(400).json({ ok: false, error: 'כתובת שרת לא תקינה' });
+    rec.baseUrl = url;
+  }
+  if (b.apiKey != null) rec.apiKey = b.apiKey;
+  if ('timeoutMs' in b) rec.timeoutMs = b.timeoutMs;
+  else if (b.extras && typeof b.extras === 'object' && 'timeoutMs' in b.extras) rec.timeoutMs = b.extras.timeoutMs;
+  if (Object.keys(rec).length) localProvider.reconfigure(rec);
+  persistLocalCfg(rec);
+  broadcastConfig();
+  res.json({ ok: true, ...localPublicStatus() });
+});
+
+app.post('/api/local/probe', async (req, res) => {
+  if (!localProvider) return res.status(404).json({ ok: false, error: 'הספק המקומי כבוי' });
+  try {
+    const models = await localProvider.probeNow();
+    broadcastConfig();
+    res.json({ ok: true, found: !!(models && models.length), ...localPublicStatus() });
+  } catch (e) {
+    broadcastConfig();
+    res.status(502).json({ ok: false, error: String(e.message || e), ...localPublicStatus() });
+  }
+});
+
 // שמירה אחרונה בעת סגירת החלון — נשלח ב-sendBeacon, לכן POST יחיד לכל המידע.
-app.post('/api/flush', storeJson, (req, res) => {
+app.post('/api/flush', storeJson, async (req, res) => {
   try {
     const b = req.body || {};
     for (const raw of (Array.isArray(b.conversations) ? b.conversations : [])) {
@@ -1229,7 +1472,9 @@ app.post('/api/flush', storeJson, (req, res) => {
       const curRev = (cur && Number(cur.rev)) || 0;
       if (raw.baseRev !== undefined && Number(raw.baseRev) !== curRev) continue;
       c.rev = curRev + 1;
-      writeConv(c);
+      // ה-beacon הוא ההזדמנות האחרונה של חלון שנסגר. ממתינים לנחיתה בפועל
+      // כדי שהתשובה תיאמר על מה שנשמר, ולא על מה שנקבע בתור.
+      await writeConv(c);
       broadcastAll({ kind: 'conv_meta', meta: convMeta(c) });
     }
     if (b.settings || b.history || b.activeId !== undefined) {
@@ -1244,29 +1489,65 @@ app.post('/api/flush', storeJson, (req, res) => {
 });
 
 // הגירה חד-פעמית מה-localStorage הישן — לא דורסת שיחה שכבר קיימת בדיסק.
-app.post('/api/import', storeJson, (req, res) => {
+app.post('/api/import', storeJson, async (req, res) => {
   try {
     const convs = Array.isArray((req.body || {}).convs) ? req.body.convs : [];
     const existing = new Set(listConvIds());
     let imported = 0;
+    // ההגירה רצה פעם אחת בחיי ההתקנה, וכל השיחות נכתבות במקביל — ההמתנה
+    // המשותפת בסוף חוסכת סבב נפרד לכל אחת מהן.
+    const landings = [];
     for (const raw of convs) {
       const c = sanitizeConv(raw);
       if (!c || existing.has(c.id) || isAnonId(c.id)) continue;
-      writeConv(c); imported++;
+      landings.push(writeConv(c)); imported++;
     }
+    await Promise.all(landings);
     console.log(`[store] הגירה מ-localStorage: ${imported} שיחות נוספו`);
     res.json({ ok: true, imported });
   } catch (e) { res.status(500).json({ ok: false, error: String(e.message || e) }); }
 });
 
 // חיפוש חופשי בכל השיחות שבדיסק (כולל כאלה שלא נטענו לזיכרון הדפדפן)
+/* אינדקס החיפוש.
+   ----------------------------------------------------------------------
+   קודם כל חיפוש קרא ופענח מהדיסק את *כל* קובצי השיחות מחדש — סינכרונית,
+   באותו thread שמזרים ברגע זה תשובה לדפדפן. החיפוש בממשק מופעל אחרי השהיה
+   של 220ms מכל הקלדה, כלומר כל מילה שמקלידים בסרגל הצד עצרה את הסטרימינג
+   למשך פענוח של מגה-בייטים. הפתרון הוא אותה תבנית שכבר משרתת את רשימת
+   השיחות (‎convMetaCached‎): מטמון שמתיישן לפי אסימון הגרסה של האחסון, כך
+   שרק שיחה שהשתנתה נקראת שוב. האסימון ולא mtime — כתיבה שעוד בדרך לדיסק
+   טרם נגעה ב-mtime, ולכן חיפוש היה ממשיך למצוא את התוכן הישן.
+   ‎lower‎ הוא כל הטקסט מוקטן פעם אחת, ומשמש רק לשאלה "האם יש כאן התאמה
+   בכלל". קטע ההקשר עצמו נחתך תמיד מהטקסט המקורי, כדי שמה שמוצג יישאר
+   בדיוק כפי שנכתב. */
+const searchCache = new Map();
+function searchDoc(id) {
+  const c = readConv(id);
+  if (!c) { searchCache.delete(id); return null; }
+  const sig = store.stamp(id);
+  const hit = searchCache.get(id);
+  if (hit && hit.sig === sig) return hit.doc;
+  const parts = [];
+  for (const m of (c.messages || [])) {
+    if (m.role === 'user') { if (m.text) parts.push(m.text); }
+    else for (const b of (m.blocks || [])) if ((b.type === 'text' || b.type === 'thinking') && b.text) parts.push(b.text);
+  }
+  const title = c.title || '';
+  const doc = { id, title, updatedAt: c.updatedAt || 0, parts, lower: (title + '\n' + parts.join('\n')).toLowerCase() };
+  searchCache.set(id, { sig, doc });
+  return doc;
+}
+
 app.get('/api/search', (req, res) => {
   const q = (req.query.q || '').toString().trim().toLowerCase();
   if (!q) return res.json({ results: [] });
   const results = [];
+  const live = new Set();
   for (const id of listConvIds()) {
-    const c = readConv(id);
-    if (!c) continue;
+    live.add(id);
+    const doc = searchDoc(id);
+    if (!doc || !doc.lower.includes(q)) continue;   // הרוב המכריע נופל כאן
     let hits = 0, snippet = '';
     const scan = (text) => {
       if (!text) return;
@@ -1275,91 +1556,53 @@ app.get('/api/search', (req, res) => {
       hits++;
       if (!snippet) snippet = text.slice(Math.max(0, i - 40), i + 100).replace(/\s+/g, ' ').trim();
     };
-    scan(c.title);
-    for (const m of (c.messages || [])) {
-      if (m.role === 'user') scan(m.text);
-      else for (const b of (m.blocks || [])) if (b.type === 'text' || b.type === 'thinking') scan(b.text);
+    scan(doc.title);
+    for (const text of doc.parts) {
+      scan(text);
       if (hits > 8) break;
     }
-    if (hits) results.push({ id: c.id, title: c.title, updatedAt: c.updatedAt, hits, snippet });
+    if (hits) results.push({ id: doc.id, title: doc.title, updatedAt: doc.updatedAt, hits, snippet });
   }
+  // שיחות שנמחקו בינתיים לא נשארות תלויות בזיכרון
+  for (const id of searchCache.keys()) if (!live.has(id)) searchCache.delete(id);
   results.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   res.json({ results: results.slice(0, 50) });
 });
 
-// ---------- שרתי MCP ----------
-let mcpCache = { t: 0, data: null };
-let mcpInflight = null;
-app.get('/api/mcp', (req, res) => {
-  const now = Date.now();
-  if (mcpCache.data && now - mcpCache.t < 30000) return res.json(mcpCache.data);
-  if (!mcpInflight) {
-    mcpInflight = new Promise((resolve) => {
-      execFile('claude', ['mcp', 'list'], { timeout: 15000 }, async (err, stdout) => {
-        const servers = [];
-        for (const line of (stdout || '').split('\n')) {
-          const m = line.match(/^([^:]+):\s*(.*?)\s*-\s*(✔|✗|.*?(?:Connected|Failed|Disconnected|error).*)$/i);
-          if (m) servers.push({ name: m[1].trim(), url: m[2].trim(), connected: /✔|connected/i.test(m[3]) });
-        }
-        // שרתי ה-MCP של Cursor הם רשימה נפרדת לגמרי (‎.cursor/mcp.json‎). הם
-        // מוצגים באותו מסך ומסומנים בשם הסוכן, כדי שיהיה ברור למי כל שרת זמין.
-        let cur = [];
-        try { cur = await cursor.mcpList(); } catch {}
-        for (const c of cur) servers.push({ name: c.name, url: c.detail || '', connected: c.status === 'connected', agent: 'cursor' });
-        const data = { servers, raw: (stdout || '').trim() };
-        mcpCache = { t: Date.now(), data };
-        mcpInflight = null;
-        resolve(data);
-      });
-    });
-  }
-  mcpInflight.then((data) => res.json(data)).catch(() => res.json({ servers: [], raw: '' }));
+// ---------- שרתי MCP ופקודות סלאש ----------
+// שתי רשימות שנקראות מהדיסק ומהתהליכים של המשתמש. ‎lib/agent-capabilities.js‎
+// מחזיק אותן יחד עם הבדיקות שלהן — סריקה של שמונה רמות שעוקבת אחרי קישורים
+// סימבוליים היא בדיוק המקום שבו תקלה נראית כמו "התפריט ריק".
+const agentCaps = require('./lib/agent-capabilities')({
+  execFile, cursor, home: os.homedir(),
 });
-
-// ---------- פקודות סלאש (מובנות + מותאמות אישית) ----------
-const BUILTIN_COMMANDS = [
-  { name: '/clear', desc: 'שיחה חדשה (מנקה הקשר)', client: true },
-  { name: '/compact', desc: 'דחיסת ההקשר לסיכום קצר' },
-  { name: '/init', desc: 'יצירת קובץ CLAUDE.md לפרויקט' },
-  { name: '/review', desc: 'סקירת קוד של השינויים' },
-  { name: '/security-review', desc: 'סקירת אבטחה של השינויים' },
-  { name: '/pr-comments', desc: 'קריאת תגובות על ה-PR' },
-  { name: '/rc', desc: 'Remote Control — שליטה במחשב מ-claude.ai/code ומהנייד', client: true },
-];
-function scanCommands(dir, scope, out, visited = new Set(), depth = 0) {
-  if (depth > 8) return;
-  let real;
-  try { real = fs.realpathSync(dir); } catch { return; }
-  if (visited.has(real)) return;
-  visited.add(real);
-  let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
-  for (const e of entries) {
-    if (e.isDirectory()) scanCommands(path.join(dir, e.name), scope, out, visited, depth + 1);
-    else if (e.name.endsWith('.md')) {
-      let desc = '';
-      try {
-        const txt = fs.readFileSync(path.join(dir, e.name), 'utf8');
-        const fm = txt.match(/^---[\s\S]*?description:\s*(.+)$[\s\S]*?---/m);
-        if (fm) desc = fm[1].trim(); else desc = (txt.split('\n').find((l) => l.trim() && !l.startsWith('---')) || '').slice(0, 80);
-      } catch {}
-      out.push({ name: '/' + e.name.replace(/\.md$/, ''), desc, scope, custom: true });
-    }
-  }
-}
+const mcpAdmin = require('./lib/mcp-admin')({
+  execFile,
+  cursorConfigPath: path.join(os.homedir(), '.cursor', 'mcp.json'),
+});
+app.get('/api/mcp', (req, res) => {
+  agentCaps.mcpList().then((data) => res.json(data)).catch(() => res.json({ servers: [], raw: '' }));
+});
+app.post('/api/mcp', express.json({ limit: '8kb' }), (req, res) => {
+  const body = req.body || {};
+  mcpAdmin.add(body).then((r) => {
+    // ביטול מטמון רק אם משהו באמת נכתב. שגיאת אימות לא צריכה להכריח
+    // את הפתיחה הבאה של הפאנל להריץ שוב את ‎claude mcp list‎.
+    if (r.ok || (r.results && Object.values(r.results).some((x) => x && x.ok))) agentCaps.forgetMcp();
+    dbg('mcp.add', { ok: r.ok, name: body.name, agents: body.agents, error: r.error || null });
+    res.status(r.ok ? 200 : 400).json(r);
+  }).catch((e) => res.status(500).json({ ok: false, error: e.message || 'שגיאה' }));
+});
+app.post('/api/mcp/remove', express.json({ limit: '4kb' }), (req, res) => {
+  const body = req.body || {};
+  mcpAdmin.remove(body).then((r) => {
+    if (r.ok) agentCaps.forgetMcp();
+    dbg('mcp.remove', { ok: r.ok, name: body.name, agent: body.agent, error: r.error || null });
+    res.status(r.ok ? 200 : 400).json(r);
+  }).catch((e) => res.status(500).json({ ok: false, error: e.message || 'שגיאה' }));
+});
 app.get('/api/commands', (req, res) => {
-  const root = resolveDirGlobal(req.query.cwd);
-  // תפריט ה-'/' הוא של הסוכן שרץ. ל-Cursor אין את הפקודות המובנות של Claude
-  // (‎/compact‎, ‎/rc‎…) ואין לו ‎.claude/commands‎ — מה שממלא שם את התפקיד הוא
-  // skills. הצגת התפריט הלא-נכון הייתה מציעה פקודות שפשוט לא יקרו.
-  if (req.query.agent === 'cursor') {
-    try { return res.json({ commands: cursor.listCommands(root), agent: 'cursor' }); }
-    catch { return res.json({ commands: [], agent: 'cursor' }); }
-  }
-  const out = [];
-  scanCommands(path.join(root, '.claude', 'commands'), 'פרויקט', out);
-  scanCommands(path.join(os.homedir(), '.claude', 'commands'), 'אישי', out);
-  res.json({ commands: [...BUILTIN_COMMANDS, ...out] });
+  res.json(agentCaps.listCommands(resolveDirGlobal(req.query.cwd), req.query.agent));
 });
 
 // ---------- רשימת ההיתר של Cursor ----------
@@ -1422,7 +1665,7 @@ const RC_LOG_MAX = 40;
 const RC_MAX = 6;                        // כמה מופעים מותר להריץ במקביל
 const RC_SPAWN = ['same-dir', 'worktree', 'session'];
 // הרשימה של תת-הפקודה עצמה (claude remote-control --help), ולא של claude
-const RC_PERM = ['default', 'acceptEdits', 'auto', 'dontAsk', 'plan', 'bypassPermissions'];
+const RC_PERM = [...CLAUDE_PERM_MODES];
 // הפלט מצויר מחדש שוב ושוב עם רצפי ANSI (כולל קישורי OSC 8) — מנקים לפני הפענוח
 const stripAnsi = (s) => s
   .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
@@ -1527,13 +1770,16 @@ function rcStart(opts) {
   }
   const label = (opts.name || '').toString().trim().slice(0, 60);
   const spawnMode = RC_SPAWN.includes(opts.spawn) ? opts.spawn : '';
-  const perm = RC_PERM.includes(opts.permissionMode) ? opts.permissionMode : '';
+  const perm = RC_PERM.includes(opts.permissionMode)
+    ? opts.permissionMode
+    : (opts.permissionMode ? claudeCliPerm(opts.permissionMode) : '');
+  const permArg = RC_PERM.includes(perm) ? perm : '';
   const cap = Math.round(Number(opts.capacity));
   const args = ['remote-control'];
   if (label) args.push('--name', label);
   if (spawnMode) args.push('--spawn', spawnMode);
   if (cap >= 1 && cap <= 32) args.push('--capacity', String(cap));
-  if (perm) args.push('--permission-mode', perm);
+  if (permArg) args.push('--permission-mode', permArg);
   // -c מתחבר מחדש לסשן שהתיקייה הזו רשמה בשעות האחרונות במקום לפתוח חדש
   if (opts.continue) args.push('--continue');
   if (opts.createSessionInDir === false) args.push('--no-create-session-in-dir');
@@ -1545,7 +1791,7 @@ function rcStart(opts) {
   }
   const inst = {
     child, cwd: workdir, name: label, state: 'starting', url: null, capacity: null,
-    spawn: spawnMode || 'same-dir', permissionMode: perm, error: '', startedAt: Date.now(),
+    spawn: spawnMode || 'same-dir', permissionMode: permArg, error: '', startedAt: Date.now(),
     log: [], sessions: [], buf: '', sawFrame: false, needsTrust: false,
   };
   rcs.set(workdir, inst);
@@ -1710,6 +1956,33 @@ app.get('/api/rc/qr', async (req, res) => {
   } catch { res.status(500).end(); }
 });
 
+/* ממשקים וירטואליים שאסור להאזין עליהם: הם לא הדרך שבה מכשיר ברשת מגיע,
+   ו-docker0 בפרט היה חושף את הממשק לכל קונטיינר שרץ על המחשב.
+   מוגדר לפני טעינת ה-HTTPS: הודעת הנפילה (אין תעודה) קוראת ל-lanAddress,
+   וקריאה לפני האתחול הייתה מפילה את התהליך ב-TDZ עוד לפני שהאזין. */
+const VIRTUAL_IFACE = /^(docker|br-|veth|virbr|vmnet|vboxnet|tun|tap|zt|wg)/;
+
+const isPrivate = (a) =>
+  a[0] === 192 && a[1] === 168 ||
+  a[0] === 10 ||
+  a[0] === 172 && a[1] >= 16 && a[1] <= 31;
+
+/**
+ * כתובת ה-LAN שעליה עולה המאזין: RTL_HOST אם הוגדר, אחרת כתובת ה-IPv4
+ * הפרטית הראשונה על ממשק פיזי. null אם המחשב לא מחובר לשום רשת.
+ */
+function lanAddress() {
+  if (process.env.RTL_HOST) return process.env.RTL_HOST;
+  for (const [iface, list] of Object.entries(os.networkInterfaces())) {
+    if (VIRTUAL_IFACE.test(iface)) continue;
+    for (const ni of list || []) {
+      if (ni.family !== 'IPv4' || ni.internal) continue;
+      if (isPrivate(ni.address.split('.').map(Number))) return ni.address;
+    }
+  }
+  return null;
+}
+
 // HTTPS עם self-signed cert. מקבל מרחוק מוגבל ל-LAN בלבד, ולא צריך להסתעף
 // ל-localhost כדי להשתמש בתשתית מאובטחת כמו Notification API.
 const certPath = path.join(__dirname, 'certs', 'cert.pem');
@@ -1746,63 +2019,14 @@ wss.on('connection', handleConnection);
 const REMOTE_PORT = Number(process.env.REMOTE_PORT) || (Number(PORT) + 1);
 const DEVICE_COOKIE = 'rtl_device';
 const DEVICES_FILE = path.join(STORE_DIR, 'devices.json');
-const PAIR_TTL_MS = 10 * 60 * 1000;      // תוקף קוד הקישור עצמו
-const PAIR_MAX_TRIES = 10;               // ניחושים כושלים עד שהקוד נשרף
-const DEVICE_TTL_MS = 365 * 24 * 3600 * 1000;
-
-/* הקוד נועד גם להיאמר בקול או להיות מוקלד ביד, ולא רק להיסרק מ-QR: שמונה
-   תווים מא״ב בן 30 (בלי 0/O/1/I/L/U שמתבלבלים בקריאה) ≈ 39 ביט. קצר מספיק
-   להכתבה בטלפון, ורחוק מלהיות בר-ניחוש — ובלאו הכי תקרת הניסיונות שורפת
-   את הקוד הרבה לפני שניחוש אקראי מתקרב. */
-const PAIR_ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ';
-const PAIR_LEN = 8;
+/* קישור המכשירים ואימותם יושבים ב-lib/device-auth.js — שם גם ההסבר למה
+   דווקא הם חולצו מכאן: זו יחידה אבטחתית (חד-פעמיות הקוד, תקרת הניחושים,
+   השוואה בזמן קבוע) שלא הייתה לה אף בדיקה כל עוד היא פוזרה בתוך הקובץ הזה. */
+const deviceAuth = require('./lib/device-auth');
+const { prettyPair } = deviceAuth;
+const auth = deviceAuth({ file: DEVICES_FILE });
 
 let remoteSrv = null;   // המאזין על כתובת ה-LAN
-let pairCode = null;    // { code, expiresAt, tries, by } — חי בזיכרון בלבד
-
-function newPairCode() {
-  let out = '';
-  // דגימה עם דחייה: bytes שמעל הכפולה השלמה האחרונה של גודל הא״ב היו מטים
-  // את ההגרלה לטובת תחילתו.
-  const limit = 256 - (256 % PAIR_ALPHABET.length);
-  while (out.length < PAIR_LEN) {
-    for (const b of crypto.randomBytes(PAIR_LEN * 2)) {
-      if (out.length === PAIR_LEN) break;
-      if (b >= limit) continue;
-      out += PAIR_ALPHABET[b % PAIR_ALPHABET.length];
-    }
-  }
-  return out;
-}
-/** מה שהוקלד → הצורה הקנונית: בלי מקפים ורווחים, אותיות גדולות. */
-const normPair = (s) => String(s == null ? '' : s).toUpperCase().replace(/[^0-9A-Z]/g, '');
-/** הצורה שמוצגת לעין ולהכתבה: XXXX-XXXX. */
-const prettyPair = (c) => c.slice(0, 4) + '-' + c.slice(4);
-
-/* ממשקים וירטואליים שאסור להאזין עליהם: הם לא הדרך שבה מכשיר ברשת מגיע,
-   ו-docker0 בפרט היה חושף את הממשק לכל קונטיינר שרץ על המחשב. */
-const VIRTUAL_IFACE = /^(docker|br-|veth|virbr|vmnet|vboxnet|tun|tap|zt|wg)/;
-
-const isPrivate = (a) =>
-  a[0] === 192 && a[1] === 168 ||
-  a[0] === 10 ||
-  a[0] === 172 && a[1] >= 16 && a[1] <= 31;
-
-/**
- * כתובת ה-LAN שעליה עולה המאזין: RTL_HOST אם הוגדר, אחרת כתובת ה-IPv4
- * הפרטית הראשונה על ממשק פיזי. null אם המחשב לא מחובר לשום רשת.
- */
-function lanAddress() {
-  if (process.env.RTL_HOST) return process.env.RTL_HOST;
-  for (const [iface, list] of Object.entries(os.networkInterfaces())) {
-    if (VIRTUAL_IFACE.test(iface)) continue;
-    for (const ni of list || []) {
-      if (ni.family !== 'IPv4' || ni.internal) continue;
-      if (isPrivate(ni.address.split('.').map(Number))) return ni.address;
-    }
-  }
-  return null;
-}
 
 const isLocalReq = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress || '');
 
@@ -1822,78 +2046,17 @@ function readCookie(header, name) {
   return '';
 }
 
-/* ---------- אחסון המכשירים ----------
-   שומרים רק את ה-hash של הטוקן: הקובץ בדיסק אינו מפתח כניסה בפני עצמו. */
-const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
+/* קריאת/כתיבת המכשירים, איתור לפי טוקן, וצריכת קוד הקישור — כולם ב-‎auth‎.
+   כאן נשארים רק העטיפות שקושרות אותם לבקשת HTTP: מאיפה בא השם של המכשיר
+   ומה שם העוגייה. */
+const { readDevices, writeDevices, findDevice, touchDevice } = auth;
 
-function readDevices() {
-  try {
-    const j = JSON.parse(fs.readFileSync(DEVICES_FILE, 'utf8'));
-    return Array.isArray(j.devices) ? j.devices : [];
-  } catch { return []; }
-}
-function writeDevices(devices) {
-  const tmp = DEVICES_FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify({ devices }, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, DEVICES_FILE);
-}
-function findDevice(token) {
-  if (!token) return null;
-  const h = hashToken(token);
-  const now = Date.now();
-  for (const d of readDevices()) {
-    if (d.hash && d.hash.length === h.length && crypto.timingSafeEqual(Buffer.from(d.hash), Buffer.from(h))) {
-      if (d.expiresAt && d.expiresAt < now) return null;
-      return d;
-    }
-  }
-  return null;
-}
-/** נגיעה עצלה: מעדכנים "נראה לאחרונה" לכל היותר פעם בשעה, לא בכל בקשה. */
-function touchDevice(id) {
-  const devices = readDevices();
-  const d = devices.find((x) => x.id === id);
-  if (!d) return;
-  const now = Date.now();
-  if (d.lastSeen && now - d.lastSeen < 3600 * 1000) return;
-  d.lastSeen = now;
-  try { writeDevices(devices); } catch {}
-}
+const consumePairCode = (code, req) => auth.consumePairCode(code, {
+  name: deviceLabel(req),
+  ua: (req.headers['user-agent'] || ''),
+});
 
-/**
- * ממש קוד קישור: מנפיק טוקן קבוע ורושם את המכשיר, או מחזיר null אם הקוד
- * שגוי או פג. הקוד חד-פעמי, ותקרת ניסיונות שורפת אותו — בלעדיה קוד קצר
- * מספיק כדי להכתיב בטלפון היה גם מספיק קצר כדי לתקוף אותו בלולאה.
- */
-function consumePairCode(code, req) {
-  const given = normPair(code);
-  if (!given || !pairCode) return null;
-  if (pairCode.expiresAt <= Date.now()) { pairCode = null; return null; }
-  const want = Buffer.from(pairCode.code);
-  const got = Buffer.from(given);
-  if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) {
-    if (++pairCode.tries >= PAIR_MAX_TRIES) pairCode = null;
-    return null;
-  }
-  const by = pairCode.by;
-  pairCode = null;   // חד-פעמי
-  const token = crypto.randomBytes(32).toString('base64url');
-  const devices = readDevices();
-  devices.push({
-    id: crypto.randomBytes(6).toString('hex'),
-    name: deviceLabel(req),
-    ua: String((req.headers['user-agent'] || '')).slice(0, 200),
-    hash: hashToken(token),
-    pairedBy: by || null,
-    createdAt: Date.now(), lastSeen: Date.now(),
-    expiresAt: Date.now() + DEVICE_TTL_MS,
-  });
-  writeDevices(devices);   // זורק — הקורא מדווח למשתמש
-  return token;
-}
-
-const deviceCookie = (token) =>
-  `${DEVICE_COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=${Math.floor(DEVICE_TTL_MS / 1000)}; HttpOnly; SameSite=Lax`;
+const deviceCookie = (token) => auth.cookieFor(DEVICE_COOKIE, token);
 
 const escHtmlMin = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -1923,7 +2086,7 @@ remoteApp.post('/__pair', express.urlencoded({ limit: '4kb', extended: false }),
   try { token = consumePairCode((req.body || {}).code, req); }
   catch (e) { return res.status(500).type('html').send(deniedHtml('שמירת המכשיר נכשלה: ' + e.message)); }
   if (!token) {
-    return res.status(401).type('html').send(deniedHtml(pairCode
+    return res.status(401).type('html').send(deniedHtml(auth.currentPairCode()
       ? 'הקוד שגוי. בדוק שהעתקת אותו במלואו ונסה שוב.'
       : 'הקוד שגוי, פג תוקפו או כבר נוצל. בקש קוד חדש.'));
   }
@@ -1954,13 +2117,16 @@ function remoteStatus() {
   const host = lanAddress();
   const proto = remoteSrv instanceof https.Server ? 'https' : 'http';
   const base = host ? `${proto}://${host}:${REMOTE_PORT}` : null;
+  // תצלום אחד: currentPairCode גם מפוגג קוד שפג תוקפו, ולכן ארבע קריאות
+  // נפרדות היו עלולות לתאר שני מצבים שונים בתוך אותה תשובה.
+  const pc = auth.currentPairCode();
   return {
     listening: !!remoteSrv,
     host, port: REMOTE_PORT, url: base,
-    pairUrl: base && pairCode ? `${base}/?pair=${pairCode.code}` : null,
-    pairCode: pairCode ? prettyPair(pairCode.code) : null,
-    pairBy: pairCode ? pairCode.by : null,
-    pairExpiresAt: pairCode ? pairCode.expiresAt : null,
+    pairUrl: base && pc ? `${base}/?pair=${pc.code}` : null,
+    pairCode: pc ? prettyPair(pc.code) : null,
+    pairBy: pc ? pc.by : null,
+    pairExpiresAt: pc ? pc.expiresAt : null,
     devices: readDevices().map((d) => ({
       id: d.id, name: d.name, ua: d.ua, pairedBy: d.pairedBy || null,
       createdAt: d.createdAt, lastSeen: d.lastSeen, expiresAt: d.expiresAt,
@@ -2037,7 +2203,7 @@ app.post('/api/remote/pair', express.json({ limit: '4kb' }), async (req, res) =>
   } catch (e) {
     return res.status(500).json({ error: e.code === 'EADDRINUSE' ? `פורט ${REMOTE_PORT} תפוס` : (e.message || 'שגיאה בפתיחת המאזין') });
   }
-  pairCode = { code: newPairCode(), expiresAt: Date.now() + PAIR_TTL_MS, tries: 0, by: pairActor(req) };
+  auth.issuePairCode(pairActor(req));
   res.json(remoteStatus());
 });
 
@@ -2052,7 +2218,7 @@ app.post('/api/remote/unpair', express.json({ limit: '4kb' }), (req, res) => {
 // ביטול קוד קישור שנוצר ולא נוצל
 app.post('/api/remote/cancel-pair', (req, res) => {
   if (!canPair(req)) return res.status(403).json({ error: 'לא מורשה' });
-  pairCode = null;
+  auth.clearPairCode();
   res.json(remoteStatus());
 });
 
@@ -2079,6 +2245,18 @@ for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { stopRemote(); r
 
 const DIALOG_TIMEOUT_MS = 5 * 60 * 1000;
 const STDOUT_MAX = 8 * 1024 * 1024;
+// כמה זמן תור יכול לשבת בלי שה-CLI אפילו קיבל את ההודעה. לפני שהוא מחזיר
+// אותה כ-replay הוא אוסף את מצב ה-git של התיקייה; בתיקייה על כונן שנתקע
+// (NTFS שתהליך עליו ישן במצב D) ה-git הזה לא חוזר לעולם, והתור נראה חי
+// דקות ארוכות עד שהתהליך יוצא בשקט עם קוד 0.
+const STALL_MS = Number(process.env.RTL_STALL_MS) || 25000;
+// result שהגיע לפני ה-replay שלנו שייך לפרומפט פנימי שעמד לפנינו בתור של
+// ה-CLI (task-notification של משימת רקע). אם אחריו לא בא דבר — זה בכל זאת
+// היה סוף התור שלנו, ואחרי ההמתנה הזו הוא נסגר עליו.
+const FOREIGN_RESULT_MS = Number(process.env.RTL_FOREIGN_RESULT_MS) || 15000;
+// תיקייה שה-git בה נתקע נשארת כזו עד שהכונן משתחרר — בדרך כלל אתחול.
+const GIT_STALL_TTL_MS = 6 * 60 * 60 * 1000;
+const gitStalled = new Map();   // workdir → מתי נתקע
 const LOG_MAX = 3000;                    // פריימים שנשמרים לצורך השלמה אחרי ניתוק
 const IDLE_KILL_MS = 20 * 60 * 1000;     // תהליך של שיחה בלי מנויים ובלי תור פעיל
 const MAX_LIVE_SESSIONS = 6;             // תקרת תהליכי claude חיים במקביל
@@ -2117,6 +2295,12 @@ function newSession(id) {
     anonSeen: 0,          // מתי נראה לאחרונה לקוח שמחזיק בצ'אט הזה (ראו sweepAnon)
     child: null, gen: 0, stdoutBuf: '', stderrBuf: '',
     lastRun: null,
+    // ---- תור שלא יצא לדרך (ראו armStallWatch / onForeignResult) ----
+    workdir: '',          // התיקייה שבה רץ התהליך הנוכחי
+    gitOff: false,        // התהליך הנוכחי הופעל בלי מצב git (תיקייה שה-git בה תקוע)
+    awaitReplay: null,    // { text } — ההודעה שלנו עוד לא חזרה מה-CLI כ-replay
+    stallTimer: null,
+    foreignTimer: null,
     pendingPerms: new Map(),    // request_id → request — כרטיסי הרשאה פתוחים
     pendingDialogs: new Map(),  // request_id → { req, timer }
     god: false,                 // מצב GOD — כל בקשת הרשאה נענית "אשר" בשרת
@@ -2135,6 +2319,7 @@ function newSession(id) {
     modelReq: null,       // request_id של set_model שממתין לתשובה
     // ---- שרשור פרומפטים ----
     queue: [],            // פרומפטים שממתינים; משוגרים אוטומטית בסיום כל תור
+    schedules: [],        // הודעות מתוזמנות לשעה מדויקת באותו סשן
     lastTurn: null,       // התור האחרון ששוגר — הבסיס להמשך אוטומטי אחרי חידוש מכסה
     turnProduced: false,  // האם התור הנוכחי הספיק להוציא פלט לפני שנעצר
     haltSent: false,      // כבר דווחה עצירה חריגה בתור הזה — לא מדווחים פעמיים
@@ -2149,6 +2334,108 @@ function newSession(id) {
 }
 const getSession = (id) => sessions.get(id) || newSession(id);
 
+/* ==========================================================================
+   מנוי שלא מספיק לנקז
+   --------------------------------------------------------------------------
+   עם ‎--include-partial-messages‎ כל טוקן הוא פריים נפרד לכל מנוי. טלפון על
+   סלולר חלש לא קורא אותם בקצב שבו הם נכתבים, ו-‎ws.send‎ ממשיך לצבור אותם
+   בזיכרון של התהליך בלי שום תקרה: תור ארוך אחד מול חיבור גרוע אחד מנפח את
+   השרת, ועל הדרך מאט את כל המנויים האחרים שיושבים באותו event loop.
+   הפתרון לא צריך באפר משלו, כי כבר יש אחד — ‎s.log‎ מחזיק כל פריים ממוספר
+   בדיוק לצורך השלמה אחרי ניתוק. לכן סוקט שעבר את סף ההמתנה פשוט מפסיק לקבל
+   ומסומן ב-‎_lagFrom‎ (ה-seq האחרון שהספיק לצאת אליו); כשהוא מתנקז, אותו מסלול
+   ‎subscribe‎ שמשרת חיבור שנפל משלים לו את הפער — לפי הסדר, בלי כפילות ובלי
+   אובדן. ואם הפיגור ארוך מהיומן, זה בדיוק המצב שבשבילו קיים ‎mode: 'reset'‎.
+   ========================================================================== */
+const WS_HIGH_WATER = 2 * 1024 * 1024;   // מעבר לכמות הזו בהמתנה — מפסיקים לכתוב לסוקט
+const WS_LOW_WATER = 512 * 1024;         // מתחת לזה הוא התנקז מספיק כדי להמשיך
+const WS_DRAIN_MS = 25;                  // ראו הערת הקצב ב-sweepLag
+const lagging = new Set();
+let lagTimer = null;
+
+function startLag(ws, s, seq) {
+  if (ws._lagStart == null) {            // תחילת פיגור, ולא המשך של אותו אחד
+    ws._lagAt = Date.now();
+    ws._lagStart = seq - 1;
+    dbg('ws.lag', { convId: s.id, device: ws._device, from: seq - 1, buffered: ws.bufferedAmount });
+  }
+  ws._lagFrom = seq - 1;                 // מה שיצא בפועל הוא הפריים שלפני זה שנחסם
+  ws._lagSess = s;
+  lagging.add(ws);
+  if (!lagTimer) { lagTimer = setInterval(sweepLag, WS_DRAIN_MS); lagTimer.unref?.(); }
+}
+
+function clearLag(ws) {
+  if (!ws) return;
+  lagging.delete(ws);
+  ws._lagFrom = null;
+  ws._lagSess = null;
+}
+
+/** ניתוק או מעבר לשיחה אחרת — גם הפיגור עצמו מתבטל, ולא רק ההשלמה שלו. */
+function dropLag(ws) {
+  clearLag(ws);
+  if (ws) { ws._lagAt = null; ws._lagStart = null; }
+}
+
+/** הפיגור נסגר — הסוקט חזר לקבל בזרם הרגיל. */
+function endLag(ws, s) {
+  const from = ws._lagStart;
+  dbg('ws.drained', { convId: s.id, device: ws._device, from, to: s.seq, ms: Date.now() - ws._lagAt });
+  ws._lagAt = null;
+  ws._lagStart = null;
+}
+
+/*
+ * הקצב כאן הוא כל העניין. הסקר הוא היחיד שיודע מתי הסוקט התנקז, ולכן כל
+ * תקתוק מעביר לכל היותר ‎HIGH−LOW‎ בייטים: עם חלון של 448KB וסקר של 250ms
+ * ההשלמה זחלה ב-1.8MB לשנייה, כלומר הייתה נשארת מאחור מול תור שמזרים מהר
+ * יותר מזה. חלון של 1.5MB כל 25ms נותן תקרה של ~60MB לשנייה — הרבה מעבר לכל
+ * רשת אמיתית — ומשאיר את הצוואר במקום היחיד שבו הוא שייך: הקו עצמו.
+ * הסקר רץ רק כשמישהו בפיגור, ונעצר ברגע שהרשימה מתרוקנת.
+ */
+function sweepLag() {
+  for (const ws of [...lagging]) {
+    if (ws.readyState !== ws.OPEN) { clearLag(ws); continue; }
+    if (ws.bufferedAmount > WS_LOW_WATER) continue;
+    const s = ws._lagSess;
+    const from = ws._lagFrom;
+    clearLag(ws);
+    // בינתיים הוא עבר לשיחה אחרת (או ירד ממנה) — אין לאן להשלים
+    if (!s || ws._sess !== s) continue;
+    const oldest = s.log.length ? s.log[0].seq : s.seq + 1;
+    if (from < oldest - 1) {
+      // הפיגור ארך יותר מהיומן. אין ממה להשלים, וזה בדיוק המצב שבשבילו קיים
+      // ‎mode: 'reset'‎ — הלקוח קורא את השיחה מהדיסק ומתחיל זרם נקי.
+      dbg('ws.lag.reset', { convId: s.id, device: ws._device, from, oldest });
+      endLag(ws, s);
+      subscribe(ws, s.id, 0);
+    } else if (replayLog(ws, s, from)) {
+      // המשך ההשלמה הוא אותם פריימים שהיו מגיעים חי, לפי הסדר — ולכן הוא
+      // אינו דורש פריים ‎sync‎ משלו. בגרסה קודמת כל תקתוק קרא ל-subscribe,
+      // והלקוח קיבל עשרות פריימי sync מיותרים על פיגור אחד.
+      endLag(ws, s);
+    }
+  }
+  if (!lagging.size && lagTimer) { clearInterval(lagTimer); lagTimer = null; }
+}
+
+/**
+ * מנגן ליומן החל מ-since. מחזיר true אם הכל יצא, ו-false אם הסוקט נחסם באמצע
+ * וסומן להמשך. גם ההשלמה כפופה לסף ההמתנה: בלעדיה היא הייתה הדרך הקצרה ביותר
+ * בדיוק לבעיה שבאה למנוע — אלפי פריימים נשפכים בבת אחת לסוקט שרק עכשיו
+ * התנקז, והבאפר מזנק לעשרות מגה-בייט במכה אחת.
+ */
+function replayLog(ws, s, since) {
+  for (const frame of s.log) {
+    if (frame.seq <= since) continue;
+    if (ws.readyState !== ws.OPEN) return false;
+    if (ws.bufferedAmount > WS_HIGH_WATER) { startLag(ws, s, frame.seq); return false; }
+    sendTo(ws, frame);
+  }
+  return true;
+}
+
 /** משדר פריים לכל המנויים ושומר אותו ביומן, כדי שמי שהתנתק יוכל להשלים. */
 function emit(s, frame) {
   s.seq += 1;
@@ -2161,7 +2448,10 @@ function emit(s, frame) {
   if (s.log.length > LOG_MAX) s.log.splice(0, s.log.length - LOG_MAX);
   const raw = JSON.stringify(out);
   for (const ws of s.subs) {
-    if (ws.readyState === ws.OPEN) { try { ws.send(raw); } catch {} }
+    if (ws.readyState !== ws.OPEN) continue;
+    if (ws._lagFrom != null) continue;                    // בפיגור — יקבל בהשלמה
+    if (ws.bufferedAmount > WS_HIGH_WATER) { startLag(ws, s, out.seq); continue; }
+    try { ws.send(raw); } catch {}
   }
 }
 /** הודעת שירות למנוי יחיד — לא נכנסת ליומן ולא תופסת seq. */
@@ -2169,29 +2459,148 @@ function sendTo(ws, obj) {
   if (ws && ws.readyState === ws.OPEN) { try { ws.send(JSON.stringify(obj)); } catch {} }
 }
 
+/** קבוצת התהליך של Sol — ‎kill -<pgid>‎ הורג את השרת גם בלי ה-PID עצמו. */
+function ownPgid() {
+  try {
+    const stat = fs.readFileSync('/proc/' + process.pid + '/stat', 'utf8');
+    const close = stat.lastIndexOf(')');
+    const rest = stat.slice(close + 1).trim().split(/\s+/);
+    const pgrp = Number(rest[2]);
+    if (pgrp > 0) return pgrp;
+  } catch { /* לא לינוקס — נופלים ל-PID */ }
+  return process.pid;
+}
+const SOL_PGID = ownPgid();
+
+/**
+ * האם הפקודה שה-CLI מבקש להריץ הורגת את Sol.
+ * נקרא גם מ-GOD וגם מאישור ידני: בשניהם אסור לכתוב ‎behavior: allow‎.
+ */
+function guardTool(toolName, input) {
+  const ports = [...new Set([Number(PORT), Number(REMOTE_PORT)].filter((n) => n > 0))];
+  return inspectBash({
+    toolName,
+    input,
+    solPid: process.pid,
+    solPgid: SOL_PGID,
+    solPorts: ports,
+    solRoot: __dirname,
+    solScript: __filename,
+    commandLine: process.argv.join(' '),
+    home: os.homedir(),
+    names: ['node', 'npm', 'server.js', 'rtl-claude', 'sol'],
+  });
+}
+
+/** הקלט שירוץ בפועל: עריכה של המשתמש אם יש פקודה, אחרת מה שה-CLI ביקש. */
+function effectiveToolInput(req, updatedInput) {
+  if (updatedInput && typeof updatedInput === 'object'
+      && (typeof updatedInput.command === 'string' || typeof updatedInput.cmd === 'string')) {
+    return updatedInput;
+  }
+  return (req && req.input) || {};
+}
+
+/**
+ * דחייה קשיחה: התשובה ל-CLI היא deny, והמסך שומע למה — לא שקט.
+ * ‎via: 'god'‎ גם נרשם ביומן התור; אישור ידני נסגר ב-permission_resolved אצל הקורא.
+ */
+function denySelfKill(s, requestId, req, guard, via) {
+  const tool = (req && req.tool_name) || 'כלי';
+  const message = guard.reason || 'Sol חסם פקודה שהייתה הורגת את שרת Sol';
+  const command = String((req && req.input && (req.input.command || req.input.cmd)) || '').slice(0, 180);
+  writeStdin(s, {
+    type: 'control_response',
+    response: { subtype: 'success', request_id: requestId, response: { behavior: 'deny', message } },
+  });
+  toastSession(s, message, true);
+  dbg('bash.guard', { convId: s.id, tool, via, command });
+  if (via === 'god') {
+    dbg('god.deny', { convId: s.id, tool });
+    emit(s, {
+      kind: 'god_deny', id: requestId, tool, text: message,
+      input: godInput(req && req.input), at: Date.now(),
+    });
+  }
+}
+
 /**
  * GOD: עונה "אשר" לבקשת הרשאה ומשדר שורה ליומן התור.
  * מחזיר false כשזו בקשה שלא מאשרים אוטומטית — ואז היא ממשיכה במסלול הרגיל
  * ומוצגת ככרטיס.
+ * פקודה שהורגת את Sol נדחית גם כאן ומחזירה 'deny' (אמת): אסור ליפול לכרטיס
+ * ש-GOD היה מאשר מיד אחר כך, ואסור לכתוב allow.
  */
 function godApprove(s, requestId, req) {
   const tool = (req && req.tool_name) || 'כלי';
   if (GOD_KEEP_TOOLS.has(tool)) return false;
+  const guard = guardTool(tool, req && req.input);
+  if (!guard.allow) {
+    denySelfKill(s, requestId, req, guard, 'god');
+    return 'deny';
+  }
   writeStdin(s, {
     type: 'control_response',
     response: { subtype: 'success', request_id: requestId, response: { behavior: 'allow', updatedInput: (req && req.input) || {} } },
   });
   emit(s, { kind: 'god_allow', entry: { id: requestId, tool, input: godInput(req && req.input), desc: (req && req.description) || '', at: Date.now() } });
   dbg('god.allow', { convId: s.id, tool });
+  return 'allow';
+}
+
+/**
+ * החלטת המשתמש על בקשת הרשאה → control_response חזרה ל-CLI.
+ * מי שענה ראשון קובע; הכרטיס נסגר בשאר המכשירים דרך permission_resolved.
+ * שני קוראים: הודעת ה-WebSocket מהממשק, והמענה מתוך ההתראה בטלפון
+ * (‎/api/permission-answer‎) — שם אין בכלל חלון פתוח שיחזיק socket.
+ * מחזיר false כשהבקשה כבר לא פתוחה, כדי שהקורא ידע לומר זאת.
+ */
+function answerPermission(s, msg, by) {
+  if (!s || !msg.requestId || !s.pendingPerms.has(msg.requestId)) return false;
+  const req = s.pendingPerms.get(msg.requestId);
+  // גם אישור ידני — מהמסך או מכפתור ההתראה — לא מעביר פקודה שהורגת את Sol.
+  if (msg.decision === 'allow') {
+    const guard = guardTool(req && req.tool_name, effectiveToolInput(req, msg.updatedInput));
+    if (!guard.allow) {
+      s.pendingPerms.delete(msg.requestId);
+      emit(s, {
+        kind: 'permission_resolved', id: msg.requestId, decision: 'deny',
+        label: 'deny', answers: null, response: null, by: by || 'Sol',
+      });
+      denySelfKill(s, msg.requestId, req, guard, 'user');
+      return true;
+    }
+  }
+  s.pendingPerms.delete(msg.requestId);
+  // label/answers נשלחים כדי שהכרטיס במכשיר השני ייסגר עם *אותה* תשובה
+  // שנבחרה כאן, ולא רק עם "אושר/נדחה" גנרי.
+  emit(s, {
+    kind: 'permission_resolved', id: msg.requestId, decision: msg.decision,
+    label: msg.label || null, answers: msg.answers || null, response: msg.response || null,
+    by: by || null,
+  });
+  if (!s.child) return true;
+  const inner = msg.decision === 'allow'
+    ? { behavior: 'allow', updatedInput: msg.updatedInput || {}, ...(msg.updatedPermissions ? { updatedPermissions: msg.updatedPermissions } : {}) }
+    : { behavior: 'deny', message: msg.message || 'נדחה על-ידי המשתמש' };
+  writeStdin(s, { type: 'control_response', response: { subtype: 'success', request_id: msg.requestId, response: inner } });
   return true;
 }
 
 /** מעבר ל-GOD בזמן שכרטיסים כבר פתוחים — הם נענים כאן ולא נשארים תלויים. */
 function godFlushPending(s) {
   for (const [id, req] of [...s.pendingPerms]) {
-    if (!godApprove(s, id, req)) continue;
+    const how = godApprove(s, id, req);
+    if (!how) continue;
     s.pendingPerms.delete(id);
-    emit(s, { kind: 'permission_resolved', id, decision: 'allow', label: 'god', answers: null, response: null, by: 'GOD' });
+    const denied = how === 'deny';
+    emit(s, {
+      kind: 'permission_resolved', id,
+      decision: denied ? 'deny' : 'allow',
+      label: denied ? 'deny' : 'god',
+      answers: null, response: null,
+      by: denied ? 'Sol' : 'GOD',
+    });
   }
 }
 
@@ -2217,6 +2626,8 @@ function destroyAnon(s) {
   killChild(s);
   s.log.length = 0;
   s.queue.length = 0;
+  disarmSchedules(s);
+  s.schedules = [];
   s.lastRun = null;
   s.lastTurn = null;
   s.limit = null;
@@ -2282,15 +2693,26 @@ app.get('/api/turn-state', (req, res) => {
   });
 });
 
-// כל החיבורים הפתוחים, בלי קשר לשיחה שהם צופים בה — לשידור שינויים ברמת
-// רשימת השיחות (שיחה חדשה, שינוי שם, מחיקה) לכל המכשירים.
-const allClients = new Set();
-function broadcastAll(obj) {
-  const raw = JSON.stringify(obj);
-  for (const ws of allClients) {
-    if (ws.readyState === ws.OPEN) { try { ws.send(raw); } catch {} }
-  }
-}
+/* מענה לבקשת הרשאה בלי חלון פתוח — הנתיב שמשרת את כפתורי ההתראה בטלפון.
+   ההתראה עצמה נורית מה-Service Worker, ולחיצה על "אשר" או "דחה" בתוכה קורית
+   כשהאפליקציה סגורה לגמרי: אין שם דף, אין WebSocket, ואין דרך להחזיר החלטה
+   דרך הזרם הרגיל. ה-SW חי גם אז, ויכול לעשות fetch — וזה כל מה שצריך.
+
+   ההרשאה: המאזין הראשי קשור ל-127.0.0.1 בלבד, והמאזין של ה-LAN מעביר כל
+   בקשה דרך שער עוגיית המכשיר (‎remoteApp.use(app)‎). כלומר הנתיב הזה כבר
+   סגור בדיוק כמו כל השאר, בלי שער נוסף משלו. */
+app.post('/api/permission-answer', express.json({ limit: '4kb' }), (req, res) => {
+  const { convId, requestId, decision } = req.body || {};
+  if (!VALID_ID.test(String(convId || ''))) return res.status(400).json({ ok: false, error: 'bad-id' });
+  if (decision !== 'allow' && decision !== 'deny') return res.status(400).json({ ok: false, error: 'bad-decision' });
+  // sessions.get ולא getSession — מענה לבקשה לא אמור ליצור סשן יש מאין
+  const s = sessions.get(String(convId));
+  const by = deviceLabel(req) + ' · התראה';
+  // הבקשה כבר נענתה במכשיר אחר (או שהתור נגמר) — לא שגיאה, פשוט מאוחר מדי
+  const ok = answerPermission(s, { requestId: String(requestId || ''), decision, label: decision }, by);
+  dbg('perm.notify', { convId, decision, by: deviceLabel(req), ok });
+  res.json({ ok });
+});
 
 function setRunning(s, running) {
   s.lastUsed = Date.now();
@@ -2384,6 +2806,7 @@ function killChild(s) {
   for (const d of s.pendingDialogs.values()) clearTimeout(d.timer);
   s.pendingDialogs.clear();
   s.pendingPerms.clear();
+  clearTurnWatch(s);
   if (s.child) {
     s.gen += 1;
     try { s.child.stdin.end(); } catch {}
@@ -2392,6 +2815,135 @@ function killChild(s) {
     s.stdoutBuf = '';
   }
   setRunning(s, false);
+}
+
+/* ==========================================================================
+   תור שלא יצא לדרך, ותור שנסגר על result של מישהו אחר
+   --------------------------------------------------------------------------
+   שתי התקלות נראות מבחוץ אותו דבר — "המודל לא עונה" — ושתיהן נתפסות לפי
+   אותו סימן: ה-replay של ההודעה שלנו (‎--replay-user-messages‎). עד שהוא
+   מגיע, ה-CLI עוד לא התחיל לעבוד על ההודעה הזו.
+   ========================================================================== */
+
+const gitStalledDir = (dir) => {
+  const t = gitStalled.get(dir);
+  if (t && Date.now() - t < GIT_STALL_TTL_MS) return true;
+  gitStalled.delete(dir);
+  return false;
+};
+
+function clearTurnWatch(s) {
+  clearTimeout(s.stallTimer);
+  clearTimeout(s.foreignTimer);
+  s.stallTimer = null;
+  s.foreignTimer = null;
+  s.awaitReplay = null;
+}
+
+/** הטקסט של הודעת user כפי שה-CLI החזיר אותה — מחרוזת או בלוקים. */
+function replayText(evt) {
+  const c = evt && evt.message && evt.message.content;
+  if (typeof c === 'string') return c;
+  return Array.isArray(c) ? c.filter((b) => b && b.type === 'text').map((b) => b.text || '').join('\n') : '';
+}
+
+/**
+ * נדרך ברגע שההודעה נכתבה ל-stdin. פקודת סלאש מקומית (‎/cost‎) לא חוזרת
+ * כ-replay בכלל — היא נענית ב-result מיידי — ולכן היא לא מחכה לו. Cursor
+ * לא מחזיר replay, ולכן אין לו מה לחכות.
+ */
+function armTurnWatch(s, text) {
+  clearTurnWatch(s);
+  if (s.cliAgent !== 'claude') return;
+  if (!/^\s*\//.test(text || '')) s.awaitReplay = { text: String(text || '').trim() };
+  const gen = s.gen;
+  s.stallTimer = setTimeout(() => onTurnStall(s, gen), STALL_MS);
+}
+
+/** כל פריים שאינו טקס פתיחה הוא הוכחה שה-CLI עובד. */
+function noteCliProgress(s, evt) {
+  if (evt.type === 'system' && (evt.subtype === 'init' || evt.subtype === 'status')) return;
+  if (evt.type === 'control_response') return;
+  if (s.stallTimer) { clearTimeout(s.stallTimer); s.stallTimer = null; }
+  if (s.foreignTimer) { clearTimeout(s.foreignTimer); s.foreignTimer = null; }
+  if (s.awaitReplay && evt.type === 'user' && evt.isReplay) {
+    const got = replayText(evt).trim();
+    const want = s.awaitReplay.text;
+    if (!want || got === want || got.includes(want)) s.awaitReplay = null;
+    else dbg('cli.replay.other', { convId: s.id, text: got.slice(0, 120) });
+  }
+}
+
+/**
+ * ה-CLI לא החזיר את ההודעה אחרי STALL_MS. בפעם הראשונה בתיקייה הזו: הורגים
+ * ומפעילים מחדש בלי מצב git, ושולחים שוב את אותה הודעה — זה מה שמשחרר את
+ * התור כשהכונן תקוע. בפעם השנייה אין עוד מה לעקוף, ורק אומרים את זה.
+ */
+function onTurnStall(s, gen) {
+  s.stallTimer = null;
+  if (gen !== s.gen || !s.child || !s.running) return;
+  const run = s.lastRun;
+  const canRetry = !s.gitOff && !s.anon && run && run.opts && run.payload;
+  dbg('cli.stall', { convId: s.id, cwd: s.workdir, ms: STALL_MS, gitOff: s.gitOff, retry: !!canRetry });
+  if (!canRetry) {
+    toastSession(s, `ה-CLI עדיין לא התחיל לעבוד אחרי ${Math.round(STALL_MS / 1000)} שניות — ייתכן שתיקיית העבודה על כונן שלא מגיב. אפשר לעצור ולבחור תיקייה אחרת`, true);
+    return;
+  }
+  gitStalled.set(s.workdir, Date.now());
+  toastSession(s, 'git לא מגיב בתיקייה הזו (כנראה כונן תקוע) — ממשיך בלי מצב git', true);
+  const old = s.child;
+  s.gen += 1;
+  s.child = null;
+  s.stdoutBuf = '';
+  try { old.stdin.end(); } catch {}
+  // SIGKILL: התהליך עצמו חי, אבל ה-git שהוא ממתין לו ישן במצב D ולא ישתחרר
+  try { old.kill('SIGKILL'); } catch {}
+  if (startChild(s, run.opts) && writeStdin(s, run.payload)) {
+    armTurnWatch(s, run.text);
+    return;
+  }
+  emitHalt(s, { reason: 'error', detail: 'הפעלה מחדש בלי מצב git נכשלה', from: 'stall' });
+  setRunning(s, false);
+}
+
+/** סוגר את התור על result שנדחה, אם אחריו ה-CLI שתק. ראו FOREIGN_RESULT_MS. */
+function onForeignResult(s, evt) {
+  const gen = s.gen;
+  clearTimeout(s.foreignTimer);
+  s.foreignTimer = setTimeout(() => {
+    s.foreignTimer = null;
+    if (gen !== s.gen || !s.running) return;
+    dbg('cli.result.adopted', { convId: s.id });
+    s.awaitReplay = null;
+    onCliResult(s, evt);
+  }, FOREIGN_RESULT_MS);
+}
+
+/** סוף תור לפי אירוע ה-result של ה-CLI. */
+function onCliResult(s, evt) {
+  clearTurnWatch(s);
+  const errText = evt.is_error || (evt.subtype && evt.subtype !== 'success')
+    ? [evt.result, evt.error, evt.message].filter((x) => typeof x === 'string').join(' ')
+    : '';
+  // הרמז מ-stderr נחשב רק כאן, בסוף התור: ה-CLI מדפיס אזהרת rate limit גם
+  // כשהוא מתאושש ממנה לבד, והריגת תהליך בריא באמצע עבודה על סמך שורת
+  // stderr הייתה גרועה בהרבה מהבעיה שהיא פותרת.
+  const hit = (errText && LIMIT_RE.test(errText)) ? errText : (s.limitHint || '');
+  const h = hit ? null : haltFromResult(evt);
+  if (h) emitHalt(s, { ...h, from: 'result' });
+
+  // סדר חשוב: קודם האירוע עצמו (הקליינט מסיים את התור עליו), ורק אחריו
+  // דגל הסיום. הפוך מזה, הקליינט היה מקבל "לא עסוק" לפני שהתור נסגר.
+  emit(s, { kind: 'event', evt });
+  const produced = s.turnProduced;
+  s.retry = null;
+  setRunning(s, false);
+  if (hit) {
+    onLimitHit(s, hit, produced).catch(() => {});
+  } else {
+    // setImmediate כדי שהעיבוד של הפריימים שנותרו במאגר יסתיים קודם
+    setImmediate(() => drainQueue(s));
+  }
 }
 
 /** סוגר תהליכים של שיחות שאיש כבר לא צופה בהן ושאין בהן תור פעיל. */
@@ -2405,11 +2957,12 @@ function reapIdle(force) {
     if (force && [...sessions.values()].filter((x) => x.child).length < MAX_LIVE_SESSIONS) break;
   }
   // סשן בלי תהליך, בלי מנויים ובלי מה להשלים — אין טעם להחזיק אותו בזיכרון.
-  // שיחה שממתינה לחידוש מכסה או שיש בה פרומפטים בתור *היא* משהו להשלים.
+  // שיחה שממתינה לחידוש מכסה, שיש בה פרומפטים בתור או הודעה מתוזמנת *היא*
+  // משהו להשלים — בלי זה הטיימר היה נמחק דקה אחרי שסגרת את החלון.
   for (const [id, s] of sessions) {
     // שחקן בדואט הוא בהגדרה בלי מנויים ובלי תור — הבעלות עליו היא של הרַכָּז,
     // והוא זה שסוגר אותו בסיום הריצה
-    if (s.limit || s.queue.length || s.duetRole) continue;
+    if (s.limit || s.queue.length || (s.schedules && s.schedules.length) || s.duetRole) continue;
     if (!s.child && !s.subs.size && now - s.lastUsed > IDLE_KILL_MS) sessions.delete(id);
   }
 }
@@ -2568,9 +3121,14 @@ function startChild(s, opts) {
   // התיקייה נוצרה על ידינו והיא ריקה; בלי סימון האמון ה-CLI היה עוצר בשאלה
   // שאין לה מסך בממשק הזה.
   if (noDir && !isTrustedDir(workdir)) { try { trustDir(workdir); } catch (e) { dbg('nodir.trust.fail', { msg: e.message }); } }
-  // מצב GOD חי בשרת ולא ב-CLI: לשם נשלח ‎default‎, שיאלץ אותו לשאול על הכול,
-  // והתשובה "אשר" נכתבת כאן (ראו godApprove).
+  // מצב GOD חי בשרת ולא ב-CLI: לשם נשלח ‎manual‎, שיאלץ אותו לשאול על הכול,
+  // והתשובה "אשר" נכתבת כאן (ראו godApprove). ערך זר (force של Cursor, default
+  // הישן) ממופה כאן — אחרת ה-CLI נופל עם "argument is invalid" לפני תור ראשון.
   s.god = isGodMode(opts.permissionMode);
+  const permArg = cliPermMode(opts.permissionMode) || 'acceptEdits';
+  if (opts.permissionMode && opts.permissionMode !== permArg && !isGodMode(opts.permissionMode)) {
+    dbg('perm.remap', { convId: s.id, from: opts.permissionMode, to: permArg });
+  }
   const args = [
     '--print',
     '--input-format', 'stream-json',
@@ -2578,7 +3136,7 @@ function startChild(s, opts) {
     '--include-partial-messages',
     '--replay-user-messages',
     '--verbose',
-    '--permission-mode', cliPermMode(opts.permissionMode) || 'acceptEdits',
+    '--permission-mode', permArg,
     // אישור הרשאות אינטראקטיבי בתוך ה-UI — ה-CLI מפנה בקשות הרשאה כ-control_request
     // מסוג can_use_tool דרך אותו ערוץ stream-json, ואנחנו עונים ב-control_response.
     '--permission-prompt-tool', 'stdio',
@@ -2643,6 +3201,11 @@ function startChild(s, opts) {
   // בצ'אט אנונימי גם מה שאינו השיחה עצמה נסגר: טלמטריה, דיווח שגיאות, וקריאות
   // מודל נלוות (כותרות, ניחושים) — כל אחת מהן היא בקשה נוספת שיוצאת בגלל
   // השיחה הזו ושלא ביקשת. מה שנשאר יוצא החוצה הוא התור עצמו, ותו לא.
+  // תיקייה שבה ה-git נתקע בתור קודם (ראו onTurnStall): בלי מצב git בהנחיית
+  // המערכת ה-CLI לא מריץ git status לפני כל בקשה, והשיחה עובדת.
+  s.workdir = workdir;
+  s.gitOff = !viaCursor && gitStalledDir(workdir);
+  if (s.gitOff) env = { ...env, CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS: '1' };
   if (s.anon) {
     env = {
       ...env,
@@ -2656,7 +3219,8 @@ function startChild(s, opts) {
   s.gen += 1;
   const gen = s.gen;
   s.stderrBuf = '';
-  s.lastRun = { opts, payload: s.lastRun && s.lastRun.opts === opts ? s.lastRun.payload : null };
+  const same = s.lastRun && s.lastRun.opts === opts;
+  s.lastRun = { opts, payload: same ? s.lastRun.payload : null, text: same ? s.lastRun.text : '' };
   // מכאן והלאה זה מה שהתהליך באמת מריץ — הבסיס להשוואה בכל החלפת מודל
   s.liveModel = opts.model || '';
   s.liveEffort = opts.effort || '';
@@ -2716,6 +3280,7 @@ function startChild(s, opts) {
       // בשיחה אנונימית אין קובץ סשן, ולכן גם המזהה חסר משמעות — ואין סיבה
       // להחזיק אותו בזיכרון או לשדר אותו הלאה.
       if (!s.anon && typeof evt.session_id === 'string' && evt.session_id) s.cliSessionId = evt.session_id;
+      noteCliProgress(s, evt);
 
       // ---- פרוטוקול בקרה (הרשאות) ----
       if (evt.type === 'control_request' && evt.request && evt.request.subtype === 'can_use_tool') {
@@ -2809,28 +3374,16 @@ function startChild(s, opts) {
           api_error_status: evt.api_error_status || null, turns: evt.num_turns || 0,
           dur: evt.duration_ms || 0, denials: (evt.permission_denials || []).length,
         });
-        const errText = evt.is_error || (evt.subtype && evt.subtype !== 'success')
-          ? [evt.result, evt.error, evt.message].filter((x) => typeof x === 'string').join(' ')
-          : '';
-        // הרמז מ-stderr נחשב רק כאן, בסוף התור: ה-CLI מדפיס אזהרת rate limit גם
-        // כשהוא מתאושש ממנה לבד, והריגת תהליך בריא באמצע עבודה על סמך שורת
-        // stderr הייתה גרועה בהרבה מהבעיה שהיא פותרת.
-        const hit = (errText && LIMIT_RE.test(errText)) ? errText : (s.limitHint || '');
-        const h = hit ? null : haltFromResult(evt);
-        if (h) emitHalt(s, { ...h, from: 'result' });
-
-        // סדר חשוב: קודם האירוע עצמו (הקליינט מסיים את התור עליו), ורק אחריו
-        // דגל הסיום. הפוך מזה, הקליינט היה מקבל "לא עסוק" לפני שהתור נסגר.
-        emit(s, { kind: 'event', evt });
-        const produced = s.turnProduced;
-        s.retry = null;
-        setRunning(s, false);
-        if (hit) {
-          onLimitHit(s, hit, produced).catch(() => {});
-        } else {
-          // setImmediate כדי שהעיבוד של הפריימים שנותרו במאגר יסתיים קודם
-          setImmediate(() => drainQueue(s));
+        // משימת רקע שהסתיימה משאירה ב-CLI הודעת task-notification בתור, והוא
+        // מטפל בה לפני ההודעה שלנו — עם result משלה. סגירת התור עליו השאירה
+        // את המודל עובד על ההודעה שלנו מאחורי מסך שכבר אמר "סיים".
+        // שגיאה לא נדחית: היא סוגרת את התור בכל מקרה.
+        if (s.running && s.awaitReplay && !evt.is_error && (!evt.subtype || evt.subtype === 'success')) {
+          dbg('cli.result.foreign', { convId: s.id, turns: evt.num_turns || 0 });
+          onForeignResult(s, evt);
+          continue;
         }
+        onCliResult(s, evt);
         continue;
       }
 
@@ -2854,6 +3407,7 @@ function startChild(s, opts) {
   child.on('exit', (code, signal) => {
     if (gen !== s.gen) return;
     const wasRunning = s.running;
+    clearTurnWatch(s);
     dbg('cli.exit', {
       convId: s.id, code, signal: signal || null, running: wasRunning,
       produced: !!s.turnProduced, model: s.liveModel || '(ברירת מחדל)',
@@ -2871,7 +3425,7 @@ function startChild(s, opts) {
     if (dropped) {
       const run = s.lastRun;
       if (run && run.opts && startChild(s, run.opts)) {
-        if (run.payload) writeStdin(s, run.payload);
+        if (run.payload && writeStdin(s, run.payload)) armTurnWatch(s, run.text);
         return;
       }
     }
@@ -2913,6 +3467,7 @@ function startChild(s, opts) {
 
 /** משגר תור אחד ל-CLI. משותף לשליחה ידנית, לשיגור מהתור ולהמשך אחרי מכסה. */
 function runTurn(s, msg, ws) {
+  applyLocalTurnExtras(msg);
   // רשת ביטחון: כל הודעה נושאת את הבוררים הנוכחיים, כך שגם אם השינוי לא
   // הגיע כ-set_model (מכשיר שהיה מנותק, לקוח ישן) הוא נתפס כאן.
   if (s.child) applyModelChange(s, msg.model, msg.effort);
@@ -2973,9 +3528,10 @@ function runTurn(s, msg, ws) {
     content = msg.text;
   }
   const payload = { type: 'user', message: { role: 'user', content } };
-  if (s.lastRun) s.lastRun.payload = payload;
+  if (s.lastRun) { s.lastRun.payload = payload; s.lastRun.text = msg.text || ''; }
   if (!writeStdin(s, payload)) return false;
   setRunning(s, true);
+  armTurnWatch(s, msg.text);
   s.turnProduced = false;
   s.haltSent = false;
   s.retry = null;
@@ -3007,6 +3563,116 @@ function broadcastQueue(s) {
   saveResumeState();
 }
 
+/* ==========================================================================
+   הודעות מתוזמנות
+   --------------------------------------------------------------------------
+   כמו התור, הן יושבות בשרת: אפשר לסגור את החלון, וההודעה תצא באותו סשן
+   בשעה שנקבעה. כל פריט נושא טיימר משלו (דיוק של שניות, לא דקה), ובנוסף
+   יש משיכה כל כמה שניות למקרה שהמכונה ישנה ו-setTimeout נסחף.
+   ========================================================================== */
+
+function broadcastSchedules(s) {
+  const raw = JSON.stringify({ kind: 'schedules', convId: s.id, items: scheduleView(s.schedules) });
+  for (const ws of s.subs) if (ws.readyState === ws.OPEN) { try { ws.send(raw); } catch {} }
+  saveResumeState();
+}
+
+function disarmSchedule(item) {
+  if (!item || !item.timer) return;
+  clearTimeout(item.timer);
+  item.timer = null;
+}
+
+function disarmSchedules(s) {
+  for (const item of (s.schedules || [])) disarmSchedule(item);
+}
+
+function armSchedule(s, item) {
+  disarmSchedule(item);
+  const delay = Math.max(0, item.at - Date.now());
+  item.timer = setTimeout(() => fireSchedule(s, item.id), delay);
+  item.timer.unref?.();
+}
+
+function armAllSchedules(s) {
+  for (const item of (s.schedules || [])) armSchedule(s, item);
+}
+
+function fireSchedule(s, id) {
+  if (!s || !Array.isArray(s.schedules)) return;
+  const idx = s.schedules.findIndex((x) => x.id === id);
+  if (idx < 0) return;
+  const item = s.schedules.splice(idx, 1)[0];
+  disarmSchedule(item);
+  broadcastSchedules(s);
+  const msg = {
+    ...(item.msg || {}),
+    resumeSessionId: s.cliSessionId || (item.msg && item.msg.resumeSessionId) || null,
+    nonce: 'sch-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+  };
+  // תור חי / המתנה למכסה: נכנס לתור וירוץ אחריו, לא נזרק
+  if (s.running || s.limit || s.limitChecking) {
+    if (s.queue.length >= MAX_QUEUE) {
+      emit(s, { kind: 'error', text: 'התור מלא — ההודעה המתוזמנת לא נשלחה' });
+      return;
+    }
+    enqueueTurn(s, msg, null);
+  } else if (!runTurn(s, msg, null)) emit(s, { kind: 'error', text: 'שיגור ההודעה המתוזמנת נכשל' });
+}
+
+function addSchedule(s, msg, ws) {
+  if (s.duetRole) {
+    sendTo(ws, { kind: 'toast', text: 'אי אפשר לתזמן הודעה בתוך דואט', err: true });
+    return;
+  }
+  if ((s.schedules || []).length >= MAX_SCHEDULES) {
+    sendTo(ws, { kind: 'toast', text: `יש כבר ${MAX_SCHEDULES} הודעות מתוזמנות בשיחה הזו`, err: true });
+    return;
+  }
+  const built = buildScheduleItem(msg, { by: ws ? ws._device : null });
+  if (!built.ok) {
+    sendTo(ws, { kind: 'toast', text: built.error, err: true });
+    return;
+  }
+  if (!s.schedules) s.schedules = [];
+  s.schedules.push(built.item);
+  s.schedules.sort((a, b) => a.at - b.at);
+  s.lastUsed = Date.now();
+  if (ws) setPrimary(s, ws);
+  armSchedule(s, built.item);
+  broadcastSchedules(s);
+}
+
+function removeSchedule(s, id) {
+  if (!id || !Array.isArray(s.schedules)) return;
+  const next = [];
+  for (const item of s.schedules) {
+    if (item.id === id) disarmSchedule(item);
+    else next.push(item);
+  }
+  if (next.length === s.schedules.length) return;
+  s.schedules = next;
+  broadcastSchedules(s);
+}
+
+function clearSchedules(s) {
+  if (!s.schedules || !s.schedules.length) return;
+  disarmSchedules(s);
+  s.schedules = [];
+  broadcastSchedules(s);
+}
+
+function sweepSchedules() {
+  const now = Date.now();
+  for (const s of sessions.values()) {
+    if (!s.schedules || !s.schedules.length) continue;
+    for (const item of s.schedules.slice()) {
+      if (item.at <= now) fireSchedule(s, item.id);
+    }
+  }
+}
+setInterval(sweepSchedules, 5000).unref?.();
+
 function enqueueTurn(s, msg, ws) {
   if (!(msg.text || '').trim() && !(msg.images || []).length) return;
   if (s.queue.length >= MAX_QUEUE) {
@@ -3019,6 +3685,8 @@ function enqueueTurn(s, msg, ws) {
   if (msgOk !== msg) sendTo(ws, { kind: 'toast', text: 'התמונות לא נכנסו לתור — נשלח הטקסט בלבד', err: true });
   s.queue.push({ id: 'q' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), msg: msgOk, by: ws ? ws._device : null });
   s.lastUsed = Date.now();
+  // גם הוספה לתור היא פעולה מהמכשיר הזה — מעבירים אליו את כתיבת הדיסק
+  if (ws) setPrimary(s, ws);
   broadcastQueue(s);
   // הגיע פרומפט לתור בזמן שהשיחה כבר פנויה (מירוץ בין סיום התור לשליחה) —
   // מנקזים מיד כדי שהוא לא ייתקע שם עד ההודעה הבאה.
@@ -3248,13 +3916,14 @@ function saveResumeState() {
     for (const s of sessions.values()) {
       // צ'אט אנונימי לא שורד הפעלה מחדש של השרת — זו התכונה, לא התקלה.
       if (s.anon) continue;
-      if (!s.limit && !s.queue.length) continue;
+      if (!s.limit && !s.queue.length && !(s.schedules && s.schedules.length)) continue;
       out.push({
         convId: s.id,
         cliSessionId: s.cliSessionId,
         limit: s.limit,
         lastTurn: s.lastTurn,
         queue: s.queue.map((q) => ({ id: q.id, by: q.by, msg: stripImages(q.msg) })),
+        schedules: persistSchedules(s.schedules),
       });
     }
     if (!out.length) { try { fs.unlinkSync(RESUME_FILE); } catch {} return; }
@@ -3274,13 +3943,18 @@ function loadResumeState() {
     s.limit = rec.limit || null;
     s.lastTurn = rec.lastTurn || null;
     s.queue = Array.isArray(rec.queue) ? rec.queue.filter((q) => q && q.msg) : [];
+    s.schedules = Array.isArray(rec.schedules)
+      ? rec.schedules.filter((x) => x && x.msg && x.msg.text && Number(x.at) > 0)
+      : [];
     s.lastUsed = Date.now();
+    armAllSchedules(s);
   }
 }
 
 /* ---------- מנויים ---------- */
 
 function unsubscribe(ws) {
+  dropLag(ws);
   const s = ws._sess;
   if (!s) return;
   s.subs.delete(ws);
@@ -3343,6 +4017,7 @@ function subscribe(ws, convId, sinceSeq) {
     dialogs: [...s.pendingDialogs].map(([id, d]) => ({ id, req: d.req })),
     // התור וההמתנה למכסה חיים בשרת, ולכן מכשיר שנפתח עכשיו רואה אותם מיד
     queue: queueView(s),
+    schedules: scheduleView(s.schedules),
     limit: s.limit ? { kind: s.limit.kind, resetsAt: s.limit.resetsAt, at: s.limit.at, text: s.limit.text } : null,
     // ניסיון חוזר שנמצא באוויר עכשיו. בלעדיו טלפון שמתחבר באמצע ניסיון חוזר
     // רואה תור "עובד" ששותק דקה שלמה, בלי לדעת שיש סיבה ושהיא מוכרת.
@@ -3352,12 +4027,12 @@ function subscribe(ws, convId, sinceSeq) {
     duet: duetState,
   });
   if (canCatchUp) {
-    for (const frame of s.log) if (frame.seq > since) sendTo(ws, frame);
+    replayLog(ws, s, since);
   } else {
     // מכשיר חדש שנכנס באמצע תור. הדיסק מחזיק את מה שכבר הסתיים, והיומן מחזיק
     // את התור הרץ מתחילתו — יחד זו התמונה המלאה. בלי המשלוח הזה הטלפון היה
     // נפתח באמצע תור ורואה שיחה שנעצרה בתור הקודם.
-    for (const frame of s.log) sendTo(ws, frame);
+    replayLog(ws, s, 0);
   }
   broadcastPresence(s);
 }
@@ -3445,7 +4120,10 @@ function handleConnection(ws, req) {
     if (!s) return;
 
     if (msg.type === 'user') {
-      runTurn(s, msg, ws);
+      // תור שכבר רץ: הודעת user שנייה (לחיצה כפולה שעברה את השער, או שני
+      // sockets) לא נכתבת ל-stdin באמצע — היא נכנסת לתור ותרוץ אחרי הסיום.
+      if (s.running || s.limit || s.limitChecking) enqueueTurn(s, msg, ws);
+      else runTurn(s, msg, ws);
 
     } else if (msg.type === 'queue_add') {
       enqueueTurn(s, msg, ws);
@@ -3459,6 +4137,15 @@ function handleConnection(ws, req) {
       s.queue = [];
       broadcastQueue(s);
 
+    } else if (msg.type === 'schedule_add') {
+      addSchedule(s, msg, ws);
+
+    } else if (msg.type === 'schedule_remove') {
+      removeSchedule(s, msg.id);
+
+    } else if (msg.type === 'schedule_clear') {
+      clearSchedules(s);
+
     } else if (msg.type === 'limit_resume_now') {
       // "המשך עכשיו" — המשתמש לא רוצה לחכות לשעון (למשל אחרי שדרוג תוכנית)
       if (s.limit) resumeAfterLimit(s, true);
@@ -3470,22 +4157,7 @@ function handleConnection(ws, req) {
       broadcastLimit(s);
 
     } else if (msg.type === 'permission') {
-      // החלטת המשתמש על בקשת הרשאה → control_response חזרה ל-CLI.
-      // מי שענה ראשון קובע; הכרטיס נסגר בשני המכשירים דרך permission_cancel.
-      if (!msg.requestId || !s.pendingPerms.has(msg.requestId)) return;
-      s.pendingPerms.delete(msg.requestId);
-      // label/answers נשלחים כדי שהכרטיס במכשיר השני ייסגר עם *אותה* תשובה
-      // שנבחרה כאן, ולא רק עם "אושר/נדחה" גנרי.
-      emit(s, {
-        kind: 'permission_resolved', id: msg.requestId, decision: msg.decision,
-        label: msg.label || null, answers: msg.answers || null, response: msg.response || null,
-        by: ws._device,
-      });
-      if (!s.child) return;
-      const inner = msg.decision === 'allow'
-        ? { behavior: 'allow', updatedInput: msg.updatedInput || {}, ...(msg.updatedPermissions ? { updatedPermissions: msg.updatedPermissions } : {}) }
-        : { behavior: 'deny', message: msg.message || 'נדחה על-ידי המשתמש' };
-      writeStdin(s, { type: 'control_response', response: { subtype: 'success', request_id: msg.requestId, response: inner } });
+      answerPermission(s, msg, ws._device);
 
     } else if (msg.type === 'dialog') {
       // תשובת המשתמש לבקשת control שאיננו מכירים מראש
@@ -3506,7 +4178,13 @@ function handleConnection(ws, req) {
       s.god = isGodMode(msg.mode);
       if (s.god) godFlushPending(s);
       if (!s.child) return;
-      writeStdin(s, { type: 'control_request', request_id: 'spm-' + Date.now().toString(36), request: { subtype: 'set_permission_mode', mode: cliPermMode(msg.mode) } });
+      // Cursor מקבל את השמות שלו (force/ask/…). Claude מקבל רק מה ש-‎--help‎
+      // מכיר — אחרת בקשת הבקרה נדחית והתור הבא נופל בשיגור.
+      const mode = s.cliAgent === 'cursor' ? msg.mode : cliPermMode(msg.mode);
+      if (s.cliAgent !== 'cursor' && msg.mode !== mode && !isGodMode(msg.mode)) {
+        dbg('perm.remap', { convId: s.id, from: msg.mode, to: mode });
+      }
+      writeStdin(s, { type: 'control_request', request_id: 'spm-' + Date.now().toString(36), request: { subtype: 'set_permission_mode', mode } });
       emit(s, { kind: 'ui', field: 'permissionMode', value: msg.mode, by: ws._device });
 
     } else if (msg.type === 'set_model') {
@@ -3520,6 +4198,11 @@ function handleConnection(ws, req) {
       // מצב שאינו חלק מהתמליל (טיוטה, כותרת, תיקיית עבודה, מודל) — נשלח
       // למכשירים האחרים כדי שהמסכים יישארו זהים. לא נכנס ליומן ההשלמה.
       relayUi(s, ws, msg.field, msg.value);
+
+    } else if (msg.type === 'claim_primary') {
+      // מכשיר משני לוקח את כתיבת הדיסק בלי לשלוח הודעה — אחרת עריכה מהטלפון
+      // נשארת "תצוגה בלבד" עד שהמשתמש שולח משהו, וזה מרגיש כמו נעילה.
+      setPrimary(s, ws);
 
     } else if (msg.type === 'interrupt') {
       // עצירה ידנית מבטלת גם את השרשרת: אחרת "עצור" היה משגר מיד את הפרומפט
@@ -3586,8 +4269,30 @@ setInterval(() => {
 loadResumeState();
 setTimeout(() => { limitTick().catch(() => {}); }, 4000).unref?.();
 
+/* הפורט תפוס כמעט תמיד מסיבה אחת: האפליקציה כבר רצה. בלי הטיפול הזה
+   ההודעה על כך הייתה ‎uncaughtException‎ עם עקבות מחסנית של ‎node:net‎ —
+   כלומר מי שהריץ פעמיים במקום לפתוח לשונית מקבל דיווח על תקלה במקום על
+   מה שבאמת קרה. יציאה 1 בשקט, עם משפט שאומר מה לעשות. */
+function onListenError(e) {
+  if (!e || e.code !== 'EADDRINUSE') throw e;
+  console.error(`\n  \x1b[1mפורט ${PORT} כבר תפוס\x1b[0m`);
+  console.error(`  \x1b[90mכנראה ש-Sol כבר רץ — נסה לפתוח https://localhost:${PORT}`);
+  console.error(`  אחרת: PORT=4174 node server.js, או בדוק מי מחזיק בפורט עם  ss -tlnp | grep :${PORT}\x1b[0m\n`);
+  process.exit(1);
+}
+server.on('error', onListenError);
+// ‎ws‎ משכפל את שגיאת ה-listen גם אל ה-‎WebSocketServer‎ שעוטף את השרת. בלי
+// מאזין *שם* היא נשארת ‎'error'‎ ללא טיפול, וזו לבדה מפילה את התהליך — גם
+// כשהמאזין שלמעלה כבר טיפל בה.
+wss.on('error', onListenError);
+
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`\n  \x1b[1mממשק RTL ל-Claude Code\x1b[0m`);
+  console.log(`\n  \x1b[1mSol · ממשק RTL ל-Claude Code\x1b[0m`);
   const proto = server instanceof https.Server ? 'https' : 'http';
   console.log(`  \x1b[36m${proto}://localhost:${PORT}\x1b[0m\n`);
+  // דוחסים את הקליפה מראש, כדי שגם הבקשה הראשונה אחרי הפעלה תקבל גרסה
+  // דחוסה. רץ על ה-threadpool ולא מעכב את ההאזנה.
+  staticCompress.warm(['/index.html', '/app.js', '/style.css', '/sw.js',
+    '/vendor/highlight/highlight.min.js', '/vendor/marked/marked.min.js',
+    '/vendor/dompurify/purify.min.js']);
 });
