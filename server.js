@@ -38,6 +38,7 @@ const {
   isGodMode, withGod, parsePermissionModes, claudeCliPerm,
 } = require('./lib/perm-mode');
 const { inspectBash } = require('./lib/bash-guard');
+const { resetReplaySince } = require('./lib/subscribe-replay');
 const {
   MAX_SCHEDULES, buildItem: buildScheduleItem, scheduleView, persistShape: persistSchedules,
 } = require('./lib/schedule');
@@ -3995,10 +3996,14 @@ function subscribe(ws, convId, sinceSeq) {
   const since = Number(sinceSeq) || 0;
   const oldest = s.log.length ? s.log[0].seq : s.seq + 1;
   const canCatchUp = since > 0 && since >= oldest - 1 && since <= s.seq;
+  // ב-reset: null = אין מה להשלים (הדיסק מספיק); מספר = since ל-replayLog.
+  const resetFrom = canCatchUp ? null : resetReplaySince(s);
   dbg('subscribe', {
     convId, device: ws._device, since, seq: s.seq, oldest,
     mode: canCatchUp ? 'catchup' : 'reset',
-    frames: canCatchUp ? s.log.filter((f) => f.seq > since).length : s.log.length,
+    frames: canCatchUp
+      ? s.log.filter((f) => f.seq > since).length
+      : (resetFrom == null ? 0 : s.log.filter((f) => f.seq > resetFrom).length),
     subs: s.subs.size, running: !!s.running,
   });
 
@@ -4028,11 +4033,11 @@ function subscribe(ws, convId, sinceSeq) {
   });
   if (canCatchUp) {
     replayLog(ws, s, since);
-  } else {
-    // מכשיר חדש שנכנס באמצע תור. הדיסק מחזיק את מה שכבר הסתיים, והיומן מחזיק
-    // את התור הרץ מתחילתו — יחד זו התמונה המלאה. בלי המשלוח הזה הטלפון היה
-    // נפתח באמצע תור ורואה שיחה שנעצרה בתור הקודם.
-    replayLog(ws, s, 0);
+  } else if (resetFrom != null) {
+    // mode:reset — הלקוח קורא מהדיסק את מה שכבר הסתיים. משלימים מהיומן רק
+    // תור שרץ עכשיו (עדיין לא בדיסק). שידור מלא של היומן אחרי טעינה מהדיסק
+    // היה מצרף שוב user_msg/stream ויוצר כפילויות ברענון.
+    replayLog(ws, s, resetFrom);
   }
   broadcastPresence(s);
 }
