@@ -2885,3 +2885,33 @@ body.anon-mode .composer-card {
 .hljs-selector-tag { color: var(--hl-name); }
 
 .hljs-section { color: var(--hl-section); }
+
+/* ----- רשימת תזמונים מרכזית ----- */
+.sched-central { display: grid; gap: 8px; }
+.sched-central .modal-note { margin-bottom: 4px; }
+.sch-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 11px 12px; border: 1px solid var(--border-soft); border-radius: 12px;
+  transition: border-color .12s;
+}
+.sch-row:hover { border-color: var(--border); }
+.sch-row.sch-limit { border-color: color-mix(in srgb, #b9721f 35%, var(--border-soft)); background: color-mix(in srgb, #b9721f 6%, var(--panel)); }
+.sch-info { min-width: 0; flex: 1; display: grid; gap: 3px; }
+.sch-when { font-size: 12.5px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--text); }
+.sch-title { font-size: 13px; font-weight: 550; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sch-text { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
+.sch-meta { font-size: 11.5px; color: var(--text-faint); }
+.sch-actions { display: flex; flex-wrap: wrap; gap: 6px; flex: none; align-items: center; }
+.sch-actions button {
+  font-family: inherit; font-size: 12px; font-weight: 550;
+  padding: 6px 11px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+}
+.sch-actions button:hover { border-color: var(--border); filter: brightness(1.03); }
+.sch-actions .sch-go { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.sch-actions .sch-x:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+@media (max-width: 760px) {
+  .sch-row { flex-wrap: wrap; }
+  .sch-actions { width: 100%; }
+  .sch-actions button { min-height: 44px; flex: 1; }
+}

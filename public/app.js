@@ -2486,25 +2486,28 @@ function fmtSchedAt(at) {
   return `${d.getDate()}.${d.getMonth() + 1} ${hm}`;
 }
 function clearSchedulesUi() {
-  if (!schedQueue.length) return;
+  const prompts = schedQueue.filter((q) => q && q.kind !== 'limit_resume');
+  if (!prompts.length) return;
   if (!sendQueueCmd('schedule_clear')) { toast('אין חיבור לשרת', true); return; }
 }
 function renderSchedules() {
   const strip = $('schedStrip');
   if (!strip) return;
+  // limit_resume מוצג בפס המכסה וברשימה המרכזית — לא ברצועת הפרומפטים
+  const prompts = schedQueue.filter((q) => q && q.kind !== 'limit_resume');
   strip.innerHTML = '';
-  strip.classList.toggle('hidden', schedQueue.length === 0);
+  strip.classList.toggle('hidden', prompts.length === 0);
   const btn = $('schedBtn');
-  if (btn) btn.classList.toggle('on', schedQueue.length > 0);
-  if (!schedQueue.length) return;
+  if (btn) btn.classList.toggle('on', prompts.length > 0);
+  if (!prompts.length) return;
   const head = el('div', 'q-head');
-  head.appendChild(el('span', 'q-count', schedQueue.length === 1 ? 'הודעה מתוזמנת' : `${schedQueue.length} מתוזמנות`));
+  head.appendChild(el('span', 'q-count', prompts.length === 1 ? 'הודעה מתוזמנת' : `${prompts.length} מתוזמנות`));
   const clr = el('button', 'q-clear', 'בטל הכול');
   clr.type = 'button'; clr.title = 'בטל את כל ההודעות המתוזמנות';
   clr.onclick = () => clearSchedulesUi();
   head.appendChild(clr);
   strip.appendChild(head);
-  schedQueue.forEach((q) => {
+  prompts.forEach((q) => {
     const chip = el('div', 'q-chip');
     chip.appendChild(el('span', 'q-ic', fmtSchedAt(q.at) || '—'));
     const label = q.text ? clamp(q.text, 60) : 'פרומפט';
@@ -7414,6 +7417,88 @@ function openLogs(preset) {
   }, 4000);
 }
 
+// ---------- משימות מתוזמנות (כל השיחות) ----------
+function schStatusLabel(row) {
+  if (row.kind === 'limit_resume') return row.status === 'due' ? 'מוכן להמשך' : 'ממתין לחידוש מכסה';
+  return row.status === 'due' ? 'מוכן לשיגור' : 'מתוזמן';
+}
+function paintSchedulesList(wrap, rows) {
+  wrap.innerHTML = '';
+  wrap.appendChild(el('div', 'modal-note',
+    'כל ההודעות המתוזמנות והמשך־אחרי־מכסה בכל השיחות. אפשר לבטל, להריץ עכשיו, או לעבור לשיחה.'));
+  if (!rows.length) {
+    wrap.appendChild(el('div', 'modal-empty', 'אין משימות מתוזמנות כרגע.'));
+    return;
+  }
+  const list = el('div', 'sched-central');
+  for (const row of rows) {
+    const isLr = row.kind === 'limit_resume';
+    const card = el('div', 'sch-row' + (isLr ? ' sch-limit' : ''));
+    const info = el('div', 'sch-info');
+    info.appendChild(el('div', 'sch-when', fmtSchedAt(row.at) || '—'));
+    info.appendChild(el('div', 'sch-title', row.title || 'שיחה'));
+    info.appendChild(el('div', 'sch-text',
+      isLr ? 'המשך אוטומטי אחרי חידוש מכסת הסשן' : (row.text || 'פרומפט')));
+    info.appendChild(el('div', 'sch-meta', schStatusLabel(row)));
+    const actions = el('div', 'sch-actions');
+    const goConv = el('button', null, 'לשיחה');
+    goConv.type = 'button'; goConv.title = 'עבור לשיחה';
+    goConv.onclick = () => {
+      closeModal();
+      if (store.convs.some((c) => c.id === row.convId)) switchConv(row.convId);
+      else toast('השיחה לא ברשימה המקומית', true);
+    };
+    actions.appendChild(goConv);
+    const run = el('button', 'sch-go', isLr ? 'המשך עכשיו' : 'הרץ עכשיו');
+    run.type = 'button';
+    run.onclick = async () => {
+      try {
+        const r = await fetch('/api/schedules/run-now', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ convId: row.convId, id: row.id }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.ok) { toast((j && j.error) || 'ההרצה נכשלה', true); return; }
+        toast(isLr ? 'ממשיכים' : 'המשימה הורצה');
+        paintSchedulesList(wrap, j.schedules || []);
+      } catch { toast('אין קשר לשרת', true); }
+    };
+    actions.appendChild(run);
+    const cancel = el('button', 'sch-x', 'בטל');
+    cancel.type = 'button';
+    cancel.onclick = async () => {
+      try {
+        const r = await fetch('/api/schedules/cancel', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ convId: row.convId, id: row.id }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.ok) { toast((j && j.error) || 'הביטול נכשל', true); return; }
+        toast('התזמון בוטל');
+        paintSchedulesList(wrap, j.schedules || []);
+      } catch { toast('אין קשר לשרת', true); }
+    };
+    actions.appendChild(cancel);
+    card.appendChild(info); card.appendChild(actions);
+    list.appendChild(card);
+  }
+  wrap.appendChild(list);
+}
+async function openAllSchedules() {
+  closeDrawer();
+  const wrap = el('div', 'sched-central');
+  openModal('משימות מתוזמנות', wrap);
+  wrap.appendChild(el('div', 'modal-empty', 'טוען…'));
+  try {
+    const r = await fetch('/api/schedules');
+    const j = await r.json();
+    paintSchedulesList(wrap, (j && j.schedules) || []);
+  } catch {
+    wrap.innerHTML = '';
+    wrap.appendChild(el('div', 'modal-empty', 'שגיאה בטעינת התזמונים.'));
+  }
+}
+
 // ---------- סשנים על הדיסק ----------
 async function openSessions() {
   const wrap = el('div', 'sess-list');
@@ -7465,6 +7550,7 @@ function resumeSession(s) {
   $('input').focus();
 }
 $('openSessions').onclick = openSessions;
+$('openSchedules').onclick = openAllSchedules;
 
 // ---------- שרתי MCP ----------
 // הרישום הוא לסוכן, לא למודל: Claude מכסה כל מודל שרץ דרכו, Cursor את
@@ -8296,6 +8382,7 @@ const paletteActions = () => [
   { ic: '⚙', name: 'הגדרות', run: () => { closeDrawer(); openSettings(); } },
   { ic: '⌕', name: 'חיפוש בתוך השיחה', run: () => { closeDrawer(); openFind(); } },
   { ic: '◷', name: 'תזמן הודעה לשעה מדויקת באותו סשן', run: () => openSchedule() },
+  { ic: '⏱', name: 'משימות מתוזמנות — כל השיחות והמשך־מכסה', run: () => openAllSchedules() },
   { ic: '✎', name: 'שנה שם לשיחה הפעילה', run: () => { closeDrawer(); renameConvPrompt(); } },
   { ic: '⇩', name: 'ייצוא השיחה ל-Markdown', run: () => exportActiveConv() },
   ...(dictSupported() ? [

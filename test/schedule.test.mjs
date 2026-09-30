@@ -9,7 +9,8 @@ import { runner } from './harness.mjs';
 const require = createRequire(import.meta.url);
 const {
   MAX_SCHEDULES, MIN_LEAD_MS, MAX_LEAD_MS,
-  validateSchedule, buildItem, scheduleView, persistShape, dueItems,
+  KIND_LIMIT_RESUME, LIMIT_RESUME_ID, isLimitResume, promptOnly,
+  validateSchedule, buildItem, buildLimitResumeItem, scheduleView, persistShape, dueItems,
 } = require('../lib/schedule.js');
 
 const t = runner('הודעות מתוזמנות');
@@ -44,7 +45,8 @@ t.section('בניית פריט ושידור');
   t.eq('השולח נרשם', built.item.by, 'Mac');
 
   const view = scheduleView([built.item]);
-  t.eq('השידור בלי msg המלא', Object.keys(view[0]).sort().join(), 'at,by,effort,id,model,permissionMode,text');
+  t.eq('השידור בלי msg המלא', Object.keys(view[0]).sort().join(), 'at,by,effort,id,kind,model,permissionMode,resetsAt,text');
+  t.eq('סוג פרומפט', view[0].kind, 'prompt');
   t.ok('הטיימר לא בשידור', !('timer' in view[0]));
 
   const persisted = persistShape([{ ...built.item, timer: 1 }]);
@@ -56,7 +58,35 @@ t.section('בניית פריט ושידור');
   t.eq('תקרה קיימת', MAX_SCHEDULES, 20);
 }
 
+t.section('limit_resume כתזמון');
+{
+  const now = Date.now();
+  const built = buildLimitResumeItem({
+    at: now + 120_000, resetsAt: now + 90_000, produced: true, text: 'usage limit',
+  });
+  t.eq('נבנה', built.ok, true);
+  t.eq('מזהה קבוע', built.item.id, LIMIT_RESUME_ID);
+  t.eq('סוג', built.item.kind, KIND_LIMIT_RESUME);
+  t.ok('מזוהה', isLimitResume(built.item));
+  t.eq('פרומפטים בלבד מסננים אותו', promptOnly([built.item]).length, 0);
+
+  const view = scheduleView([built.item]);
+  t.eq('השידור נושא kind', view[0].kind, KIND_LIMIT_RESUME);
+  t.ok('עם resetsAt', view[0].resetsAt === now + 90_000);
+
+  const persisted = persistShape([built.item]);
+  t.eq('נשמר עם kind', persisted[0].kind, KIND_LIMIT_RESUME);
+
+  const bad = buildLimitResumeItem({ at: 0, resetsAt: 0 });
+  t.eq('בלי שעה נדחה', bad.ok, false);
+
+  // שעה שכבר עברה מותרת (שחזור אחרי הפעלה מחדש)
+  const past = buildLimitResumeItem({ at: now - 1000, resetsAt: now - 5000, produced: false });
+  t.eq('שעה בעבר מותרת להמשך־מכסה', past.ok, true);
+}
+
 t.section('השרת משגר ומשמר');
+
 {
   t.ok('מייבא את המודול', /require\('\.\/lib\/schedule'\)/.test(srv));
   t.ok('סשן חדש עם מערך ריק', /schedules:\s*\[\]/.test(srv));
@@ -67,6 +97,13 @@ t.section('השרת משגר ומשמר');
   t.ok('סשן עם תזמון לא נמחק במנוחה', /s\.schedules && s\.schedules\.length/.test(srv));
   t.ok('תור חי → enqueue', /enqueueTurn\(s, msg, null\)/.test(srv) && /התור מלא — ההודעה המתוזמנת/.test(srv));
   t.ok('מופיע ב-sync', /schedules: scheduleView\(s\.schedules\)/.test(srv));
+  t.ok('upsert limit_resume', /function upsertLimitResumeSchedule\(/.test(srv));
+  t.ok('onLimitHit מתזמן', /upsertLimitResumeSchedule\(s, s\.limit\)/.test(srv));
+  t.ok('fireSchedule מטפל ב-limit_resume', /isLimitResume\(item\)/.test(srv) && /resumeAfterLimit\(s, false\)/.test(srv));
+  t.ok('API רשימה מרכזית', /app\.get\('\/api\/schedules'/.test(srv));
+  t.ok('API ביטול', /app\.post\('\/api\/schedules\/cancel'/.test(srv));
+  t.ok('API הרץ עכשיו', /app\.post\('\/api\/schedules\/run-now'/.test(srv));
+  t.ok('שחזור לא מאבד תזמונים ליד מכסה ישנה', /התור והתזמונים האחרים כן/.test(srv));
 }
 
 t.section('הממשק');
@@ -82,6 +119,10 @@ t.section('הממשק');
   t.ok('מסנכרן מ-sync', /onScheduleUpdate\(m\.schedules/.test(app));
   t.ok('כפתור compact מקבל order', /#schedBtn \{ order: 3/.test(css));
   t.ok('ו-tall לא דורס את השליחה', /compose-tall #schedBtn \{ order: 4/.test(css) && /compose-tall #sendBtn \{ order: 6/.test(css));
+  t.ok('כפתור סרגל למשימות מתוזמנות', /id="openSchedules"/.test(html));
+  t.ok('פאנל מרכזי', /function openAllSchedules\(/.test(app));
+  t.ok('מסתיר limit_resume מהרצועה', /kind !== 'limit_resume'/.test(app));
+  t.ok('פעולה בלוח הפקודות לרשימה', /משימות מתוזמנות — כל השיחות/.test(app));
 }
 
 import { findBrowser, launch, newPage, startServer, freePort } from './browser.mjs';
